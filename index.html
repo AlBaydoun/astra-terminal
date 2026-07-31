@@ -158,6 +158,7 @@
           <button data-tab="screener" class="active">SCREENER</button>
           <button data-tab="heatmap">HEATMAP</button>
           <button data-tab="observer">OBSERVER</button>
+          <button data-tab="intel">INTEL</button>
           <button id="botCollapse" title="Collapse / expand">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
@@ -213,6 +214,26 @@
                 <div id="obRadar"></div>
                 <div class="obTitle">JOURNAL</div>
                 <div id="obJournal"></div>
+              </div>
+            </div>
+          </div>
+          <div id="bot-intel" class="botPanel">
+            <div class="obWrap intelWrap">
+              <div class="obCol">
+                <div class="obTitle">MARKET MOOD</div>
+                <div id="inMood"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">LIVE CRYPTO NEWS <span class="dim2">(scored by the Observer)</span></div>
+                <div id="inNews"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">HISTORY BOOK <span class="dim2">(what shocks did to the market)</span></div>
+                <div id="inEvents"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">HISTORY ECHOES <span class="dim2">(past patterns like today)</span></div>
+                <div id="inTwins"></div>
               </div>
             </div>
           </div>
@@ -280,6 +301,13 @@
         <div id="tab-ai" class="sidePanel">
           <div class="sideHead"><span>THE OBSERVER</span><button id="aiAnalyze" title="Analyze now" style="width:auto;padding:0 8px;font-size:11px">Analyze</button></div>
           <div id="aiVerdict"></div>
+          <div id="obChatBox">
+            <div id="obChatLog"></div>
+            <div class="chatRow">
+              <input id="chatIn" type="text" placeholder="Ask the Observer… (try 'help')" spellcheck="false" autocomplete="off">
+              <button id="chatSend" title="Send">➤</button>
+            </div>
+          </div>
           <label class="aiAutoRow"><input type="checkbox" id="aiAuto"> Let it paper-trade its signals <small>(play money only)</small></label>
           <div class="secTitle">TRACK RECORD <span id="aiStats" style="float:right;font-family:var(--font-mono);font-size:10px"></span></div>
           <div id="aiNotes"></div>
@@ -398,7 +426,9 @@
 <script src="js/multichart.js"></script>
 <script src="js/patterns.js"></script>
 <script src="js/notes.js"></script>
+<script src="js/intel.js"></script>
 <script src="js/brain.js"></script>
+<script src="js/obchat.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -15,6 +15,8 @@ no build step, no backend, no accounts.
 - **Multi-chart layouts** — 1, 2 or 4 live charts side by side, each with its own coin and timeframe
 - **Compare overlay** — up to 3 coins on one chart with a percent scale (e.g. BTC vs ETH)
 - **The Observer** — the flagship: a self-adjusting signal engine with its own 10,000 USDT virtual fund. 16 strategies (indicators + candle patterns) vote UP/DOWN; decisive calls become graded signal notes; strong signals trade the fund at live prices with 0.1% fees per side; outcomes re-weight the strategies; misses trigger retrospectives; every opened coin gets a fee-aware backtest research pass; a watchlist radar scans for signals; a full dashboard reports equity curve, P&L, fees, win rate, profit factor, drawdown, trades and its learning journal. Experimental, play money only — not financial advice.
+- **Intel** — live news headlines (linked and credited) scored for mood; a curated history book of market shocks matched against today's headlines (war words trigger caution, with the Feb 2022 lesson attached); ~9 years of BTC daily history searched for patterns matching the present ("history echoes"); Fear & Greed percentile + what followed similar moods historically
+- **Observer chat** — ask it about any coin, its trades, the news mood, history or its lessons; it answers from its real state (intent-based, not a general chatbot)
 - **Candle pattern markers** — hammers, engulfings, morning/evening stars, three soldiers/crows, tweezers, dojis marked on the chart
 - **Personal notes** — a NOTES tab with price/time-stamped, editable notes per coin
 - **Free drawing + chart text** — pencil sketching and text annotations, saved per coin

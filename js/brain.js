@@ -127,6 +127,19 @@ const Brain = {
     { id: 'patCrows', name: 'Three crows', check(x, i){
       return (x.pat[i] || []).some(q => q.name === 'Three crows') ? { dir: -1, why: 'three strong red candles in a row' } : null;
     }},
+    /* live-only intel strategies (never fire in backtests — they read the present) */
+    { id: 'newsSent', name: 'News mood', check(x, i){
+      if (i !== x.cl.length - 1 || typeof Intel === 'undefined' || !Intel.newsFresh()) return null;
+      if (Intel.sentiment >= 25) return { dir: 1, why: 'news flow is clearly positive right now' };
+      if (Intel.sentiment <= -25) return { dir: -1, why: 'news flow is clearly negative right now' };
+      return null;
+    }},
+    { id: 'histEcho', name: 'History echo', check(x, i){
+      if (i !== x.cl.length - 1 || typeof Intel === 'undefined' || !Intel.analogs || Intel.analogs.avgFwd == null) return null;
+      if (Intel.analogs.avgFwd > 3) return { dir: 1, why: 'similar past market patterns went on to rise' };
+      if (Intel.analogs.avgFwd < -3) return { dir: -1, why: 'similar past market patterns went on to fall' };
+      return null;
+    }},
   ],
 
   /* ---------------- lifecycle ---------------- */
@@ -209,7 +222,14 @@ const Brain = {
     if (votes.length < this.MIN_VOTERS) return { votes, dir: 0, conf: 0, ctx: x };
     let score = 0, wsum = 0;
     for (const v of votes){ score += v.dir * v.w; wsum += v.w; }
-    return { votes, dir: score > 0 ? 1 : score < 0 ? -1 : 0, conf: wsum ? Math.abs(score) / wsum : 0, ctx: x };
+    const dir = score > 0 ? 1 : score < 0 ? -1 : 0;
+    let conf = wsum ? Math.abs(score) / wsum : 0;
+    let risk = null;
+    if (typeof Intel !== 'undefined' && Intel.risk && Intel.risk.level >= 2){
+      risk = Intel.risk;
+      if (dir > 0) conf *= 0.75;   // shock headlines: dampen bullish confidence
+    }
+    return { votes, dir, conf, ctx: x, risk };
   },
 
   makeNote(candles, sym, tf, res, source){
@@ -455,8 +475,9 @@ const Brain = {
     el.innerHTML =
       `<div class="aiDir ${cls}">${res.dir > 0 ? '▲' : res.dir < 0 ? '▼' : '◆'} ${dirTxt}` +
       (res.dir ? ` <span class="aiConf">${pct}%</span>` : '') + `</div>` +
-      `<div class="aiSub">${esc(baseAsset(STORE.symbol))}/USDT · ${esc(STORE.tf.toUpperCase())} · next ${this.HORIZON} bars · ${res.votes.length}/16 strategies voting</div>` +
-      (whys ? `<ul class="aiWhys">${whys}</ul>` : '<div class="aiSub">Fewer than 3 strategies see anything right now.</div>');
+      `<div class="aiSub">${esc(baseAsset(STORE.symbol))}/USDT · ${esc(STORE.tf.toUpperCase())} · next ${this.HORIZON} bars · ${res.votes.length}/${this.STRATS.length} strategies voting</div>` +
+      (whys ? `<ul class="aiWhys">${whys}</ul>` : '<div class="aiSub">Fewer than 3 strategies see anything right now.</div>') +
+      (res.risk ? `<div class="aiRisk">⚠ ${esc(res.risk.label)}<br><span>${esc(res.risk.lesson)}</span></div>` : '');
   },
 
   render(){

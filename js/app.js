@@ -136,7 +136,9 @@ const App = {
     Multi.init();
     Strip.init();
     Notes.init();
+    Intel.init();
     Brain.init();
+    OBChat.init();
     this.updateSymBtn();
     this.stats();
     setInterval(() => this.stats(), 120000);
@@ -265,6 +267,7 @@ const App = {
           p.classList.toggle('active', p.id === 'bot-' + b.dataset.tab));
         if (b.dataset.tab === 'heatmap') Heat.show();
         if (b.dataset.tab === 'observer') Brain.renderDash();
+        if (b.dataset.tab === 'intel') Intel.render();
       }));
     document.getElementById('botCollapse').addEventListener('click', () => {
       const bp = document.getElementById('bottomPanel');
