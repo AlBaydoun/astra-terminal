@@ -8,6 +8,11 @@ const Screener = {
 
   init(){
     BUS.on('tickers', ch => { if (this.built) this.liveUpdate(ch); });
+    BUS.on('watch', () => {
+      if (!this.built) return;
+      this.rows.forEach((tr, sym) =>
+        tr.querySelector('.rStar').classList.toggle('on', Watch.list.includes(sym)));
+    });
     document.getElementById('scrSearch').addEventListener('input', e => {
       this.query = e.target.value.trim().toUpperCase();
       this.apply();
@@ -34,8 +39,20 @@ const Screener = {
       tr.innerHTML =
         `<td class="c-sym"><i class="dot" style="--hue:${Watch.hue(sym)}"></i>${esc(baseAsset(sym))}<span class="q">/USDT</span></td>` +
         `<td class="c-last num"></td><td class="c-pct num"></td><td class="c-high num"></td>` +
-        `<td class="c-low num"></td><td class="c-vol num"></td><td class="c-cnt num"></td>`;
-      tr.addEventListener('click', () => App.setSymbol(sym));
+        `<td class="c-low num"></td><td class="c-vol num"></td><td class="c-cnt num"></td>` +
+        `<td class="c-act"><button class="rAct rStar${Watch.list.includes(sym) ? ' on' : ''}" title="Add / remove watchlist">★</button>` +
+        `<button class="rAct rBell" title="Set price alert">` +
+        `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button></td>`;
+      tr.addEventListener('click', e => {
+        const star = e.target.closest('.rStar');
+        if (star){
+          if (Watch.list.includes(sym)) Watch.remove(sym);
+          else Watch.add(sym);
+          return;
+        }
+        if (e.target.closest('.rBell')){ Alerts.openModal(null, sym); return; }
+        App.setSymbol(sym);
+      });
       this.rows.set(sym, tr);
       this.fill(sym);
     }

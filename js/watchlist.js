@@ -29,6 +29,7 @@ const Watch = {
   },
 
   render(){
+    BUS.emit('watch');
     this.el.innerHTML = '';
     this.rows = {};
     for (const sym of this.list){

@@ -12,6 +12,8 @@ no build step, no backend, no accounts.
 - **Live charts** for 640+ Binance USDT pairs — candles, Heikin Ashi, bars, line, area; 1m to 1W
 - **12 indicators** — EMA/SMA ×3, Bollinger Bands, VWAP, SuperTrend, Volume, RSI, MACD, Stochastic, ATR
 - **Bar replay** — rewind to any candle and play history forward at 1–10×
+- **Multi-chart layouts** — 1, 2 or 4 live charts side by side, each with its own coin and timeframe
+- **Compare overlay** — up to 3 coins on one chart with a percent scale (e.g. BTC vs ETH)
 - **Drawing tools** — trend line, ray, horizontal line, Fibonacci retracement (saved per coin)
 - **Screener** — every pair, live prices, sortable by 24h %, volume, high/low
 - **Heatmap** — top 100 coins by market cap, colored by 24h change

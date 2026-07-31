@@ -33,6 +33,9 @@ the PC version and the online version each keep their own.
 - **Screener:** bottom panel. Click a column header to sort (e.g. 24H % for the day's winners). Click a row to open that coin.
 - **Heatmap:** tab next to the screener. Size = market cap, color = 24h change. Click a tile to open the coin.
 - **Theme:** the moon button switches light/dark. **Dark is the default.**
+- **Multi-chart layouts:** the layout buttons (top right area) switch between 1, 2 or 4 charts. The extra charts are independent — each has its own coin and timeframe, all live. Your setup is remembered.
+- **Compare:** the "Compare" button overlays another coin on the main chart (up to 3). The price scale switches to percent so you can see who's stronger — e.g. BTC vs ETH. Remove with the × on the little colored chip.
+- **Straight from the screener:** hover a row — the ★ adds/removes the coin from your watchlist, the bell sets a price alert for it. No need to open the coin first.
 
 ## What gets saved
 

@@ -10,9 +10,10 @@ const Alerts = {
     this.render();
   },
 
-  openModal(prefPrice){
-    const t = STORE.tickers.get(STORE.symbol);
-    document.getElementById('alSym').textContent = baseAsset(STORE.symbol) + '/USDT';
+  openModal(prefPrice, symbol){
+    this.modalSym = symbol || STORE.symbol;
+    const t = STORE.tickers.get(this.modalSym);
+    document.getElementById('alSym').textContent = baseAsset(this.modalSym) + '/USDT';
     document.getElementById('alPrice').value = prefPrice != null ? prefPrice : (t ? t.last : '');
     document.getElementById('alCond').value = 'auto';
     App.showModal('alertModal');
@@ -20,18 +21,19 @@ const Alerts = {
   },
 
   create(){
+    const sym = this.modalSym || STORE.symbol;
     const price = parseFloat(document.getElementById('alPrice').value);
     if (!(price > 0)){ toast('Enter a valid price', 'warn'); return; }
-    const t = STORE.tickers.get(STORE.symbol);
+    const t = STORE.tickers.get(sym);
     let cond = document.getElementById('alCond').value;
     if (cond === 'auto') cond = (t && price >= t.last) ? 'above' : 'below';
-    this.list.push({ id: Date.now(), symbol: STORE.symbol, price, cond, active: true, created: Date.now() });
+    this.list.push({ id: Date.now(), symbol: sym, price, cond, active: true, created: Date.now() });
     this.save();
     App.hideModal('alertModal');
     if (window.Notification && Notification.permission === 'default'){
       try { Notification.requestPermission(); } catch(e){}
     }
-    toast('Alert set: ' + baseAsset(STORE.symbol) + ' ' + (cond === 'above' ? '≥ ' : '≤ ') + fmtPrice(price), 'ok');
+    toast('Alert set: ' + baseAsset(sym) + ' ' + (cond === 'above' ? '≥ ' : '≤ ') + fmtPrice(price), 'ok');
   },
 
   save(){

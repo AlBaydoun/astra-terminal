@@ -45,6 +45,7 @@ const App = {
     Watch.init(); Screener.init(); Alerts.init(); Port.init(); Book.init(); Heat.wire();
     await Chart.load();
     Screener.build();
+    Multi.init();
     this.updateSymBtn();
     this.stats();
     setInterval(() => this.stats(), 120000);
@@ -125,6 +126,10 @@ const App = {
     document.getElementById('indApply').addEventListener('click', () => this.applyIndicators());
     document.getElementById('alertBtn').addEventListener('click', () => Alerts.openModal());
 
+    /* compare overlay */
+    document.getElementById('cmpBtn').addEventListener('click', () =>
+      SymbolSearch.open(sym => Chart.addCompare(sym)));
+
     /* bar replay */
     document.getElementById('replayBtn').addEventListener('click', () => Chart.replayStart());
     document.getElementById('rpPlay').addEventListener('click', () => Chart.replayTogglePlay());
@@ -138,6 +143,7 @@ const App = {
       localStorage.setItem('astra_theme', STORE.theme);
       document.documentElement.dataset.theme = STORE.theme;
       Chart.applyTheme();
+      Multi.applyTheme();
       if (Heat.data) Heat.draw();
     });
     document.getElementById('fsBtn').addEventListener('click', () => {

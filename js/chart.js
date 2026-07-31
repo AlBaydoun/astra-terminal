@@ -27,6 +27,11 @@ const Chart = {
 
   replay: { active: false, selecting: false, playing: false, idx: 0, speed: 2, timer: null },
 
+  compares: lsGet('astra_compare', []),
+  cmpColors: ['#ffb03a', '#ff6bd6', '#8b6cff'],
+  cmpSeries: {},
+  cmpLast: {},
+
   themeColors(){
     const light = STORE.theme === 'light';
     return {
@@ -87,6 +92,15 @@ const Chart = {
     this.main.subscribeClick(p => {
       if (this.replay.selecting){ this.replayBeginAt(p); return; }
       Draw.onClick(p);
+    });
+    /* live tick for compare overlays */
+    BUS.on('tickers', ch => {
+      if (this.replay.active) return;
+      for (const sym of this.compares){
+        if (ch.indexOf(sym) === -1 || !this.cmpSeries[sym] || this.cmpLast[sym] == null) continue;
+        const t = STORE.tickers.get(sym);
+        if (t) try { this.cmpSeries[sym].update({ time: this.cmpLast[sym], value: t.last }); } catch(e){}
+      }
     });
   },
 
@@ -336,6 +350,7 @@ const Chart = {
     try { this.main.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 160), to: n + 8 }); } catch(e){}
     this.resub();
     Draw.loadFor(STORE.symbol);
+    this.loadCompares();
     BUS.emit('symbol', STORE.symbol);
   },
 
@@ -364,6 +379,7 @@ const Chart = {
     if (isNew || k.x){
       this.priceSeries.setData(this.priceData());
       this.renderIndicators();
+      if (isNew) this.refreshComparesSoon();
     } else {
       this.tickUpdate(c);
     }
@@ -459,6 +475,88 @@ const Chart = {
     } else this.updateLegend(null);
   },
 
+  /* --- compare overlay (percent scale while active) --- */
+  async addCompare(sym){
+    if (sym === STORE.symbol){ toast('That is already the main chart symbol', 'warn'); return; }
+    if (this.compares.includes(sym)) return;
+    if (this.compares.length >= 3){ toast('Maximum 3 compare symbols', 'warn'); return; }
+    this.compares.push(sym);
+    lsSet('astra_compare', this.compares);
+    await this.loadCompare(sym);
+    this.applyCompareMode();
+    this.renderCmpChips();
+    toast('Comparing with ' + baseAsset(sym) + ' — scale switched to %', 'ok');
+  },
+
+  async loadCompare(sym){
+    let data;
+    try { data = await API.klines(sym, STORE.tf); }
+    catch(e){ toast('Could not load ' + baseAsset(sym), 'error'); return; }
+    if (!this.compares.includes(sym)) return;
+    let s = this.cmpSeries[sym];
+    if (!s){
+      s = this.cmpSeries[sym] = this.main.addLineSeries({
+        color: this.cmpColors[this.compares.indexOf(sym) % this.cmpColors.length],
+        lineWidth: 1, priceScaleId: 'right',
+        priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
+        title: baseAsset(sym),
+      });
+    }
+    s.setData(data.map(c => ({ time: c.time, value: c.close })));
+    this.cmpLast[sym] = data.length ? data[data.length - 1].time : null;
+  },
+
+  removeCompare(sym){
+    this.compares = this.compares.filter(x => x !== sym);
+    lsSet('astra_compare', this.compares);
+    if (this.cmpSeries[sym]){
+      try { this.main.removeSeries(this.cmpSeries[sym]); } catch(e){}
+      delete this.cmpSeries[sym];
+      delete this.cmpLast[sym];
+    }
+    this.applyCompareMode();
+    this.renderCmpChips();
+  },
+
+  applyCompareMode(){
+    try { this.main.priceScale('right').applyOptions({ mode: this.compares.length ? 2 : 0 }); } catch(e){}
+  },
+
+  async loadCompares(){
+    this.compares = this.compares.filter(s => s !== STORE.symbol);
+    lsSet('astra_compare', this.compares);
+    for (const sym of Object.keys(this.cmpSeries)){
+      if (!this.compares.includes(sym)){
+        try { this.main.removeSeries(this.cmpSeries[sym]); } catch(e){}
+        delete this.cmpSeries[sym]; delete this.cmpLast[sym];
+      }
+    }
+    for (const sym of [...this.compares]) await this.loadCompare(sym);
+    this.applyCompareMode();
+    this.renderCmpChips();
+  },
+
+  refreshComparesSoon(){
+    if (!this.compares.length || this._cmpTimer) return;
+    this._cmpTimer = setTimeout(() => {
+      this._cmpTimer = null;
+      for (const sym of [...this.compares]) this.loadCompare(sym);
+    }, 2500);
+  },
+
+  renderCmpChips(){
+    const host = document.getElementById('cmpChips');
+    if (!host) return;
+    host.innerHTML = this.compares.map((s, i) =>
+      `<span class="cmpChip" style="--c:${this.cmpColors[i % this.cmpColors.length]}">vs ${esc(baseAsset(s))}<button data-sym="${esc(s)}" title="Remove">×</button></span>`).join('');
+    host.querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => this.removeCompare(b.dataset.sym)));
+  },
+
+  setComparesVisible(v){
+    Object.values(this.cmpSeries).forEach(s => { try { s.applyOptions({ visible: v }); } catch(e){} });
+  },
+
   /* --- bar replay --- */
   replayStart(){
     if (this.replay.active){ this.replayExit(); return; }
@@ -480,6 +578,8 @@ const Chart = {
     this.replay.active = true;
     this.replay.idx = idx;
     this.replay.playing = false;
+    this.setComparesVisible(false);
+    try { this.main.priceScale('right').applyOptions({ mode: 0 }); } catch(e){}
     document.getElementById('replayBar').classList.add('show');
     this.replayRender();
     toast('Replay started — press play or step forward', 'ok');
@@ -536,6 +636,8 @@ const Chart = {
     document.getElementById('replayBar').classList.remove('show');
     document.getElementById('replayBtn').classList.remove('active');
     document.getElementById('mainWrap').classList.remove('drawing');
+    this.setComparesVisible(true);
+    this.applyCompareMode();
     this.renderAll();
     try { this.main.timeScale().scrollToRealTime(); } catch(e){}
   },

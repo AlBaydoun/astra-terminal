@@ -575,3 +575,61 @@ select#chartType {
 [data-theme="light"] #chartLoading { background: rgba(235, 240, 250, 0.55); }
 [data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(60, 90, 160, 0.3); }
 [data-theme="light"] .mPrimary, [data-theme="light"] #ptBuy { color: #ffffff; }
+
+/* ============ MULTI-CHART GRID ============ */
+#chartGrid { flex: 1; min-height: 0; display: grid; gap: 8px; }
+#chartGrid.layout-1 { grid-template-columns: 1fr; }
+#chartGrid.layout-2 { grid-template-columns: 1fr 1fr; }
+#chartGrid.layout-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+#chartGrid #chartArea { flex: none; min-height: 0; }
+
+#layoutSeg { display: flex; gap: 2px; background: var(--field); border: 1px solid var(--border-soft); border-radius: 8px; padding: 2px; }
+#layoutSeg button {
+  border: 0; background: transparent; color: var(--dim); border-radius: 6px;
+  width: 28px; height: 26px; display: grid; place-items: center; cursor: pointer; transition: all 0.12s;
+}
+#layoutSeg button:hover { color: var(--text); }
+#layoutSeg button.active { color: var(--accent); background: rgba(0, 229, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.25); }
+
+.miniCell {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  backdrop-filter: blur(14px); padding: 4px;
+}
+.miniHead { display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; }
+.miniSym {
+  display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0;
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  color: var(--text); cursor: pointer; font-family: var(--font-head); padding: 3px 6px; text-align: left;
+}
+.miniSym:hover { border-color: rgba(0, 229, 255, 0.3); }
+.miniSym b { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
+.miniPx { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+.miniPct { font-family: var(--font-mono); font-size: 10px; }
+.miniTf {
+  background: var(--field); color: var(--text); border: 1px solid var(--border-soft);
+  border-radius: 6px; font-family: var(--font-mono); font-size: 10px; padding: 3px 4px; outline: none; cursor: pointer;
+}
+.miniChart { flex: 1; min-height: 0; position: relative; }
+
+/* ============ COMPARE CHIPS ============ */
+#cmpChips { position: absolute; top: 40px; left: 8px; z-index: 6; display: flex; gap: 6px; flex-wrap: wrap; }
+.cmpChip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--c);
+  border: 1px solid var(--c); border-radius: 5px; padding: 2px 4px 2px 7px;
+  background: var(--panel-solid); opacity: 0.92;
+}
+.cmpChip button { background: transparent; border: 0; color: var(--c); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 2px; }
+.cmpChip button:hover { color: var(--down); }
+
+/* ============ SCREENER ROW ACTIONS ============ */
+.c-act { white-space: nowrap; width: 58px; }
+.rAct {
+  background: transparent; border: 0; color: var(--dim); cursor: pointer;
+  font-size: 13px; padding: 1px 4px; opacity: 0.3; transition: all 0.12s; vertical-align: middle;
+}
+#scrTable tbody tr:hover .rAct { opacity: 1; }
+.rAct:hover { color: var(--accent); }
+.rStar.on { opacity: 1; color: #ffd166; }
+.rStar.on:hover { color: #ffd166; }

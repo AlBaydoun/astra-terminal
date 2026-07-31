@@ -59,6 +59,15 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2-9.4L1 10"/></svg>
       Replay
     </button>
+    <button class="tbtn" id="cmpBtn" title="Compare another coin on this chart (% scale)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-6 4 3 6-8"/><path d="M3 21l5-4 4 2 6-6" opacity="0.5"/></svg>
+      Compare
+    </button>
+    <div id="layoutSeg" title="Chart layout">
+      <button data-l="1" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg></button>
+      <button data-l="2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="16" rx="1"/><rect x="13" y="4" width="8" height="16" rx="1"/></svg></button>
+      <button data-l="4"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/></svg></button>
+    </div>
     <div class="spacer"></div>
     <button class="tbtn" id="themeBtn" title="Switch light / dark">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -98,13 +107,15 @@
       </button>
     </div>
 
-    <!-- center: chart + bottom panel -->
+    <!-- center: chart grid + bottom panel -->
     <div id="center">
+      <div id="chartGrid" class="layout-1">
       <div id="chartArea">
         <div id="mainWrap">
           <div id="mainChart"></div>
           <canvas id="drawLayer"></canvas>
           <div id="legend"></div>
+          <div id="cmpChips"></div>
           <div id="chartLoading"><div class="spinner"></div></div>
           <div id="replayBar">
             <span class="rpLbl">REPLAY</span>
@@ -125,6 +136,7 @@
         <div id="stochPane" class="pane"><div class="paneTag">STOCH</div><div class="paneChart"></div></div>
         <div id="atrPane" class="pane"><div class="paneTag">ATR</div><div class="paneChart"></div></div>
       </div>
+      </div><!-- /chartGrid -->
 
       <div id="bottomPanel">
         <div id="botTabs">
@@ -150,6 +162,7 @@
                   <th data-k="low">24H LOW</th>
                   <th data-k="quoteVol">VOLUME (USDT)</th>
                   <th data-k="count">TRADES</th>
+                  <th class="c-act-h"></th>
                 </tr></thead>
                 <tbody></tbody>
               </table>
@@ -296,6 +309,7 @@
 <script src="js/screener.js"></script>
 <script src="js/heatmap.js"></script>
 <script src="js/portfolio.js"></script>
+<script src="js/multichart.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
