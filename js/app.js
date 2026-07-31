@@ -116,6 +116,10 @@ const Layouts = {
 const App = {
   async boot(){
     document.getElementById('bootSplash').classList.add('show');
+    await Sync.gate();
+    document.getElementById('stSyncWrap').addEventListener('click', () => {
+      if (confirm('Sign out of the terminal on this device? Your data stays saved in the cloud.')) Sync.signOut();
+    });
     if (!window.LightweightCharts){
       document.getElementById('bootSplash').innerHTML =
         '<div class="bootBox"><h1>ASTRA</h1><p>Chart library could not be loaded.<br>Please check your internet connection and reopen.</p></div>';

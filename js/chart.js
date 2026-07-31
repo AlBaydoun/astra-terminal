@@ -261,7 +261,7 @@ const Chart = {
       () => this.main.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }),
       s => {
         this.main.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-        s.setData(v.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(0,229,160,0.35)' : 'rgba(255,77,109,0.35)' })));
+        s.setData(v.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(46,189,133,0.35)' : 'rgba(246,70,93,0.35)' })));
       });
 
     for (const [key, color] of [['ema1', '#00e5ff'], ['ema2', '#ffb03a'], ['ema3', '#ff6bd6']]){
@@ -287,7 +287,7 @@ const Chart = {
     const stOn = S.st.on;
     let stData = null;
     if (stOn) stData = IND.supertrend(v, S.st.len, S.st.mult);
-    for (const [key, part, color] of [['stUp', 'up', 'rgba(0,229,160,0.9)'], ['stDn', 'down', 'rgba(255,77,109,0.9)']]){
+    for (const [key, part, color] of [['stUp', 'up', 'rgba(46,189,133,0.9)'], ['stDn', 'down', 'rgba(246,70,93,0.9)']]){
       this.setOverlay(key, stOn,
         () => this.main.addLineSeries({ color, lineWidth: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
         s => s.setData(this.lineData(stData[part], v)));
@@ -314,8 +314,8 @@ const Chart = {
       rsiEl.classList.add('open');
       this.rsiChart = this.makePane(rsiEl.querySelector('.paneChart'), false);
       this.rsiSeries = this.rsiChart.addLineSeries({ color: '#c084fc', lineWidth: 1, priceLineVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
-      this.rsiSeries.createPriceLine({ price: 70, color: 'rgba(255,77,109,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.rsiSeries.createPriceLine({ price: 30, color: 'rgba(0,229,160,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+      this.rsiSeries.createPriceLine({ price: 70, color: 'rgba(246,70,93,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+      this.rsiSeries.createPriceLine({ price: 30, color: 'rgba(46,189,133,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
       this.rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('rsi', r));
     }
     if (!S.rsi.on && this.rsiChart){
@@ -344,8 +344,8 @@ const Chart = {
       this.stochChart = this.makePane(stochEl.querySelector('.paneChart'), false);
       this.stochK = this.stochChart.addLineSeries({ color: '#00e5ff', lineWidth: 1, priceLineVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
       this.stochD = this.stochChart.addLineSeries({ color: '#ffb03a', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      this.stochK.createPriceLine({ price: 80, color: 'rgba(255,77,109,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.stochK.createPriceLine({ price: 20, color: 'rgba(0,229,160,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+      this.stochK.createPriceLine({ price: 80, color: 'rgba(246,70,93,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
+      this.stochK.createPriceLine({ price: 20, color: 'rgba(46,189,133,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
       this.stochChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('stoch', r));
     }
     if (!S.stoch.on && this.stochChart){
@@ -394,7 +394,7 @@ const Chart = {
     this.macdSig.setData(this.lineData(m.signal, v));
     const hd = [];
     for (let i = 0; i < m.hist.length; i++)
-      if (m.hist[i] != null) hd.push({ time: v[i].time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(0,229,160,0.5)' : 'rgba(255,77,109,0.5)' });
+      if (m.hist[i] != null) hd.push({ time: v[i].time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(46,189,133,0.5)' : 'rgba(246,70,93,0.5)' });
     this.macdHist.setData(hd);
   },
 
@@ -488,7 +488,7 @@ const Chart = {
         if (a[i] != null) this.atrSeries.update({ time, value: a[i] });
       }
       if (this.overlays.vol)
-        this.overlays.vol.update({ time, value: c.volume, color: c.close >= c.open ? 'rgba(0,229,160,0.35)' : 'rgba(255,77,109,0.35)' });
+        this.overlays.vol.update({ time, value: c.volume, color: c.close >= c.open ? 'rgba(46,189,133,0.35)' : 'rgba(246,70,93,0.35)' });
       if (this.overlays.bbU){
         const b = IND.bb(closes, S.bb.len, S.bb.mult);
         if (b.up[i] != null){
@@ -508,7 +508,7 @@ const Chart = {
       if (this.macdHist){
         const m = IND.macd(closes, S.macd.f, S.macd.s, S.macd.sig);
         if (m.hist[i] != null){
-          this.macdHist.update({ time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(0,229,160,0.5)' : 'rgba(255,77,109,0.5)' });
+          this.macdHist.update({ time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(46,189,133,0.5)' : 'rgba(246,70,93,0.5)' });
           this.macdLine.update({ time, value: m.macd[i] });
           this.macdSig.update({ time, value: m.signal[i] });
         }

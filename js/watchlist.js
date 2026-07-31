@@ -92,7 +92,7 @@ const Watch = {
       ctx.stroke();
       ctx.lineTo(cv.width, cv.height); ctx.lineTo(0, cv.height); ctx.closePath();
       const g = ctx.createLinearGradient(0, 0, 0, cv.height);
-      g.addColorStop(0, up ? 'rgba(0,229,160,0.25)' : 'rgba(255,77,109,0.25)');
+      g.addColorStop(0, up ? 'rgba(46,189,133,0.25)' : 'rgba(246,70,93,0.25)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fill();

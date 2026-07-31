@@ -26,6 +26,18 @@
   </div>
 </div>
 
+<div id="loginGate">
+  <div class="lgBox">
+    <h1>ASTRA</h1>
+    <p class="lgSub">PRIVATE CRYPTO TERMINAL · SIGN IN</p>
+    <input id="lgUser" type="text" placeholder="Username" autocomplete="username" spellcheck="false">
+    <input id="lgPass" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="lgBtn" class="mPrimary">SIGN IN</button>
+    <div id="lgErr"></div>
+    <button id="lgOffline">Continue offline on this device (no cloud sync)</button>
+  </div>
+</div>
+
 <div id="app">
 
   <!-- ================= TOP BAR ================= -->
@@ -345,6 +357,7 @@
     <div class="stItem"><label>ETH.D</label><span class="stv" id="stEthD">—</span></div>
     <div class="stItem"><label>FEAR&amp;GREED</label><span class="stv" id="stFng">—</span></div>
     <div class="stItem"><label>NEWS</label><span class="stv" id="stNews">—</span></div>
+    <div class="stItem" id="stSyncWrap" title="Cloud sync — click to sign out" style="cursor:pointer"><label>SYNC</label><span class="stv" id="stSync">—</span></div>
     <span id="stClock"></span>
   </footer>
 </div>
@@ -414,6 +427,7 @@
 </div>
 
 <script src="js/config.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/indicators.js"></script>
 <script src="js/api.js"></script>
 <script src="js/alerts.js"></script>

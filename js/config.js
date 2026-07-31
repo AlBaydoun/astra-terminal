@@ -7,7 +7,7 @@ const CFG = {
   TFS: [['1m','1m'],['5m','5m'],['15m','15m'],['1h','1H'],['4h','4H'],['1d','1D'],['1w','1W']],
   KLINE_LIMIT: 1000,
   WATCH_DEFAULT: ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT','LINKUSDT','DOTUSDT','LTCUSDT','TRXUSDT','SHIBUSDT','PEPEUSDT','NEARUSDT','SUIUSDT'],
-  UP: '#00e5a0', DOWN: '#ff4d6d', ACCENT: '#00e5ff', ACCENT2: '#8b6cff',
+  UP: '#2ebd85', DOWN: '#f6465d', ACCENT: '#00e5ff', ACCENT2: '#8b6cff',
 };
 const TZ_OFF = -new Date().getTimezoneOffset() * 60; // shift epoch so the chart axis shows local time
 

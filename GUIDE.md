@@ -8,8 +8,18 @@ Two ways to open the terminal — both are the same app:
 2. **Anywhere online:** open **https://albaydoun.github.io/astra-terminal/** — works on any computer or phone browser.
 
 Internet is required (all prices stream live from Binance).
-Note: your watchlist, alerts, drawings and paper account are saved per browser —
-the PC version and the online version each keep their own.
+
+## Sign-in & sync
+
+The terminal is **private** — it asks for your username and password when it opens
+(you chose them; they are not written down anywhere public). One account, full access.
+
+Once signed in, **everything syncs automatically**: watchlist, alerts, drawings, notes,
+workspaces, indicator settings, your paper account and the Observer's entire brain and
+fund travel with you between the PC and any other device. Changes save to the cloud a
+few seconds after you make them (watch the SYNC light in the bottom bar). If two devices
+are open at once, the one that saved last wins. "Continue offline" on the sign-in screen
+skips sync for that device.
 
 ## What you see
 

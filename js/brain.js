@@ -597,7 +597,7 @@ const Brain = {
     ctx.stroke();
     ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, up ? 'rgba(0,229,160,0.25)' : 'rgba(255,77,109,0.25)');
+    g.addColorStop(0, up ? 'rgba(46,189,133,0.25)' : 'rgba(246,70,93,0.25)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fill();
