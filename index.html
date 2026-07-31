@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASTRA · Crypto Terminal</title>
+<meta name="description" content="ASTRA — a futuristic live crypto trading terminal. Real-time charts for 640+ coins, indicators, drawing tools, screener, heatmap, order book, price alerts and paper trading.">
+<meta property="og:title" content="ASTRA · Crypto Terminal">
+<meta property="og:description" content="Live crypto charts, screener, heatmap, order book, alerts and paper trading — in one futuristic terminal.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='16,3 29,26 3,26' fill='none' stroke='%2300e5ff' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='18' r='4' fill='%238b6cff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script>document.documentElement.dataset.theme = localStorage.getItem('astra_theme') || 'dark';</script>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>if(!window.LightweightCharts) document.write('<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"><\/script>');</script>
+</head>
+<body>
+
+<div id="bootSplash" class="show">
+  <div class="bootBox">
+    <h1>ASTRA</h1>
+    <p>CRYPTO TERMINAL · INITIALIZING</p>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- ================= TOP BAR ================= -->
+  <header id="topbar">
+    <div id="brand">
+      <svg width="26" height="26" viewBox="0 0 32 32"><polygon points="16,3 29,26 3,26" fill="none" stroke="#00e5ff" stroke-width="2.5"/><circle cx="16" cy="18" r="4" fill="#8b6cff"/></svg>
+      <b>ASTRA</b><span>CRYPTO<br>TERMINAL</span>
+    </div>
+    <div class="vdiv"></div>
+    <button id="symBtn" title="Change symbol (or just start typing)">
+      <span id="symBtnName">BTC/USDT</span>
+      <span id="symBtnPx"></span>
+    </button>
+    <div id="tfPills"></div>
+    <select id="chartType" title="Chart type">
+      <option value="candles">Candles</option>
+      <option value="heikin">Heikin Ashi</option>
+      <option value="bars">Bars</option>
+      <option value="line">Line</option>
+      <option value="area">Area</option>
+    </select>
+    <button class="tbtn" id="indBtn" title="Indicators">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-6 4 3 6-8 3 4"/></svg>
+      Indicators
+    </button>
+    <button class="tbtn" id="alertBtn" title="New price alert">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      Alert
+    </button>
+    <button class="tbtn" id="replayBtn" title="Bar replay — play back history">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.5 15a9 9 0 1 0 2-9.4L1 10"/></svg>
+      Replay
+    </button>
+    <div class="spacer"></div>
+    <button class="tbtn" id="themeBtn" title="Switch light / dark">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <button class="tbtn" id="fsBtn" title="Fullscreen">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+  </header>
+
+  <!-- ================= MAIN ================= -->
+  <div id="main">
+
+    <!-- left drawing toolbar -->
+    <div id="lefttools">
+      <button data-tool="trend" title="Trend line (2 clicks)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/></svg>
+      </button>
+      <button data-tool="ray" title="Ray (extends right)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="18" x2="22" y2="9"/><circle cx="4" cy="18" r="2" fill="currentColor"/></svg>
+      </button>
+      <button data-tool="hline" title="Horizontal line (1 click)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/></svg>
+      </button>
+      <button data-tool="fib" title="Fibonacci retracement (2 clicks)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="19" x2="21" y2="19"/></svg>
+      </button>
+      <div class="tsep"></div>
+      <button data-tool="alert" title="Click on chart to set alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      </button>
+      <div class="tsep"></div>
+      <button data-tool="del" title="Delete a drawing (click near it)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H8L2 14l8-10h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2z"/><line x1="12" y1="9" x2="17" y2="14"/><line x1="17" y1="9" x2="12" y2="14"/></svg>
+      </button>
+      <button id="toolClear" title="Remove all drawings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+
+    <!-- center: chart + bottom panel -->
+    <div id="center">
+      <div id="chartArea">
+        <div id="mainWrap">
+          <div id="mainChart"></div>
+          <canvas id="drawLayer"></canvas>
+          <div id="legend"></div>
+          <div id="chartLoading"><div class="spinner"></div></div>
+          <div id="replayBar">
+            <span class="rpLbl">REPLAY</span>
+            <button id="rpPlay" title="Play / pause">▶</button>
+            <button id="rpStep" title="One bar forward">⏭</button>
+            <select id="rpSpeed" title="Speed">
+              <option value="1">1×</option>
+              <option value="2" selected>2×</option>
+              <option value="5">5×</option>
+              <option value="10">10×</option>
+            </select>
+            <span id="rpPos"></span>
+            <button id="rpExit" title="Exit replay">✕</button>
+          </div>
+        </div>
+        <div id="rsiPane" class="pane"><div class="paneTag">RSI</div><div class="paneChart"></div></div>
+        <div id="macdPane" class="pane"><div class="paneTag">MACD</div><div class="paneChart"></div></div>
+        <div id="stochPane" class="pane"><div class="paneTag">STOCH</div><div class="paneChart"></div></div>
+        <div id="atrPane" class="pane"><div class="paneTag">ATR</div><div class="paneChart"></div></div>
+      </div>
+
+      <div id="bottomPanel">
+        <div id="botTabs">
+          <button data-tab="screener" class="active">SCREENER</button>
+          <button data-tab="heatmap">HEATMAP</button>
+          <button id="botCollapse" title="Collapse / expand">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <div class="botBody">
+          <div id="bot-screener" class="botPanel active">
+            <div class="scrHead">
+              <input id="scrSearch" type="text" placeholder="Filter pairs… e.g. SOL" spellcheck="false">
+              <span id="scrCount"></span>
+            </div>
+            <div class="scrWrap">
+              <table id="scrTable">
+                <thead><tr>
+                  <th data-k="symbol">PAIR</th>
+                  <th data-k="last">PRICE</th>
+                  <th data-k="pct" class="desc">24H %</th>
+                  <th data-k="high">24H HIGH</th>
+                  <th data-k="low">24H LOW</th>
+                  <th data-k="quoteVol">VOLUME (USDT)</th>
+                  <th data-k="count">TRADES</th>
+                </tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="bot-heatmap" class="botPanel">
+            <div id="heatWrap">
+              <canvas id="heatCanvas"></canvas>
+              <div id="heatTip"></div>
+              <span id="heatSrc"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- right sidebar -->
+    <div id="sidebar">
+      <div id="sideTabs">
+        <button data-tab="watch" class="active">WATCHLIST</button>
+        <button data-tab="book">DEPTH</button>
+        <button data-tab="alerts">ALERTS</button>
+        <button data-tab="portfolio">PAPER</button>
+      </div>
+      <div class="sideBody">
+
+        <div id="tab-watch" class="sidePanel active">
+          <div class="sideHead"><span>WATCHLIST</span><button id="watchAdd" title="Add symbol">+</button></div>
+          <div id="watchBody"></div>
+        </div>
+
+        <div id="tab-book" class="sidePanel">
+          <div class="bookHead"><span>PRICE</span><span style="text-align:right">AMOUNT</span><span style="text-align:right">TOTAL</span></div>
+          <div id="bookAsks"></div>
+          <div id="bookSpread"></div>
+          <div id="bookBids"></div>
+          <div class="tapeTitle">RECENT TRADES</div>
+          <div id="tapeBody"></div>
+        </div>
+
+        <div id="tab-alerts" class="sidePanel">
+          <div class="sideHead"><span>PRICE ALERTS</span><button id="alertNew" title="New alert">+</button></div>
+          <div id="alertsBody"></div>
+        </div>
+
+        <div id="tab-portfolio" class="sidePanel">
+          <div class="ptStats">
+            <div class="ptStat"><label>CASH</label><div class="ptv" id="ptBalance">—</div></div>
+            <div class="ptStat"><label>EQUITY</label><div class="ptv" id="ptEquity">—</div></div>
+            <div class="ptStat" style="grid-column:1/3"><label>TOTAL P&amp;L</label><div class="ptv" id="ptPnl">—</div></div>
+          </div>
+          <div class="ticket">
+            <span id="ptSym">BTC/USDT</span>
+            <div class="tkRow">
+              <input id="ptQty" type="number" step="any" min="0" placeholder="Quantity">
+              <button class="ptPct" data-p="25">25%</button>
+              <button class="ptPct" data-p="50">50%</button>
+              <button class="ptPct" data-p="100">MAX</button>
+            </div>
+            <div class="tkRow">
+              <button id="ptBuy">BUY</button>
+              <button id="ptSell">SELL</button>
+            </div>
+          </div>
+          <div class="secTitle">OPEN POSITIONS</div>
+          <div id="ptPositions"></div>
+          <div class="secTitle">TRADE HISTORY</div>
+          <div id="ptHistory"></div>
+          <button id="ptReset">Reset paper account</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= STATUS BAR ================= -->
+  <footer id="statusbar">
+    <div class="stItem"><div id="wsDot"></div><span id="wsLbl">CONNECTING…</span></div>
+    <div class="stItem"><label>MCAP</label><span class="stv" id="stMcap">—</span><span class="stv" id="stMcapCh"></span></div>
+    <div class="stItem"><label>BTC.D</label><span class="stv" id="stBtcD">—</span></div>
+    <div class="stItem"><label>ETH.D</label><span class="stv" id="stEthD">—</span></div>
+    <div class="stItem"><label>FEAR&amp;GREED</label><span class="stv" id="stFng">—</span></div>
+    <span id="stClock"></span>
+  </footer>
+</div>
+
+<!-- ================= MODALS ================= -->
+<div class="modal" id="symModal">
+  <div class="mBox">
+    <div class="mHead">SYMBOL <span>SEARCH</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <input id="symInput" type="text" placeholder="Type a coin… BTC, ETH, SOL…" spellcheck="false" autocomplete="off">
+      <div id="symList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="indModal">
+  <div class="mBox">
+    <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema1"><span class="chip" style="background:#00e5ff"></span>MA 1</label><select id="i_ema1type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema1len" min="2" max="500"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema2"><span class="chip" style="background:#ffb03a"></span>MA 2</label><select id="i_ema2type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema2len" min="2" max="500"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema3"><span class="chip" style="background:#ff6bd6"></span>MA 3</label><select id="i_ema3type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema3len" min="2" max="500"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_bb"><span class="chip" style="background:#8b6cff"></span>Bollinger Bands</label>Len <input type="number" id="i_bblen" min="2" max="200"> ×<input type="number" id="i_bbmult" min="1" max="5" step="0.5" style="width:44px"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_vwap"><span class="chip" style="background:#ffd166"></span>VWAP (daily)</label></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_st"><span class="chip" style="background:linear-gradient(90deg,#00e5a0,#ff4d6d)"></span>SuperTrend</label>Len <input type="number" id="i_stlen" min="2" max="100"> ×<input type="number" id="i_stmult" min="1" max="10" step="0.5" style="width:44px"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_vol"><span class="chip" style="background:#3d5a80"></span>Volume</label></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_rsi"><span class="chip" style="background:#c084fc"></span>RSI <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_rsilen" min="2" max="100"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_macd"><span class="chip" style="background:#00e5ff"></span>MACD <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_macdf" min="2" max="100" style="width:44px"><input type="number" id="i_macds" min="2" max="200" style="width:44px"><input type="number" id="i_macdsig" min="2" max="100" style="width:44px"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_stoch"><span class="chip" style="background:#00b8cc"></span>Stochastic <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_stochk" min="2" max="100" style="width:44px"><input type="number" id="i_stochsm" min="1" max="50" style="width:44px"><input type="number" id="i_stochd" min="1" max="50" style="width:44px"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_atr"><span class="chip" style="background:#ff9f6b"></span>ATR <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_atrlen" min="2" max="100"></div>
+      <button class="mPrimary" id="indApply">APPLY</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="alertModal">
+  <div class="mBox">
+    <div class="mHead">PRICE <span>ALERT</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div class="formRow"><label>Symbol</label><b id="alSym" style="font-family:var(--font-mono)">—</b></div>
+      <div class="formRow"><label>Condition</label>
+        <select id="alCond">
+          <option value="auto">Automatic (crossing)</option>
+          <option value="above">Price rises above</option>
+          <option value="below">Price falls below</option>
+        </select>
+      </div>
+      <div class="formRow"><label>Price</label><input id="alPrice" type="number" step="any" min="0"></div>
+      <button class="mPrimary" id="alCreate">CREATE ALERT</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/api.js"></script>
+<script src="js/alerts.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/watchlist.js"></script>
+<script src="js/orderbook.js"></script>
+<script src="js/screener.js"></script>
+<script src="js/heatmap.js"></script>
+<script src="js/portfolio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
