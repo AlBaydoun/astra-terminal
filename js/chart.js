@@ -24,6 +24,7 @@ const Chart = {
     stoch:{ on: false, k: 14, smooth: 3, d: 3 },
     atr:  { on: false, len: 14 },
     vp:   { on: false },
+    patterns: { on: true },
   }, lsGet('astra_ind', {})),
 
   replay: { active: false, selecting: false, playing: false, idx: 0, speed: 2, timer: null },
@@ -160,10 +161,73 @@ const Chart = {
     this.rebuildPrice();
     this.priceSeries.setData(this.priceData());
     this.renderIndicators();
+    this.renderPatternMarkers();
     this.renderAlertLines();
     this.updateLegend(null);
     setTimeout(() => this.alignScales(), 60);
     Draw.redraw();
+  },
+
+  /* candlestick pattern markers (Hammer, Engulfing, Morning star, …) */
+  renderPatternMarkers(){
+    if (!this.priceSeries) return;
+    const S = this.settings.patterns;
+    const showable = ['candles', 'heikin', 'bars'].includes(STORE.chartType);
+    if (!S || !S.on || !showable || typeof PAT === 'undefined'){
+      try { this.priceSeries.setMarkers([]); } catch(e){}
+      return;
+    }
+    const v = this.view();
+    const markers = [];
+    const start = Math.max(4, v.length - 200);
+    for (let i = start; i < v.length; i++){
+      for (const p of PAT.at(v, i)){
+        markers.push({
+          time: v[i].time,
+          position: p.dir >= 0 ? 'belowBar' : 'aboveBar',
+          color: p.dir > 0 ? CFG.UP : p.dir < 0 ? CFG.DOWN : '#8fa3c8',
+          shape: p.dir > 0 ? 'arrowUp' : p.dir < 0 ? 'arrowDown' : 'circle',
+          text: p.name,
+        });
+      }
+    }
+    try { this.priceSeries.setMarkers(markers.slice(-60)); } catch(e){}
+  },
+
+  /* compose a PNG of the chart (panes + drawings) and download it */
+  snapshot(){
+    try {
+      const parts = [this.main, this.rsiChart, this.macdChart, this.stochChart, this.atrChart]
+        .filter(Boolean).map(c => c.takeScreenshot());
+      const light = STORE.theme === 'light';
+      const w = Math.max(...parts.map(c => c.width));
+      const header = 40;
+      const h = header + parts.reduce((a, c) => a + c.height, 0);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = light ? '#eef2fb' : '#04060d';
+      ctx.fillRect(0, 0, w, h);
+      const t = STORE.tickers.get(STORE.symbol);
+      ctx.fillStyle = light ? '#16233f' : '#d6e4ff';
+      ctx.font = '700 18px Rajdhani, Segoe UI, sans-serif';
+      ctx.fillText('ASTRA  ·  ' + baseAsset(STORE.symbol) + '/USDT  ·  ' + STORE.tf.toUpperCase() +
+        (t ? '  ·  ' + fmtPrice(t.last) : '') + '  ·  ' + new Date().toLocaleString(), 12, 26);
+      let y = header;
+      parts.forEach((c, i) => {
+        ctx.drawImage(c, 0, y);
+        if (i === 0){ try { ctx.drawImage(Draw.canvas, 0, y, c.width, c.height); } catch(e){} }
+        y += c.height;
+      });
+      const a = document.createElement('a');
+      a.download = 'ASTRA_' + STORE.symbol + '_' + STORE.tf + '_' +
+        new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.png';
+      a.href = cv.toDataURL('image/png');
+      a.click();
+      toast('Screenshot saved to your Downloads folder', 'ok');
+    } catch(e){
+      toast('Screenshot failed — ' + e.message, 'error');
+    }
   },
 
   lineData(arr, view){
@@ -380,6 +444,7 @@ const Chart = {
     if (isNew || k.x){
       this.priceSeries.setData(this.priceData());
       this.renderIndicators();
+      this.renderPatternMarkers();
       if (isNew) this.refreshComparesSoon();
       Draw.redraw();
       if (k.x) BUS.emit('candleClose', { sym: STORE.symbol, tf: STORE.tf });

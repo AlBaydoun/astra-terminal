@@ -157,6 +157,72 @@ const IND = {
     return { k, d };
   },
 
+  /* Wilder ADX with +DI/-DI */
+  adx(candles, n){
+    const len = candles.length;
+    const out = { adx: new Array(len).fill(null), pdi: new Array(len).fill(null), mdi: new Array(len).fill(null) };
+    if (len <= n * 2) return out;
+    const tr = [], pdm = [], mdm = [];
+    for (let i = 1; i < len; i++){
+      const c = candles[i], p = candles[i - 1];
+      tr.push(Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close)));
+      const up = c.high - p.high, dn = p.low - c.low;
+      pdm.push(up > dn && up > 0 ? up : 0);
+      mdm.push(dn > up && dn > 0 ? dn : 0);
+    }
+    let sTr = 0, sP = 0, sM = 0;
+    for (let i = 0; i < n; i++){ sTr += tr[i]; sP += pdm[i]; sM += mdm[i]; }
+    const dx = [];
+    for (let i = n; i <= tr.length; i++){
+      const pdi = sTr ? 100 * sP / sTr : 0, mdi = sTr ? 100 * sM / sTr : 0;
+      out.pdi[i] = pdi; out.mdi[i] = mdi;
+      dx.push((pdi + mdi) ? 100 * Math.abs(pdi - mdi) / (pdi + mdi) : 0);
+      if (i < tr.length){ sTr = sTr - sTr / n + tr[i]; sP = sP - sP / n + pdm[i]; sM = sM - sM / n + mdm[i]; }
+    }
+    let a = 0;
+    for (let i = 0; i < n && i < dx.length; i++) a += dx[i];
+    a /= Math.min(n, dx.length);
+    out.adx[n * 2] = a;
+    for (let i = n + 1; i < dx.length; i++){
+      a = (a * (n - 1) + dx[i]) / n;
+      out.adx[i + n] = a;
+    }
+    return out;
+  },
+
+  /* Donchian channel of the PREVIOUS n bars (for breakout checks) */
+  donchian(candles, n){
+    const len = candles.length;
+    const hi = new Array(len).fill(null), lo = new Array(len).fill(null);
+    for (let i = n; i < len; i++){
+      let h = -Infinity, l = Infinity;
+      for (let j = i - n; j < i; j++){
+        if (candles[j].high > h) h = candles[j].high;
+        if (candles[j].low < l) l = candles[j].low;
+      }
+      hi[i] = h; lo[i] = l;
+    }
+    return { hi, lo };
+  },
+
+  /* Ichimoku conversion/base lines */
+  ichimoku(candles, t, k){
+    const len = candles.length;
+    const mid = n => {
+      const out = new Array(len).fill(null);
+      for (let i = n - 1; i < len; i++){
+        let h = -Infinity, l = Infinity;
+        for (let j = i - n + 1; j <= i; j++){
+          if (candles[j].high > h) h = candles[j].high;
+          if (candles[j].low < l) l = candles[j].low;
+        }
+        out[i] = (h + l) / 2;
+      }
+      return out;
+    };
+    return { tenkan: mid(t), kijun: mid(k) };
+  },
+
   heikinAshi(candles){
     const out = [];
     let prevO = null, prevC = null;

@@ -19,9 +19,55 @@ const Draw = {
     const clr = document.getElementById('toolClear');
     if (clr) clr.addEventListener('click', () => { this.items = []; this.save(); this.redraw(); toast('All drawings removed', 'info'); });
     window.addEventListener('keydown', e => {
-      if (e.key === 'Escape'){ this.temp = null; this.setTool(null); this.redraw(); }
+      if (e.key === 'Escape'){ this.temp = null; this.stroke = null; this.setTool(null); this.redraw(); }
+    });
+    /* freehand pencil: canvas captures the mouse while the tool is active */
+    this.canvas.addEventListener('mousedown', e => {
+      if (this.tool !== 'pencil') return;
+      e.preventDefault();
+      this.stroke = [];
+      this.addStrokePoint(e);
+      const move = ev => this.addStrokePoint(ev);
+      const up = () => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        if (this.stroke && this.stroke.length > 3){
+          this.items.push({ type: 'pencil', pts: this.stroke });
+          this.save();
+        }
+        this.stroke = null;
+        this.redraw();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
     });
     this.loadFor(STORE.symbol);
+  },
+
+  addStrokePoint(e){
+    const r = this.canvas.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const last = this.stroke[this.stroke.length - 1];
+    if (last && Math.hypot(x - last._x, y - last._y) < 3) return;
+    const time = this.timeForX(x);
+    const price = Chart.priceSeries ? Chart.priceSeries.coordinateToPrice(y) : null;
+    if (time == null || price == null) return;
+    this.stroke.push({ time, price, _x: x, _y: y });
+    this.redraw();
+  },
+
+  /* x → time, working even right of the last candle */
+  timeForX(x){
+    try {
+      const t = Chart.main.timeScale().coordinateToTime(x);
+      if (t != null) return t;
+      const l = Chart.main.timeScale().coordinateToLogical(x);
+      if (l == null) return null;
+      const raw = Chart.raw;
+      if (!raw.length) return null;
+      const step = raw.length > 1 ? raw[1].time - raw[0].time : 60;
+      return raw[0].time + l * step;
+    } catch(e){ return null; }
   },
 
   resize(){
@@ -38,6 +84,9 @@ const Draw = {
     document.querySelectorAll('#lefttools [data-tool]').forEach(b =>
       b.classList.toggle('active', b.dataset.tool === t));
     document.getElementById('mainWrap').classList.toggle('drawing', !!t);
+    /* pencil captures the mouse directly (chart pan is paused while sketching) */
+    this.canvas.style.pointerEvents = t === 'pencil' ? 'auto' : 'none';
+    this.canvas.style.cursor = t === 'pencil' ? 'crosshair' : '';
   },
 
   save(){ lsSet('astra_draw_' + STORE.symbol, this.items); },
@@ -63,6 +112,16 @@ const Draw = {
     if (this.tool === 'hline'){
       this.items.push({ type: 'hline', price });
       this.save(); this.redraw(); this.setTool(null);
+      return;
+    }
+    if (this.tool === 'text'){
+      if (time == null){ toast('Click inside the chart area', 'warn'); return; }
+      const text = prompt('Note on the chart:');
+      if (text && text.trim()){
+        this.items.push({ type: 'text', p: { time, price }, text: text.trim().slice(0, 80) });
+        this.save(); this.redraw();
+      }
+      this.setTool(null);
       return;
     }
     if (time == null){ toast('Click inside the chart area', 'warn'); return; }
@@ -106,15 +165,59 @@ const Draw = {
     if (!Chart.priceSeries) return;
     this.drawVP(ctx);
     for (const it of this.items) this.drawItem(ctx, it, false);
-    if (this.temp && this.cursor && this.tool && this.tool !== 'hline'){
+    if (this.stroke && this.stroke.length > 1) this.drawPencil(ctx, this.stroke);
+    if (this.temp && this.cursor && this.tool && this.tool !== 'hline' && this.tool !== 'pencil' && this.tool !== 'text'){
       const a = this.toXY(this.temp);
       if (a) this.drawItem(ctx, { type: this.tool, p1: this.temp,
         p2: { time: 0, price: 0 }, _previewTo: this.cursor }, true, a);
     }
   },
 
+  drawPencil(ctx, pts){
+    ctx.save();
+    ctx.strokeStyle = '#8b6cff';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(139,108,255,0.5)';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    let started = false;
+    for (const p of pts){
+      const xy = p._x != null ? { x: p._x, y: p._y } : this.toXY({ time: p.time, price: p.price });
+      if (!xy) continue;
+      started ? ctx.lineTo(xy.x, xy.y) : ctx.moveTo(xy.x, xy.y);
+      started = true;
+    }
+    ctx.stroke();
+    ctx.restore();
+  },
+
   drawItem(ctx, it, preview, aPre){
     ctx.save();
+    if (it.type === 'pencil'){
+      ctx.restore();
+      this.drawPencil(ctx, it.pts.map(p => ({ time: p.time, price: p.price })));
+      return;
+    }
+    if (it.type === 'text'){
+      const xy = this.toXY(it.p);
+      if (xy){
+        ctx.font = '600 12px Rajdhani, sans-serif';
+        const w = ctx.measureText(it.text).width;
+        ctx.fillStyle = 'rgba(8,12,26,0.85)';
+        ctx.strokeStyle = 'rgba(255,209,102,0.6)';
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(xy.x + 8, xy.y - 20, w + 12, 18, 4);
+        else ctx.rect(xy.x + 8, xy.y - 20, w + 12, 18);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText(it.text, xy.x + 14, xy.y - 7);
+        ctx.beginPath(); ctx.arc(xy.x, xy.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,209,102,0.9)'; ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     if (it.type === 'hline'){
       const y = Chart.priceSeries.priceToCoordinate(it.price);
       if (y != null){
@@ -249,6 +352,16 @@ const Draw = {
       if (it.type === 'hline'){
         const ly = Chart.priceSeries.priceToCoordinate(it.price);
         hit = ly != null && Math.abs(y - ly) < 8;
+      } else if (it.type === 'pencil'){
+        let prev = null;
+        for (const p of it.pts){
+          const xy = this.toXY({ time: p.time, price: p.price });
+          if (xy && prev && this.distToSeg(x, y, prev.x, prev.y, xy.x, xy.y) < 8){ hit = true; break; }
+          if (xy) prev = xy;
+        }
+      } else if (it.type === 'text'){
+        const xy = this.toXY(it.p);
+        hit = xy != null && x >= xy.x && x <= xy.x + 120 && y >= xy.y - 24 && y <= xy.y + 6;
       } else {
         const a = this.toXY(it.p1), b = this.toXY(it.p2);
         if (a && b){

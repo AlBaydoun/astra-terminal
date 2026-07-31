@@ -135,6 +135,7 @@ const App = {
     Screener.build();
     Multi.init();
     Strip.init();
+    Notes.init();
     Brain.init();
     this.updateSymBtn();
     this.stats();
@@ -241,6 +242,7 @@ const App = {
       Multi.applyTheme();
       if (Heat.data) Heat.draw();
     });
+    document.getElementById('shotBtn').addEventListener('click', () => Chart.snapshot());
     document.getElementById('fsBtn').addEventListener('click', () => {
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen().catch(() => {});
@@ -262,6 +264,7 @@ const App = {
         document.querySelectorAll('.botPanel').forEach(p =>
           p.classList.toggle('active', p.id === 'bot-' + b.dataset.tab));
         if (b.dataset.tab === 'heatmap') Heat.show();
+        if (b.dataset.tab === 'observer') Brain.renderDash();
       }));
     document.getElementById('botCollapse').addEventListener('click', () => {
       const bp = document.getElementById('bottomPanel');
@@ -300,6 +303,7 @@ const App = {
     set('i_stoch', S.stoch.on); set('i_stochk', S.stoch.k); set('i_stochsm', S.stoch.smooth); set('i_stochd', S.stoch.d);
     set('i_atr', S.atr.on); set('i_atrlen', S.atr.len);
     set('i_vp', S.vp.on);
+    set('i_pat', S.patterns.on);
     this.showModal('indModal');
   },
 
@@ -320,6 +324,7 @@ const App = {
     S.stoch = { on: chk('i_stoch'), k: num('i_stochk', 14), smooth: num('i_stochsm', 3), d: num('i_stochd', 3) };
     S.atr = { on: chk('i_atr'), len: num('i_atrlen', 14) };
     S.vp = { on: chk('i_vp') };
+    S.patterns = { on: chk('i_pat') };
     lsSet('astra_ind', S);
     this.hideModal('indModal');
     Chart.renderAll();

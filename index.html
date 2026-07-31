@@ -72,6 +72,9 @@
       <button data-l="4"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/></svg></button>
     </div>
     <div class="spacer"></div>
+    <button class="tbtn" id="shotBtn" title="Screenshot the chart (saved to Downloads)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </button>
     <button class="tbtn" id="themeBtn" title="Switch light / dark">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
     </button>
@@ -99,6 +102,12 @@
       </button>
       <button data-tool="fib" title="Fibonacci retracement (2 clicks)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="19" x2="21" y2="19"/></svg>
+      </button>
+      <button data-tool="pencil" title="Free drawing — sketch anything (Esc to stop)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+      </button>
+      <button data-tool="text" title="Write a note on the chart (1 click)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="8" y1="20" x2="16" y2="20"/></svg>
       </button>
       <div class="tsep"></div>
       <button data-tool="alert" title="Click on chart to set alert">
@@ -148,6 +157,7 @@
         <div id="botTabs">
           <button data-tab="screener" class="active">SCREENER</button>
           <button data-tab="heatmap">HEATMAP</button>
+          <button data-tab="observer">OBSERVER</button>
           <button id="botCollapse" title="Collapse / expand">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
@@ -181,6 +191,31 @@
               <span id="heatSrc"></span>
             </div>
           </div>
+          <div id="bot-observer" class="botPanel">
+            <div class="obWrap">
+              <div class="obCol">
+                <div class="obTitle">FUND · 10K PLAY MONEY <button id="obFundReset" title="Reset fund">↺</button></div>
+                <div id="obFund"></div>
+                <canvas id="obEquity" height="70"></canvas>
+                <div class="obTitle">OPEN POSITIONS</div>
+                <div id="obPositions"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">CLOSED TRADES <span class="dim2">(fees included)</span></div>
+                <div id="obTrades"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">STRATEGY RESEARCH <span class="dim2">(live votes + backtests)</span></div>
+                <div id="obStrats"></div>
+              </div>
+              <div class="obCol">
+                <div class="obTitle">SIGNAL RADAR <button id="obScan" title="Scan the watchlist now">Scan</button></div>
+                <div id="obRadar"></div>
+                <div class="obTitle">JOURNAL</div>
+                <div id="obJournal"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -193,6 +228,7 @@
         <button data-tab="alerts">ALERTS</button>
         <button data-tab="portfolio">PAPER</button>
         <button data-tab="ai">AI</button>
+        <button data-tab="notes">NOTES</button>
       </div>
       <div class="sideBody">
 
@@ -255,6 +291,20 @@
           <div class="aiDisclaimer">Experimental pattern engine that grades itself and re-weights its strategies. Not financial advice — it can and will be wrong.</div>
         </div>
 
+        <div id="tab-notes" class="sidePanel">
+          <div class="noteCompose">
+            <textarea id="noteText" rows="3" placeholder="Write a trading note… (Ctrl+Enter saves)" spellcheck="false"></textarea>
+            <div class="noteBar">
+              <div id="noteFilter">
+                <button data-f="all" class="active">All</button>
+                <button data-f="sym">BTC</button>
+              </div>
+              <button id="noteAdd">Save note</button>
+            </div>
+          </div>
+          <div id="notesBody"></div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -297,6 +347,7 @@
       <div class="indRow"><label class="main"><input type="checkbox" id="i_stoch"><span class="chip" style="background:#00b8cc"></span>Stochastic <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_stochk" min="2" max="100" style="width:44px"><input type="number" id="i_stochsm" min="1" max="50" style="width:44px"><input type="number" id="i_stochd" min="1" max="50" style="width:44px"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_atr"><span class="chip" style="background:#ff9f6b"></span>ATR <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_atrlen" min="2" max="100"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_vp"><span class="chip" style="background:linear-gradient(90deg,#00e5ff,#ffd166)"></span>Volume Profile <small style="color:var(--dim)">(visible range)</small></label></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_pat"><span class="chip" style="background:linear-gradient(90deg,#00e5a0,#ff4d6d)"></span>Candle patterns <small style="color:var(--dim)">(markers on chart)</small></label></div>
       <button class="mPrimary" id="indApply">APPLY</button>
     </div>
   </div>
@@ -345,6 +396,8 @@
 <script src="js/heatmap.js"></script>
 <script src="js/portfolio.js"></script>
 <script src="js/multichart.js"></script>
+<script src="js/patterns.js"></script>
+<script src="js/notes.js"></script>
 <script src="js/brain.js"></script>
 <script src="js/app.js"></script>
 </body>
