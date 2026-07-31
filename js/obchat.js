@@ -84,7 +84,8 @@ const OBChat = {
       if (/news|mood|sentiment|atmosphere|headlines/.test(q)){
         if (!Intel.newsFresh()) return 'My news feed is not available right now — I judge only by the charts at the moment.';
         const s = Intel.sentiment;
-        let a = 'News mood is ' + (s > 25 ? 'clearly positive' : s < -25 ? 'clearly negative' : 'mixed') + ' (' + (s > 0 ? '+' : '') + s + ' on my -100..+100 scale). ';
+        const md = Intel.moodDirection();
+        let a = 'My news direction call: ' + md.arrow + ' ' + md.label + '. Mood is ' + (s > 25 ? 'clearly positive' : s < -25 ? 'clearly negative' : 'mixed') + ' (' + (s > 0 ? '+' : '') + s + ' on my -100..+100 scale). ';
         const worst = [...Intel.news].sort((x, y) => x.score - y.score)[0];
         const best = [...Intel.news].sort((x, y) => y.score - x.score)[0];
         if (best && best.score > 1) a += 'Most positive story: "' + best.title.slice(0, 80) + '" (' + best.source + '). ';

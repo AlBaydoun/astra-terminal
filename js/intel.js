@@ -104,6 +104,7 @@ const Intel = {
       this.fetchedAt = Date.now();
       this.computeSentiment();
       this.assessRisk();
+      this.updateStatusChip();
       BUS.emit('intel');
       const p = document.getElementById('bot-intel');
       if (p && p.classList.contains('active')) this.render();
@@ -256,14 +257,50 @@ const Intel = {
 
   newsFresh(){ return this.fetchedAt && Date.now() - this.fetchedAt < 20 * 60 * 1000; },
 
+  /* the Observer's overall news direction call: collected headlines → one colored verdict */
+  moodDirection(){
+    if (!this.newsFresh()) return { dir: 0, score: 0, label: 'NO DATA', cls: 'flat' };
+    let s = this.sentiment;
+    if (this.risk.level >= 2) s -= 15;   // shock echoes weigh the mood down
+    const dir = s >= 15 ? 1 : s <= -15 ? -1 : 0;
+    return {
+      dir, score: this.sentiment,
+      label: dir > 0 ? 'UP' : dir < 0 ? 'DOWN' : 'NEUTRAL',
+      cls: dir > 0 ? 'up' : dir < 0 ? 'down' : 'flat',
+      arrow: dir > 0 ? '▲' : dir < 0 ? '▼' : '—',
+    };
+  },
+
+  updateStatusChip(){
+    const el = document.getElementById('stNews');
+    if (!el) return;
+    const m = this.moodDirection();
+    el.textContent = m.arrow + ' ' + (m.dir === 0 && !this.newsFresh() ? '—' : (m.score > 0 ? '+' : '') + m.score);
+    el.className = 'stv ' + m.cls;
+    el.title = 'News mood direction: ' + m.label + (this.risk.level >= 2 ? ' · ⚠ ' + this.risk.label : '');
+  },
+
+  scoreClass(score){
+    if (score >= 3) return 'nStrongPos';
+    if (score >= 1) return 'nPos';
+    if (score <= -3) return 'nStrongNeg';
+    if (score <= -1) return 'nNeg';
+    return '';
+  },
+
   /* ---------------- rendering (INTEL bottom tab) ---------------- */
   render(){
     const moodEl = document.getElementById('inMood');
     if (!moodEl) return;
     const s = this.sentiment;
-    const cls = s > 15 ? 'up' : s < -15 ? 'down' : 'flat';
+    const m = this.moodDirection();
+    const needle = Math.max(2, Math.min(98, (s + 100) / 2));
     moodEl.innerHTML =
-      `<div class="obStat"><label>NEWS MOOD</label><b class="${cls}">${s > 0 ? '+' : ''}${s} ${s > 25 ? 'positive' : s < -25 ? 'negative' : 'mixed'}</b></div>` +
+      `<div class="moodGauge ${m.cls}">` +
+        `<div class="mgHead"><span>NEWS DIRECTION</span><b class="${m.cls}">${m.arrow} ${m.label}${this.newsFresh() ? ' · ' + (s > 0 ? '+' : '') + s : ''}</b></div>` +
+        `<div class="mgBar"><i class="mgNeedle" style="left:${needle}%"></i></div>` +
+        `<div class="mgScale"><span>bearish</span><span>0</span><span>bullish</span></div>` +
+      `</div>` +
       (this.fngInsight
         ? `<div class="obStat"><label>FEAR &amp; GREED</label><b>${this.fngInsight.now} · ${esc(this.fngInsight.cls)}</b></div>` +
           `<div class="obStat"><label>VS HISTORY</label><b>lower than ${100 - this.fngInsight.pct}% of all days</b></div>` +
@@ -276,7 +313,7 @@ const Intel = {
 
     const newsEl = document.getElementById('inNews');
     newsEl.innerHTML = this.news.length ? this.news.slice(0, 25).map(n =>
-      `<a class="newsRow" href="${esc(n.url)}" target="_blank" rel="noopener">` +
+      `<a class="newsRow ${this.scoreClass(n.score)}" href="${esc(n.url)}" target="_blank" rel="noopener">` +
       `<span class="nScore ${n.score > 1 ? 'up' : n.score < -1 ? 'down' : 'flat'}">${n.score > 1 ? '▲' : n.score < -1 ? '▼' : '·'}</span>` +
       `<span class="nTitle">${esc(n.title)}</span>` +
       `<span class="dim2">${esc(n.source)} · ${new Date(n.t).toLocaleTimeString()}</span></a>`).join('')

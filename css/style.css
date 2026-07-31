@@ -805,3 +805,29 @@ select#chartType {
 .evRow i { display: block; color: var(--dim); font-style: normal; margin-top: 2px; }
 .intelWrap { grid-template-columns: 240px 1.4fr 1.3fr 1fr; }
 #inMood .obStat { margin-bottom: 4px; }
+
+/* ============ NEWS MOOD GAUGE + COLORED HEADLINES ============ */
+.moodGauge {
+  margin-bottom: 6px; padding: 8px 10px; border-radius: 9px;
+  background: var(--field); border: 1px solid var(--border-soft);
+}
+.moodGauge.up { border-color: rgba(0, 229, 160, 0.35); box-shadow: 0 0 12px rgba(0, 229, 160, 0.08); }
+.moodGauge.down { border-color: rgba(255, 77, 109, 0.35); box-shadow: 0 0 12px rgba(255, 77, 109, 0.08); }
+.mgHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.mgHead span { color: var(--dim); font-size: 9.5px; letter-spacing: 1.5px; }
+.mgHead b { font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+.mgBar {
+  position: relative; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--down), rgba(107, 123, 163, 0.55) 50%, var(--up));
+  opacity: 0.85;
+}
+.mgNeedle {
+  position: absolute; top: -3px; bottom: -3px; width: 3px; border-radius: 2px;
+  background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  transform: translateX(-50%); transition: left 0.6s ease;
+}
+.mgScale { display: flex; justify-content: space-between; margin-top: 3px; color: var(--dim); font-family: var(--font-mono); font-size: 8.5px; }
+.newsRow.nPos { background: rgba(0, 229, 160, 0.045); border-left: 2px solid rgba(0, 229, 160, 0.35); padding-left: 5px; }
+.newsRow.nStrongPos { background: rgba(0, 229, 160, 0.10); border-left: 2px solid var(--up); padding-left: 5px; }
+.newsRow.nNeg { background: rgba(255, 77, 109, 0.045); border-left: 2px solid rgba(255, 77, 109, 0.35); padding-left: 5px; }
+.newsRow.nStrongNeg { background: rgba(255, 77, 109, 0.10); border-left: 2px solid var(--down); padding-left: 5px; }
