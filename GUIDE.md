@@ -5,7 +5,7 @@
 Two ways to open the terminal — both are the same app:
 
 1. **On this PC:** double-click **`START-ASTRA-Terminal.bat`** — opens in its own window.
-2. **Anywhere online:** open **https://astra-terminal.higgsfield.app** — works on any computer or phone browser.
+2. **Anywhere online:** open **https://albaydoun.github.io/astra-terminal/** — works on any computer or phone browser.
 
 Internet is required (all prices stream live from Binance).
 Note: your watchlist, alerts, drawings and paper account are saved per browser —
