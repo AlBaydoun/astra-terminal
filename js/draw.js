@@ -104,6 +104,7 @@ const Draw = {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.cssW, this.cssH);
     if (!Chart.priceSeries) return;
+    this.drawVP(ctx);
     for (const it of this.items) this.drawItem(ctx, it, false);
     if (this.temp && this.cursor && this.tool && this.tool !== 'hline'){
       const a = this.toXY(this.temp);
@@ -176,6 +177,58 @@ const Draw = {
       ctx.strokeStyle = 'rgba(139,108,255,0.6)'; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       ctx.setLineDash([]);
+    }
+    ctx.restore();
+  },
+
+  /* --- volume profile of the visible range (toggled in the Indicators dialog) --- */
+  drawVP(ctx){
+    const S = Chart.settings.vp;
+    if (!S || !S.on) return;
+    let range = null;
+    try { range = Chart.main.timeScale().getVisibleLogicalRange(); } catch(e){}
+    if (!range) return;
+    const v = Chart.view();
+    const from = Math.max(0, Math.floor(range.from));
+    const to = Math.min(v.length - 1, Math.ceil(range.to));
+    if (to - from < 5) return;
+    let pMin = Infinity, pMax = -Infinity;
+    for (let i = from; i <= to; i++){
+      if (v[i].low < pMin) pMin = v[i].low;
+      if (v[i].high > pMax) pMax = v[i].high;
+    }
+    if (!(pMax > pMin)) return;
+    const buckets = 40, bh = (pMax - pMin) / buckets;
+    const vol = new Array(buckets).fill(0);
+    for (let i = from; i <= to; i++){
+      const c = v[i];
+      const lo = Math.max(0, Math.floor((c.low - pMin) / bh));
+      const hi = Math.min(buckets - 1, Math.floor((c.high - pMin) / bh));
+      const n = hi - lo + 1;
+      for (let b = lo; b <= hi; b++) vol[b] += c.volume / n;
+    }
+    const maxV = Math.max(...vol);
+    if (!(maxV > 0)) return;
+    const maxW = this.cssW * 0.18;
+    const pocIdx = vol.indexOf(maxV);
+    ctx.save();
+    for (let b = 0; b < buckets; b++){
+      const y1 = Chart.priceSeries.priceToCoordinate(pMin + (b + 1) * bh);
+      const y2 = Chart.priceSeries.priceToCoordinate(pMin + b * bh);
+      if (y1 == null || y2 == null) continue;
+      const w = vol[b] / maxV * maxW;
+      ctx.fillStyle = b === pocIdx ? 'rgba(255,209,102,0.32)' : 'rgba(0,229,255,0.13)';
+      ctx.fillRect(this.cssW - w, Math.min(y1, y2) + 0.5, w, Math.max(1, Math.abs(y2 - y1) - 1));
+    }
+    const pocY = Chart.priceSeries.priceToCoordinate(pMin + (pocIdx + 0.5) * bh);
+    if (pocY != null){
+      ctx.strokeStyle = 'rgba(255,209,102,0.45)';
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(0, pocY); ctx.lineTo(this.cssW, pocY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,209,102,0.8)';
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.fillText('POC', 4, pocY - 3);
     }
     ctx.restore();
   },

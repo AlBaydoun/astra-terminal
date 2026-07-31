@@ -63,6 +63,9 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-6 4 3 6-8"/><path d="M3 21l5-4 4 2 6-6" opacity="0.5"/></svg>
       Compare
     </button>
+    <button class="tbtn" id="layoutsBtn" title="Save / load named workspaces">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    </button>
     <div id="layoutSeg" title="Chart layout">
       <button data-l="1" class="active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg></button>
       <button data-l="2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="16" rx="1"/><rect x="13" y="4" width="8" height="16" rx="1"/></svg></button>
@@ -76,6 +79,9 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
     </button>
   </header>
+
+  <!-- ================= TOP MOVERS STRIP ================= -->
+  <div id="tickerStrip" title="Top movers (24h) — click to open"></div>
 
   <!-- ================= MAIN ================= -->
   <div id="main">
@@ -182,10 +188,11 @@
     <!-- right sidebar -->
     <div id="sidebar">
       <div id="sideTabs">
-        <button data-tab="watch" class="active">WATCHLIST</button>
+        <button data-tab="watch" class="active">WATCH</button>
         <button data-tab="book">DEPTH</button>
         <button data-tab="alerts">ALERTS</button>
         <button data-tab="portfolio">PAPER</button>
+        <button data-tab="ai">AI</button>
       </div>
       <div class="sideBody">
 
@@ -234,6 +241,20 @@
           <button id="ptReset">Reset paper account</button>
         </div>
 
+        <div id="tab-ai" class="sidePanel">
+          <div class="sideHead"><span>THE OBSERVER</span><button id="aiAnalyze" title="Analyze now" style="width:auto;padding:0 8px;font-size:11px">Analyze</button></div>
+          <div id="aiVerdict"></div>
+          <label class="aiAutoRow"><input type="checkbox" id="aiAuto"> Let it paper-trade its signals <small>(play money only)</small></label>
+          <div class="secTitle">TRACK RECORD <span id="aiStats" style="float:right;font-family:var(--font-mono);font-size:10px"></span></div>
+          <div id="aiNotes"></div>
+          <div class="secTitle">STRATEGY TRUST</div>
+          <div id="aiLeader"></div>
+          <div class="secTitle">WHAT IT LEARNED</div>
+          <div id="aiLog"></div>
+          <button id="aiReset">Reset the Observer</button>
+          <div class="aiDisclaimer">Experimental pattern engine that grades itself and re-weights its strategies. Not financial advice — it can and will be wrong.</div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -275,7 +296,21 @@
       <div class="indRow"><label class="main"><input type="checkbox" id="i_macd"><span class="chip" style="background:#00e5ff"></span>MACD <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_macdf" min="2" max="100" style="width:44px"><input type="number" id="i_macds" min="2" max="200" style="width:44px"><input type="number" id="i_macdsig" min="2" max="100" style="width:44px"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_stoch"><span class="chip" style="background:#00b8cc"></span>Stochastic <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_stochk" min="2" max="100" style="width:44px"><input type="number" id="i_stochsm" min="1" max="50" style="width:44px"><input type="number" id="i_stochd" min="1" max="50" style="width:44px"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_atr"><span class="chip" style="background:#ff9f6b"></span>ATR <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_atrlen" min="2" max="100"></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_vp"><span class="chip" style="background:linear-gradient(90deg,#00e5ff,#ffd166)"></span>Volume Profile <small style="color:var(--dim)">(visible range)</small></label></div>
       <button class="mPrimary" id="indApply">APPLY</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="layoutModal">
+  <div class="mBox">
+    <div class="mHead">SAVED <span>WORKSPACES</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div class="formRow">
+        <input id="lyName" type="text" placeholder="Name this workspace… e.g. Scalping, Overview" spellcheck="false">
+        <button class="mPrimary" id="lySave" style="width:auto;margin:0;padding:9px 16px">SAVE</button>
+      </div>
+      <div id="lyList"></div>
     </div>
   </div>
 </div>
@@ -310,6 +345,7 @@
 <script src="js/heatmap.js"></script>
 <script src="js/portfolio.js"></script>
 <script src="js/multichart.js"></script>
+<script src="js/brain.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

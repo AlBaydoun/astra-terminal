@@ -14,6 +14,10 @@ no build step, no backend, no accounts.
 - **Bar replay** — rewind to any candle and play history forward at 1–10×
 - **Multi-chart layouts** — 1, 2 or 4 live charts side by side, each with its own coin and timeframe
 - **Compare overlay** — up to 3 coins on one chart with a percent scale (e.g. BTC vs ETH)
+- **The Observer** — a self-adjusting signal engine: 10 strategies vote UP/DOWN, every call is graded against what actually happened, weights shift toward what works, and misses trigger a retrospective ("which strategy would have caught this?"). Optional auto paper-trading of its signals. Experimental — not financial advice.
+- **Named workspaces** — save and reload complete screen setups
+- **Top movers strip** — scrolling ticker of the day's biggest gainers and losers
+- **Volume profile** — sideways volume histogram with POC line, computed over the visible range
 - **Drawing tools** — trend line, ray, horizontal line, Fibonacci retracement (saved per coin)
 - **Screener** — every pair, live prices, sortable by 24h %, volume, high/low
 - **Heatmap** — top 100 coins by market cap, colored by 24h change

@@ -25,6 +25,94 @@ const SymbolSearch = {
   },
 };
 
+/* top movers ticker strip */
+const Strip = {
+  init(){
+    this.el = document.getElementById('tickerStrip');
+    this.build();
+    setInterval(() => this.build(), 60000);
+  },
+  build(){
+    if (!STORE.universe.length || !this.el) return;
+    const liquid = STORE.universe.filter(s => (STORE.tickers.get(s) || {}).quoteVol > 2e6);
+    const sorted = [...liquid].sort((a, b) => STORE.tickers.get(b).pct - STORE.tickers.get(a).pct);
+    const items = [...sorted.slice(0, 8), ...sorted.slice(-8).reverse()];
+    if (!items.length) return;
+    const chip = s => {
+      const t = STORE.tickers.get(s);
+      return `<span class="tsChip" data-sym="${esc(s)}"><b>${esc(baseAsset(s))}</b><span>${fmtPrice(t.last)}</span><i class="${pctClass(t.pct)}">${fmtPct(t.pct)}</i></span>`;
+    };
+    const html = items.map(chip).join('');
+    this.el.innerHTML = `<div class="tsTrack">${html}${html}</div>`;
+    this.el.querySelectorAll('.tsChip').forEach(c =>
+      c.addEventListener('click', () => App.setSymbol(c.dataset.sym)));
+  },
+};
+
+/* named workspaces: save / load the whole screen setup */
+const Layouts = {
+  saved: lsGet('astra_workspaces', {}),
+  open(){
+    this.renderList();
+    App.showModal('layoutModal');
+    setTimeout(() => document.getElementById('lyName').focus(), 60);
+  },
+  saveCurrent(){
+    const inp = document.getElementById('lyName');
+    const name = inp.value.trim();
+    if (!name){ toast('Give the workspace a name first', 'warn'); return; }
+    this.saved[name] = {
+      sym: STORE.symbol, tf: STORE.tf, type: STORE.chartType,
+      layout: Multi.layout,
+      minis: Multi.cells.length ? Multi.cells.map(c => ({ sym: c.sym, tf: c.tf, ema: !!c.ema })) : Multi.minis,
+      ind: Chart.settings,
+      compares: Chart.compares,
+    };
+    lsSet('astra_workspaces', this.saved);
+    inp.value = '';
+    this.renderList();
+    toast('Workspace "' + name + '" saved', 'ok');
+  },
+  load(name){
+    const w = this.saved[name];
+    if (!w) return;
+    Chart.settings = Object.assign({}, Chart.settings, w.ind || {});
+    lsSet('astra_ind', Chart.settings);
+    STORE.chartType = w.type || 'candles';
+    localStorage.setItem('astra_ctype', STORE.chartType);
+    document.getElementById('chartType').value = STORE.chartType;
+    Chart.compares = (w.compares || []).filter(s => s !== w.sym);
+    lsSet('astra_compare', Chart.compares);
+    Multi.minis = w.minis || Multi.minis;
+    lsSet('astra_minis', Multi.minis);
+    Multi.setLayout(w.layout || 1);
+    STORE.tf = w.tf || STORE.tf;
+    localStorage.setItem('astra_tf', STORE.tf);
+    App.renderTfPills();
+    STORE.symbol = STORE.tickers.has(w.sym) ? w.sym : STORE.symbol;
+    localStorage.setItem('astra_symbol', STORE.symbol);
+    App.updateSymBtn();
+    Chart.load();
+    App.hideModal('layoutModal');
+    toast('Workspace "' + name + '" loaded', 'ok');
+  },
+  del(name){
+    delete this.saved[name];
+    lsSet('astra_workspaces', this.saved);
+    this.renderList();
+  },
+  renderList(){
+    const host = document.getElementById('lyList');
+    const names = Object.keys(this.saved);
+    host.innerHTML = names.length ? names.map(n =>
+      `<div class="lyRow"><b>${esc(n)}</b><span>${esc(baseAsset(this.saved[n].sym || ''))} · ${esc(this.saved[n].tf || '')} · ${this.saved[n].layout || 1} chart${(this.saved[n].layout || 1) > 1 ? 's' : ''}</span>` +
+      `<button data-act="load" data-n="${esc(n)}">Load</button><button data-act="del" data-n="${esc(n)}" class="lyDel">×</button></div>`).join('')
+      : '<div class="empty">No saved workspaces yet.</div>';
+    host.querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => b.dataset.act === 'load' ? this.load(b.dataset.n) : this.del(b.dataset.n)));
+  },
+};
+
 const App = {
   async boot(){
     document.getElementById('bootSplash').classList.add('show');
@@ -46,6 +134,8 @@ const App = {
     await Chart.load();
     Screener.build();
     Multi.init();
+    Strip.init();
+    Brain.init();
     this.updateSymBtn();
     this.stats();
     setInterval(() => this.stats(), 120000);
@@ -130,6 +220,11 @@ const App = {
     document.getElementById('cmpBtn').addEventListener('click', () =>
       SymbolSearch.open(sym => Chart.addCompare(sym)));
 
+    /* named workspaces */
+    document.getElementById('layoutsBtn').addEventListener('click', () => Layouts.open());
+    document.getElementById('lySave').addEventListener('click', () => Layouts.saveCurrent());
+    document.getElementById('lyName').addEventListener('keydown', e => { if (e.key === 'Enter') Layouts.saveCurrent(); });
+
     /* bar replay */
     document.getElementById('replayBtn').addEventListener('click', () => Chart.replayStart());
     document.getElementById('rpPlay').addEventListener('click', () => Chart.replayTogglePlay());
@@ -204,6 +299,7 @@ const App = {
     set('i_macd', S.macd.on); set('i_macdf', S.macd.f); set('i_macds', S.macd.s); set('i_macdsig', S.macd.sig);
     set('i_stoch', S.stoch.on); set('i_stochk', S.stoch.k); set('i_stochsm', S.stoch.smooth); set('i_stochd', S.stoch.d);
     set('i_atr', S.atr.on); set('i_atrlen', S.atr.len);
+    set('i_vp', S.vp.on);
     this.showModal('indModal');
   },
 
@@ -223,6 +319,7 @@ const App = {
     S.macd = { on: chk('i_macd'), f: num('i_macdf', 12), s: num('i_macds', 26), sig: num('i_macdsig', 9) };
     S.stoch = { on: chk('i_stoch'), k: num('i_stochk', 14), smooth: num('i_stochsm', 3), d: num('i_stochd', 3) };
     S.atr = { on: chk('i_atr'), len: num('i_atrlen', 14) };
+    S.vp = { on: chk('i_vp') };
     lsSet('astra_ind', S);
     this.hideModal('indModal');
     Chart.renderAll();

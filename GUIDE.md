@@ -36,6 +36,11 @@ the PC version and the online version each keep their own.
 - **Multi-chart layouts:** the layout buttons (top right area) switch between 1, 2 or 4 charts. The extra charts are independent — each has its own coin and timeframe, all live. Your setup is remembered.
 - **Compare:** the "Compare" button overlays another coin on the main chart (up to 3). The price scale switches to percent so you can see who's stronger — e.g. BTC vs ETH. Remove with the × on the little colored chip.
 - **Straight from the screener:** hover a row — the ★ adds/removes the coin from your watchlist, the bell sets a price alert for it. No need to open the coin first.
+- **The Observer (AI tab):** an experimental signal engine. Ten strategies (EMA cross, RSI, MACD, SuperTrend, Bollinger, VWAP, Stochastic, volume bursts, trend slope, engulfing candles) vote UP or DOWN on the current chart. When they agree, it writes a **signal note** with its confidence and reasons, then checks itself ~10 candles later: right calls make it trust those strategies more, wrong calls less — and after a miss it re-examines the chart to find which strategy *would* have been right and boosts it. You can watch its hit rate, its strategy trust list, and what it learned. Optionally let it paper-trade its own signals (play money only). **It is an experiment, not financial advice.**
+- **Workspaces:** the bookmark button saves your whole screen setup (coin, timeframe, layout, mini charts, indicators, compares) under a name — e.g. "Scalping" or "Overview" — and loads it back with one click.
+- **Top movers strip:** the scrolling band under the top bar shows the day's biggest gainers and losers. Hover to pause, click to open.
+- **Volume profile:** in the Indicators dialog. Shows sideways volume bars on the right — where the most trading happened. The yellow line (POC) marks the busiest price level.
+- **Mini-chart EMA:** each side chart has a small "EMA" button for 20/50 EMA lines.
 
 ## What gets saved
 

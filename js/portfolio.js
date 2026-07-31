@@ -36,8 +36,12 @@ const Port = {
   },
 
   trade(side){
-    const sym = STORE.symbol, px = this.price(sym);
     const qty = parseFloat(document.getElementById('ptQty').value);
+    this.execute(STORE.symbol, side, qty);
+  },
+
+  execute(sym, side, qty, who){
+    const px = this.price(sym);
     if (!(qty > 0) || !(px > 0)){ toast('Enter a quantity first', 'warn'); return; }
     const st = this.state;
     const pos = st.positions[sym] || { qty: 0, avg: 0 };
@@ -60,7 +64,7 @@ const Port = {
     }
     if (st.history.length > 60) st.history.length = 60;
     this.persist();
-    toast((side === 'buy' ? 'Bought ' : 'Sold ') + (+qty.toPrecision(6)) + ' ' + baseAsset(sym) + ' @ ' + fmtPrice(px) + ' (paper)', 'ok');
+    toast((who ? who + ': ' : '') + (side === 'buy' ? 'Bought ' : 'Sold ') + (+qty.toPrecision(6)) + ' ' + baseAsset(sym) + ' @ ' + fmtPrice(px) + ' (paper)', 'ok');
   },
 
   persist(){ lsSet('astra_port', this.state); this.render(); },

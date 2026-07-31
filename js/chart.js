@@ -23,6 +23,7 @@ const Chart = {
     macd: { on: false, f: 12, s: 26, sig: 9 },
     stoch:{ on: false, k: 14, smooth: 3, d: 3 },
     atr:  { on: false, len: 14 },
+    vp:   { on: false },
   }, lsGet('astra_ind', {})),
 
   replay: { active: false, selecting: false, playing: false, idx: 0, speed: 2, timer: null },
@@ -380,6 +381,8 @@ const Chart = {
       this.priceSeries.setData(this.priceData());
       this.renderIndicators();
       if (isNew) this.refreshComparesSoon();
+      Draw.redraw();
+      if (k.x) BUS.emit('candleClose', { sym: STORE.symbol, tf: STORE.tf });
     } else {
       this.tickUpdate(c);
     }
