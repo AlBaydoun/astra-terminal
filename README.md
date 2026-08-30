@@ -14,7 +14,8 @@ browser with no build step.
 - **Markets browser** — seven groups plus worldwide symbol search; star what you monitor
 - **Honest data status** — every instrument is labelled LIVE / DELAYED / CLOSED, never guessed
 - **MT5 bridge** — reads your own MetaTrader 5 terminal for real broker prices with no delay (read-only, never trades)
-- **12 indicators** — EMA/SMA ×3, Bollinger Bands, VWAP, SuperTrend, Volume, RSI, MACD, Stochastic, ATR
+- **Timeframes from 1 second to 1 week** — 1S/30S built from the live tick stream (crypto and MT5 bridge)
+- **12 indicators, placed where you want them** — EMA/SMA ×3, Bollinger Bands, VWAP, SuperTrend, Volume, RSI, Stochastic, MACD, ATR, ADX+DI; each can live on the price chart or in any of three sub-windows, and several can share one window
 - **Bar replay** — rewind to any candle and play history forward at 1–10×
 - **Multi-chart layouts** — 1, 2 or 4 live charts side by side, each with its own coin and timeframe
 - **Compare overlay** — up to 3 coins on one chart with a percent scale (e.g. BTC vs ETH)

@@ -328,41 +328,45 @@ const App = {
   },
 
   openIndicators(){
-    const S = Chart.settings;
-    const set = (id, v) => { const el = document.getElementById(id); if (el.type === 'checkbox') el.checked = v; else el.value = v; };
-    set('i_ema1', S.ema1.on); set('i_ema1len', S.ema1.len); set('i_ema1type', S.ema1.type || 'ema');
-    set('i_ema2', S.ema2.on); set('i_ema2len', S.ema2.len); set('i_ema2type', S.ema2.type || 'ema');
-    set('i_ema3', S.ema3.on); set('i_ema3len', S.ema3.len); set('i_ema3type', S.ema3.type || 'ema');
-    set('i_bb', S.bb.on); set('i_bblen', S.bb.len); set('i_bbmult', S.bb.mult);
-    set('i_vwap', S.vwap.on); set('i_vol', S.vol.on);
-    set('i_st', S.st.on); set('i_stlen', S.st.len); set('i_stmult', S.st.mult);
-    set('i_rsi', S.rsi.on); set('i_rsilen', S.rsi.len);
-    set('i_macd', S.macd.on); set('i_macdf', S.macd.f); set('i_macds', S.macd.s); set('i_macdsig', S.macd.sig);
-    set('i_stoch', S.stoch.on); set('i_stochk', S.stoch.k); set('i_stochsm', S.stoch.smooth); set('i_stochd', S.stoch.d);
-    set('i_atr', S.atr.on); set('i_atrlen', S.atr.len);
-    set('i_vp', S.vp.on);
-    set('i_pat', S.patterns.on);
+    const host = document.getElementById('indList');
+    host.innerHTML = INDS.map(def => {
+      const c = Chart.settings[def.id] || def.def;
+      const params = (def.params || []).map(p => {
+        const val = c[p.k];
+        if (p.kind === 'sel')
+          return `<select class="tsel" data-id="${def.id}" data-k="${p.k}">` +
+            p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>';
+        return `<input type="number" data-id="${def.id}" data-k="${p.k}" value="${val}" ` +
+          `min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''} style="width:52px">`;
+      }).join('');
+      const targets = IND_TARGETS.map(([v, l]) =>
+        `<option value="${v}"${v === c.target ? ' selected' : ''}>${l}</option>`).join('');
+      return `<div class="indRow">` +
+        `<label class="main"><input type="checkbox" data-id="${def.id}" data-k="on"${c.on ? ' checked' : ''}>` +
+        `<span class="chip" style="background:${def.color || '#3d5a80'}"></span>${esc(def.label)}</label>` +
+        `<span class="indParams">${params}</span>` +
+        `<select class="tsel indTarget" data-id="${def.id}" data-k="target" title="Which window to draw it in">${targets}</select>` +
+        `</div>`;
+    }).join('');
+    document.getElementById('i_vp').checked = Chart.settings.vp.on;
+    document.getElementById('i_pat').checked = Chart.settings.patterns.on;
     this.showModal('indModal');
   },
 
   applyIndicators(){
     const S = Chart.settings;
-    const num = (id, def) => { const v = parseInt(document.getElementById(id).value, 10); return (v > 0 && v < 1000) ? v : def; };
-    const chk = id => document.getElementById(id).checked;
-    const sel = id => document.getElementById(id).value;
-    S.ema1 = { on: chk('i_ema1'), len: num('i_ema1len', 20), type: sel('i_ema1type') };
-    S.ema2 = { on: chk('i_ema2'), len: num('i_ema2len', 50), type: sel('i_ema2type') };
-    S.ema3 = { on: chk('i_ema3'), len: num('i_ema3len', 200), type: sel('i_ema3type') };
-    S.bb = { on: chk('i_bb'), len: num('i_bblen', 20), mult: parseFloat(document.getElementById('i_bbmult').value) || 2 };
-    S.vwap = { on: chk('i_vwap') };
-    S.vol = { on: chk('i_vol') };
-    S.st = { on: chk('i_st'), len: num('i_stlen', 10), mult: parseFloat(document.getElementById('i_stmult').value) || 3 };
-    S.rsi = { on: chk('i_rsi'), len: num('i_rsilen', 14) };
-    S.macd = { on: chk('i_macd'), f: num('i_macdf', 12), s: num('i_macds', 26), sig: num('i_macdsig', 9) };
-    S.stoch = { on: chk('i_stoch'), k: num('i_stochk', 14), smooth: num('i_stochsm', 3), d: num('i_stochd', 3) };
-    S.atr = { on: chk('i_atr'), len: num('i_atrlen', 14) };
-    S.vp = { on: chk('i_vp') };
-    S.patterns = { on: chk('i_pat') };
+    document.querySelectorAll('#indList [data-id]').forEach(el => {
+      const cfg = S[el.dataset.id];
+      if (!cfg) return;
+      const k = el.dataset.k;
+      if (el.type === 'checkbox') cfg[k] = el.checked;
+      else if (el.type === 'number'){
+        const v = parseFloat(el.value);
+        if (!isNaN(v) && v > 0) cfg[k] = v;
+      } else cfg[k] = el.value;
+    });
+    S.vp = { on: document.getElementById('i_vp').checked };
+    S.patterns = { on: document.getElementById('i_pat').checked };
     lsSet('astra_ind', S);
     this.hideModal('indModal');
     Chart.renderAll();

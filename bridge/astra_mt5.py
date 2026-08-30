@@ -20,6 +20,7 @@ import json
 import re
 import time
 import threading
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -41,6 +42,7 @@ TF = {
     "1d": mt5.TIMEFRAME_D1,
     "1w": mt5.TIMEFRAME_W1,
 }
+SUB_MINUTE = {"1s": 1, "30s": 30}     # built from ticks, not from MT5 candles
 SAFE = re.compile(r"^[A-Za-z0-9._#/-]{1,32}$")
 
 _lock = threading.Lock()
@@ -112,9 +114,46 @@ def quote(symbol):
     }
 
 
+def candles_from_ticks(symbol, bucket, limit):
+    """MetaTrader has no sub-minute candles, so build them from the real tick stream."""
+    span = min(bucket * max(limit, 60), 6 * 3600)
+    now = datetime.now(timezone.utc)
+    with _lock:
+        ticks = mt5.copy_ticks_range(symbol, now - timedelta(seconds=span), now, mt5.COPY_TICKS_ALL)
+    if ticks is None or not len(ticks):
+        return []
+    bars, cur, slot = [], None, -1
+    for t in ticks:
+        last, bid, ask = float(t["last"]), float(t["bid"]), float(t["ask"])
+        if last:
+            price = last
+        elif bid and ask:
+            price = (bid + ask) / 2
+        else:
+            price = bid or ask
+        if not price:
+            continue
+        s = int(t["time"]) // bucket * bucket
+        if s != slot:
+            if cur:
+                bars.append(cur)
+            cur = [s, price, price, price, price, 1.0]
+            slot = s
+        else:
+            cur[2] = max(cur[2], price)
+            cur[3] = min(cur[3], price)
+            cur[4] = price
+            cur[5] += 1.0
+    if cur:
+        bars.append(cur)
+    return bars[-limit:]
+
+
 def candles(symbol, tf, limit):
     if not ensure_selected(symbol):
         return None
+    if tf in SUB_MINUTE:
+        return candles_from_ticks(symbol, SUB_MINUTE[tf], min(limit, 2000))
     with _lock:
         rates = mt5.copy_rates_from_pos(symbol, TF.get(tf, mt5.TIMEFRAME_H1), 0, min(limit, 5000))
     if rates is None:

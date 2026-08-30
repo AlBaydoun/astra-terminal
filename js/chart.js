@@ -2,30 +2,23 @@
 const Chart = {
   raw: [],
   main: null, priceSeries: null,
-  overlays: {},
-  rsiChart: null, rsiSeries: null,
-  macdChart: null, macdHist: null, macdLine: null, macdSig: null,
-  stochChart: null, stochK: null, stochD: null,
-  atrChart: null, atrSeries: null,
+  panes: {},          // 'p1'|'p2'|'p3' -> {el, chart}
+  series: {},         // 'indicatorId|seriesKey' -> {s, target}
   sock: null,
   alertLines: [],
   syncing: false,
 
-  settings: Object.assign({
-    ema1: { on: true,  len: 20,  type: 'ema' },
-    ema2: { on: true,  len: 50,  type: 'ema' },
-    ema3: { on: false, len: 200, type: 'ema' },
-    bb:   { on: false, len: 20, mult: 2 },
-    vwap: { on: false },
-    vol:  { on: true },
-    st:   { on: false, len: 10, mult: 3 },
-    rsi:  { on: true,  len: 14 },
-    macd: { on: false, f: 12, s: 26, sig: 9 },
-    stoch:{ on: false, k: 14, smooth: 3, d: 3 },
-    atr:  { on: false, len: 14 },
-    vp:   { on: false },
-    patterns: { on: true },
-  }, lsGet('astra_ind', {})),
+  /* built from the indicator catalogue, then overlaid with whatever was saved —
+     so a new indicator appears with its defaults without wiping your settings */
+  settings: (() => {
+    const saved = lsGet('astra_ind', {});
+    const out = {
+      vp: Object.assign({ on: false }, saved.vp || {}),
+      patterns: Object.assign({ on: true }, saved.patterns || {}),
+    };
+    for (const d of INDS) out[d.id] = Object.assign({}, d.def, saved[d.id] || {});
+    return out;
+  })(),
 
   replay: { active: false, selecting: false, playing: false, idx: 0, speed: 2, timer: null },
 
@@ -77,7 +70,7 @@ const Chart = {
       rightPriceScale: { borderColor: c.border },
       timeScale: { borderColor: c.border },
     };
-    for (const ch of [this.main, this.rsiChart, this.macdChart, this.stochChart, this.atrChart])
+    for (const [, ch] of this.allCharts())
       if (ch) try { ch.applyOptions(opts); } catch(e){}
   },
 
@@ -109,7 +102,7 @@ const Chart = {
   syncFrom(which, range){
     if (this.syncing || !range) return;
     this.syncing = true;
-    for (const [name, c] of [['main', this.main], ['rsi', this.rsiChart], ['macd', this.macdChart], ['stoch', this.stochChart], ['atr', this.atrChart]]){
+    for (const [name, c] of this.allCharts()){
       if (!c || name === which) continue;
       try { c.timeScale().setVisibleLogicalRange(range); } catch(e){}
     }
@@ -198,8 +191,7 @@ const Chart = {
   /* compose a PNG of the chart (panes + drawings) and download it */
   snapshot(){
     try {
-      const parts = [this.main, this.rsiChart, this.macdChart, this.stochChart, this.atrChart]
-        .filter(Boolean).map(c => c.takeScreenshot());
+      const parts = this.allCharts().map(x => x[1]).map(c => c.takeScreenshot());
       const light = STORE.theme === 'light';
       const w = Math.max(...parts.map(c => c.width));
       const header = 40;
@@ -239,169 +231,177 @@ const Chart = {
     return out;
   },
 
-  setOverlay(key, on, create, fill){
-    if (on){
-      if (!this.overlays[key]) this.overlays[key] = create();
-      fill(this.overlays[key]);
-    } else if (this.overlays[key]){
-      try { this.main.removeSeries(this.overlays[key]); } catch(e){}
-      delete this.overlays[key];
-    }
+  /* ---------- indicator engine ----------
+     Every indicator in the catalogue names the window it belongs to: the price
+     chart itself, or one of three extra windows. Several indicators can share
+     one window. Series are created, moved and destroyed to match. */
+
+  chartFor(target){
+    if (target === 'main') return this.main;
+    const p = this.panes[target];
+    return p ? p.chart : null;
   },
 
-  ma(closes, cfg){
-    return (cfg.type === 'sma' ? IND.sma : IND.ema)(closes, cfg.len);
+  allCharts(){
+    const out = [['main', this.main]];
+    for (const k of Object.keys(this.panes)) out.push([k, this.panes[k].chart]);
+    return out;
   },
 
-  renderIndicators(){
-    const S = this.settings;
-    const v = this.view();
-    const closes = v.map(c => c.close);
-
-    this.setOverlay('vol', S.vol.on,
-      () => this.main.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false }),
-      s => {
-        this.main.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-        s.setData(v.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(46,189,133,0.35)' : 'rgba(246,70,93,0.35)' })));
-      });
-
-    for (const [key, color] of [['ema1', '#00e5ff'], ['ema2', '#ffb03a'], ['ema3', '#ff6bd6']]){
-      const cfg = S[key];
-      this.setOverlay(key, cfg.on,
-        () => this.main.addLineSeries({ color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
-        s => s.setData(this.lineData(this.ma(closes, cfg), v)));
+  /* which extra windows are needed right now, in fixed order */
+  neededPanes(){
+    const want = [];
+    for (const d of INDS){
+      const c = this.settings[d.id];
+      if (c && c.on && c.target && c.target !== 'main' && want.indexOf(c.target) === -1) want.push(c.target);
     }
-
-    const bbOn = S.bb.on;
-    let bbData = null;
-    if (bbOn) bbData = IND.bb(closes, S.bb.len, S.bb.mult);
-    for (const [key, part, color] of [['bbU', 'up', 'rgba(139,108,255,0.7)'], ['bbM', 'mid', 'rgba(139,108,255,0.45)'], ['bbL', 'lo', 'rgba(139,108,255,0.7)']]){
-      this.setOverlay(key, bbOn,
-        () => this.main.addLineSeries({ color, lineWidth: 1, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
-        s => s.setData(this.lineData(bbData[part], v)));
-    }
-
-    this.setOverlay('vwap', S.vwap.on,
-      () => this.main.addLineSeries({ color: '#ffd166', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
-      s => s.setData(this.lineData(IND.vwapDaily(v), v)));
-
-    const stOn = S.st.on;
-    let stData = null;
-    if (stOn) stData = IND.supertrend(v, S.st.len, S.st.mult);
-    for (const [key, part, color] of [['stUp', 'up', 'rgba(46,189,133,0.9)'], ['stDn', 'down', 'rgba(246,70,93,0.9)']]){
-      this.setOverlay(key, stOn,
-        () => this.main.addLineSeries({ color, lineWidth: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }),
-        s => s.setData(this.lineData(stData[part], v)));
-    }
-
-    this.ensurePanes();
-    if (this.rsiSeries) this.rsiSeries.setData(this.lineData(IND.rsi(closes, S.rsi.len), v));
-    if (this.macdHist) this.setMacdData(closes, v);
-    if (this.stochK){
-      const st = IND.stoch(v, S.stoch.k, S.stoch.smooth, S.stoch.d);
-      this.stochK.setData(this.lineData(st.k, v));
-      this.stochD.setData(this.lineData(st.d, v));
-    }
-    if (this.atrSeries) this.atrSeries.setData(this.lineData(IND.atr(v, S.atr.len), v));
-    this.updateTimeAxes();
+    return IND_TARGETS.map(t => t[0]).filter(t => t !== 'main' && want.indexOf(t) !== -1);
   },
 
   ensurePanes(){
-    const S = this.settings;
-    const rsiEl = document.getElementById('rsiPane');
-    const macdEl = document.getElementById('macdPane');
-
-    if (S.rsi.on && !this.rsiChart){
-      rsiEl.classList.add('open');
-      this.rsiChart = this.makePane(rsiEl.querySelector('.paneChart'), false);
-      this.rsiSeries = this.rsiChart.addLineSeries({ color: '#c084fc', lineWidth: 1, priceLineVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
-      this.rsiSeries.createPriceLine({ price: 70, color: 'rgba(246,70,93,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.rsiSeries.createPriceLine({ price: 30, color: 'rgba(46,189,133,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('rsi', r));
+    const need = this.neededPanes();
+    /* drop windows that no longer hold anything */
+    for (const key of Object.keys(this.panes)){
+      if (need.indexOf(key) !== -1) continue;
+      const p = this.panes[key];
+      for (const sk of Object.keys(this.series))
+        if (this.series[sk].target === key) delete this.series[sk];
+      try { p.chart.remove(); } catch(e){}
+      p.el.classList.remove('open');
+      delete this.panes[key];
     }
-    if (!S.rsi.on && this.rsiChart){
-      try { this.rsiChart.remove(); } catch(e){}
-      this.rsiChart = null; this.rsiSeries = null;
-      rsiEl.classList.remove('open');
+    /* build the ones that are missing */
+    for (const key of need){
+      if (this.panes[key]) continue;
+      const el = document.getElementById('pane-' + key);
+      if (!el) continue;
+      el.classList.add('open');
+      const chart = this.makePane(el.querySelector('.paneChart'), false);
+      chart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom(key, r));
+      this.panes[key] = { el, chart };
     }
-
-    if (S.macd.on && !this.macdChart){
-      macdEl.classList.add('open');
-      this.macdChart = this.makePane(macdEl.querySelector('.paneChart'), false);
-      this.macdHist = this.macdChart.addHistogramSeries({ priceFormat: { type: 'price', precision: 4, minMove: 0.0001 }, lastValueVisible: false, priceLineVisible: false });
-      this.macdLine = this.macdChart.addLineSeries({ color: '#00e5ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      this.macdSig = this.macdChart.addLineSeries({ color: '#ffb03a', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      this.macdChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('macd', r));
-    }
-    if (!S.macd.on && this.macdChart){
-      try { this.macdChart.remove(); } catch(e){}
-      this.macdChart = null; this.macdHist = this.macdLine = this.macdSig = null;
-      macdEl.classList.remove('open');
-    }
-
-    const stochEl = document.getElementById('stochPane');
-    if (S.stoch.on && !this.stochChart){
-      stochEl.classList.add('open');
-      this.stochChart = this.makePane(stochEl.querySelector('.paneChart'), false);
-      this.stochK = this.stochChart.addLineSeries({ color: '#00e5ff', lineWidth: 1, priceLineVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } });
-      this.stochD = this.stochChart.addLineSeries({ color: '#ffb03a', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      this.stochK.createPriceLine({ price: 80, color: 'rgba(246,70,93,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.stochK.createPriceLine({ price: 20, color: 'rgba(46,189,133,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' });
-      this.stochChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('stoch', r));
-    }
-    if (!S.stoch.on && this.stochChart){
-      try { this.stochChart.remove(); } catch(e){}
-      this.stochChart = null; this.stochK = this.stochD = null;
-      stochEl.classList.remove('open');
-    }
-
-    const atrEl = document.getElementById('atrPane');
-    if (S.atr.on && !this.atrChart){
-      atrEl.classList.add('open');
-      this.atrChart = this.makePane(atrEl.querySelector('.paneChart'), false);
-      this.atrSeries = this.atrChart.addLineSeries({ color: '#ff9f6b', lineWidth: 1, priceLineVisible: false });
-      this.atrChart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom('atr', r));
-    }
-    if (!S.atr.on && this.atrChart){
-      try { this.atrChart.remove(); } catch(e){}
-      this.atrChart = null; this.atrSeries = null;
-      atrEl.classList.remove('open');
+    /* name each window after what it holds */
+    for (const key of Object.keys(this.panes)){
+      const names = INDS.filter(d => this.settings[d.id] && this.settings[d.id].on && this.settings[d.id].target === key)
+        .map(d => d.label);
+      const tag = this.panes[key].el.querySelector('.paneTag');
+      if (tag) tag.textContent = names.join('  ·  ');
     }
   },
 
+  makeSeries(chart, spec, target, def){
+    const scaleId = spec.scale === 'vol' ? 'vol'
+      : (target === 'main' && def.kind === 'osc') ? 'osc_' + def.id
+      : 'right';
+    const priceFormat = spec.precision != null
+      ? { type: 'price', precision: spec.precision, minMove: Math.pow(10, -spec.precision) }
+      : (spec.scale === 'vol' ? { type: 'volume' } : undefined);
+    const base = {
+      priceScaleId: scaleId,
+      priceLineVisible: false,
+      lastValueVisible: target !== 'main',
+      crosshairMarkerVisible: false,
+    };
+    if (priceFormat) base.priceFormat = priceFormat;
+    const s = spec.type === 'hist'
+      ? chart.addHistogramSeries(Object.assign(base, spec.color ? { color: spec.color } : {}))
+      : chart.addLineSeries(Object.assign(base, {
+          color: spec.color || def.color || '#8fa3c8',
+          lineWidth: spec.width || 1,
+          lineStyle: spec.lineStyle || 0,
+        }));
+    if (scaleId !== 'right'){
+      const margins = spec.margins || { top: 0.72, bottom: 0 };
+      try { chart.priceScale(scaleId).applyOptions({ scaleMargins: margins }); } catch(e){}
+    }
+    for (const [price, color] of spec.levels || [])
+      try { s.createPriceLine({ price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' }); } catch(e){}
+    return s;
+  },
+
+  ma(closes, cfg){ return (cfg.type === 'sma' ? IND.sma : IND.ema)(closes, cfg.len); },
+
+  /* tickOnly = keep the drawn history, just move the newest point along */
+  renderIndicators(tickOnly){
+    const v = this.view();
+    if (!v.length) return;
+    const ctx = {
+      v, closes: v.map(c => c.close),
+      line: arr => this.lineData(arr, v),
+    };
+    this.ensurePanes();
+
+    const alive = {};
+    for (const def of INDS){
+      const cfg = this.settings[def.id];
+      if (!cfg || !cfg.on) continue;
+      const target = this.chartFor(cfg.target) ? cfg.target : 'main';
+      const chart = this.chartFor(target);
+      if (!chart) continue;
+      let specs;
+      try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
+      for (const spec of specs){
+        const id = def.id + '|' + spec.key;
+        alive[id] = true;
+        let entry = this.series[id];
+        if (entry && entry.target !== target){          /* moved to another window */
+          try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}
+          entry = null;
+        }
+        if (!entry){
+          entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def), target };
+          entry.s.setData(spec.data);
+          continue;
+        }
+        if (tickOnly){
+          const last = spec.data[spec.data.length - 1];
+          if (last) { try { entry.s.update(last); } catch(e){} }
+        } else {
+          entry.s.setData(spec.data);
+        }
+      }
+    }
+    /* remove what is no longer switched on */
+    for (const id of Object.keys(this.series)){
+      if (alive[id]) continue;
+      const e = this.series[id];
+      const c = this.chartFor(e.target);
+      if (c) try { c.removeSeries(e.s); } catch(err){}
+      delete this.series[id];
+    }
+    this.updateTimeAxes();
+  },
+
   updateTimeAxes(){
-    const last = this.atrChart ? 'atr' : this.stochChart ? 'stoch' : this.macdChart ? 'macd' : this.rsiChart ? 'rsi' : 'main';
-    this.main.applyOptions({ timeScale: { visible: last === 'main' } });
-    if (this.rsiChart) this.rsiChart.applyOptions({ timeScale: { visible: last === 'rsi' } });
-    if (this.macdChart) this.macdChart.applyOptions({ timeScale: { visible: last === 'macd' } });
-    if (this.stochChart) this.stochChart.applyOptions({ timeScale: { visible: last === 'stoch' } });
-    if (this.atrChart) this.atrChart.applyOptions({ timeScale: { visible: last === 'atr' } });
+    const charts = this.allCharts();
+    const lastKey = charts[charts.length - 1][0];
+    for (const [key, c] of charts)
+      try { c.applyOptions({ timeScale: { visible: key === lastKey } }); } catch(e){}
   },
 
   alignScales(){
     try {
-      const charts = [this.main, this.rsiChart, this.macdChart, this.stochChart, this.atrChart].filter(Boolean);
+      const charts = this.allCharts().map(x => x[1]);
       let w = 0;
       charts.forEach(c => { w = Math.max(w, c.priceScale('right').width()); });
       if (w > 0) charts.forEach(c => c.applyOptions({ rightPriceScale: { minimumWidth: w } }));
     } catch(e){}
   },
 
-  setMacdData(closes, view){
-    const S = this.settings.macd;
-    const v = view || this.view();
-    const m = IND.macd(closes, S.f, S.s, S.sig);
-    this.macdLine.setData(this.lineData(m.macd, v));
-    this.macdSig.setData(this.lineData(m.signal, v));
-    const hd = [];
-    for (let i = 0; i < m.hist.length; i++)
-      if (m.hist[i] != null) hd.push({ time: v[i].time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(46,189,133,0.5)' : 'rgba(246,70,93,0.5)' });
-    this.macdHist.setData(hd);
-  },
-
   /* --- data loading + live stream --- */
   async load(){
     const spin = document.getElementById('chartLoading');
+    this._fold = null;
+    /* second-by-second candles exist only where we get a real tick stream */
+    if (CFG.SUB_MINUTE.includes(STORE.tf)){
+      const route = typeof Feed !== 'undefined' ? Feed.route(STORE.symbol) : { kind: 'binance' };
+      if (route.kind === 'proxy'){
+        toast(baseAsset(STORE.symbol) + ' has no second-by-second data from the public feed — showing 1 minute. Run the MT5 bridge for seconds.', 'warn');
+        STORE.tf = '1m';
+        localStorage.setItem('astra_tf', STORE.tf);
+        App.renderTfPills();
+      }
+    }
     spin.classList.add('show');
     try {
       this.raw = await API.klines(STORE.symbol, STORE.tf);
@@ -435,9 +435,11 @@ const Chart = {
       this.quoteTick();
       return;
     }
-    const s = STORE.symbol.toLowerCase();
+    const s = (route.addr || STORE.symbol).toLowerCase();
+    /* 30-second candles are folded from the 1-second stream */
+    const wsTf = STORE.tf === '30s' ? '1s' : STORE.tf;
     this.sock = new Sock(
-      [`${s}@kline_${STORE.tf}`, `${s}@depth20@1000ms`, `${s}@aggTrade`],
+      [`${s}@kline_${wsTf}`, `${s}@depth20@1000ms`, `${s}@aggTrade`],
       (d, stream) => {
         if (stream.includes('@kline')) this.onKline(d);
         else if (stream.includes('@depth')) Book.onDepth(d);
@@ -491,7 +493,33 @@ const Chart = {
   onKline(d){
     const k = d.k;
     if (!k || !this.raw.length) return;
-    const c = { rawTime: k.t / 1000, time: k.t / 1000 + TZ_OFF, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v, quoteVol: +k.q };
+    let c = { rawTime: k.t / 1000, time: k.t / 1000 + TZ_OFF, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v, quoteVol: +k.q };
+    /* fold the 1-second stream into the running 30-second candle.
+       Each second can be re-sent while it is still open, so volumes are kept
+       per second and summed — never added twice. */
+    if (STORE.tf === '30s'){
+      const sec = c.rawTime;
+      const slot = Math.floor(sec / 30) * 30;
+      const last = this.raw[this.raw.length - 1];
+      if (!this._fold || this._fold.slot !== slot)
+        this._fold = { slot, open: c.open, high: c.high, low: c.low, secs: {}, qsecs: {} };
+      if (last && last.rawTime === slot && this._fold.slot === slot){
+        this._fold.high = Math.max(this._fold.high, c.high);
+        this._fold.low = Math.min(this._fold.low, c.low);
+      }
+      this._fold.secs[sec] = c.volume;
+      this._fold.qsecs[sec] = c.quoteVol;
+      let vol = 0, qvol = 0;
+      for (const s in this._fold.secs){ vol += this._fold.secs[s]; qvol += this._fold.qsecs[s]; }
+      c = {
+        rawTime: slot, time: slot + TZ_OFF,
+        open: this._fold.open,
+        high: Math.max(this._fold.high, c.high),
+        low: Math.min(this._fold.low, c.low),
+        close: c.close, volume: vol, quoteVol: qvol,
+      };
+      this._fold.high = c.high; this._fold.low = c.low;
+    }
     const last = this.raw[this.raw.length - 1];
     let isNew = false;
     if (last && last.time === c.time) this.raw[this.raw.length - 1] = c;
@@ -522,54 +550,7 @@ const Chart = {
       }
       else this.priceSeries.update({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close });
 
-      const closes = this.raw.map(x => x.close);
-      const S = this.settings, i = this.raw.length - 1, time = c.time;
-      for (const key of ['ema1', 'ema2', 'ema3']){
-        const s = this.overlays[key];
-        if (!s) continue;
-        const arr = this.ma(closes, S[key]);
-        if (arr[i] != null) s.update({ time, value: arr[i] });
-      }
-      if (this.overlays.stUp){
-        const st = IND.supertrend(this.raw, S.st.len, S.st.mult);
-        if (st.up[i] != null) this.overlays.stUp.update({ time, value: st.up[i] });
-        if (st.down[i] != null) this.overlays.stDn.update({ time, value: st.down[i] });
-      }
-      if (this.stochK){
-        const st = IND.stoch(this.raw, S.stoch.k, S.stoch.smooth, S.stoch.d);
-        if (st.k[i] != null) this.stochK.update({ time, value: st.k[i] });
-        if (st.d[i] != null) this.stochD.update({ time, value: st.d[i] });
-      }
-      if (this.atrSeries){
-        const a = IND.atr(this.raw, S.atr.len);
-        if (a[i] != null) this.atrSeries.update({ time, value: a[i] });
-      }
-      if (this.overlays.vol)
-        this.overlays.vol.update({ time, value: c.volume, color: c.close >= c.open ? 'rgba(46,189,133,0.35)' : 'rgba(246,70,93,0.35)' });
-      if (this.overlays.bbU){
-        const b = IND.bb(closes, S.bb.len, S.bb.mult);
-        if (b.up[i] != null){
-          this.overlays.bbU.update({ time, value: b.up[i] });
-          this.overlays.bbM.update({ time, value: b.mid[i] });
-          this.overlays.bbL.update({ time, value: b.lo[i] });
-        }
-      }
-      if (this.overlays.vwap){
-        const v = IND.vwapDaily(this.raw);
-        if (v[i] != null) this.overlays.vwap.update({ time, value: v[i] });
-      }
-      if (this.rsiSeries){
-        const r = IND.rsi(closes, S.rsi.len);
-        if (r[i] != null) this.rsiSeries.update({ time, value: r[i] });
-      }
-      if (this.macdHist){
-        const m = IND.macd(closes, S.macd.f, S.macd.s, S.macd.sig);
-        if (m.hist[i] != null){
-          this.macdHist.update({ time, value: m.hist[i], color: m.hist[i] >= 0 ? 'rgba(46,189,133,0.5)' : 'rgba(246,70,93,0.5)' });
-          this.macdLine.update({ time, value: m.macd[i] });
-          this.macdSig.update({ time, value: m.signal[i] });
-        }
-      }
+      this.renderIndicators(true);
     } catch(e){ console.warn('tick update', e); }
   },
 

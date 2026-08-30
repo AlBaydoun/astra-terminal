@@ -65,17 +65,20 @@ const TF = {
 
 /* --- tiny cache so repeated polls do not hammer the source --- */
 const cache = new Map();
-function cacheGet(k){
+function cacheGet(k, allowStale){
   const e = cache.get(k);
-  if (e && e.exp > Date.now()) return e.v;
-  if (e) cache.delete(k);
-  return null;
+  if (!e) return null;
+  if (e.exp > Date.now() || allowStale) return e.v;
+  return null;                       // kept, so it can still serve as a fallback
 }
 function cacheSet(k, v, ttlMs){
   cache.set(k, { v, exp: Date.now() + ttlMs });
   if (cache.size > 400) cache.delete(cache.keys().next().value);
 }
 
+/* The public feed rate-limits bursts. Rather than failing the whole request we
+   fall back to the last good answer — a slightly older price beats no price,
+   and the terminal labels its age anyway. */
 async function yahoo(pathq){
   const key = 'y:' + pathq;
   const hit = cacheGet(key);
@@ -90,6 +93,8 @@ async function yahoo(pathq){
       return j;
     } catch(e){ lastErr = e; }
   }
+  const stale = cacheGet(key, true);
+  if (stale) return stale;
   throw lastErr || new Error('upstream failed');
 }
 
@@ -181,6 +186,26 @@ async function handleMarket(req, res, url){
         prev: m.chartPreviousClose != null ? m.chartPreviousClose : null,
         name: m.longName || m.shortName || '' },
     }, 200, (tf === '1d' || tf === '1w') ? 120 : 20);
+  }
+
+  /* CoinGecko refuses some browser calls (and rate-limits them); go through here */
+  if (p === '/api/market/gecko'){
+    const q = url.searchParams.get('path') || '';
+    if (!/^\/[A-Za-z0-9\/_.\-?=&,%]*$/.test(q)) return sendJSON(res, { error: 'bad_path' }, 400, 0);
+    const key = 'g:' + q;
+    const hit = cacheGet(key);
+    if (hit) return sendJSON(res, hit, 200, 60);
+    try {
+      const r = await fetch('https://api.coingecko.com/api/v3' + q, { headers: { 'user-agent': UA, accept: 'application/json' } });
+      if (!r.ok) throw new Error('gecko ' + r.status);
+      const j = await r.json();
+      cacheSet(key, j, 60000);
+      return sendJSON(res, j, 200, 60);
+    } catch(e){
+      const stale = cacheGet(key, true);
+      if (stale) return sendJSON(res, stale, 200, 30);
+      return sendJSON(res, { error: String(e.message || e) }, 502, 0);
+    }
   }
 
   if (p === '/api/market/search'){

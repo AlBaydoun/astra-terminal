@@ -26,7 +26,7 @@ skips sync for that device.
 | Area | What it is |
 |---|---|
 | **Center** | The chart. Drag = move, mouse wheel = zoom. |
-| **Top** | Switch coin, timeframe (1m–1W), chart type, Indicators, Alert, Replay, theme, fullscreen |
+| **Top** | Switch instrument, timeframe (**1 second to 1 week**), chart type, Indicators, Alert, Replay, Compare, Markets, theme, fullscreen |
 | **Left** | Drawing tools: trend line, ray, horizontal line, Fibonacci, alert bell, delete |
 | **Right** | Watchlist · Order book (DEPTH) · Alerts · Paper trading (PAPER) |
 | **Bottom** | Screener (640+ coins, sortable) and Heatmap |
@@ -35,7 +35,13 @@ skips sync for that device.
 ## The essentials
 
 - **Switch coin:** just start typing (e.g. `SOL`) — the search opens by itself. Or click the coin button top-left.
-- **Indicators:** "Indicators" button — moving averages (EMA or SMA), Bollinger Bands, VWAP, SuperTrend, Volume, RSI, MACD, Stochastic and ATR. Turn on/off, adjust lengths.
+- **Indicators:** the "Indicators" button. Every indicator has a **"Show in"** box on its right:
+  **Price chart**, or **Window 1 / 2 / 3** underneath. Two indicators pointed at the same window
+  are drawn **together in that one window** (RSI + Stochastic side by side, for example), and an
+  oscillator can also be laid straight over the price chart. Windows appear and disappear by
+  themselves, and each one is labelled with what it holds.
+  Available: 3 moving averages (EMA or SMA), Bollinger Bands, VWAP, SuperTrend, Volume,
+  RSI, Stochastic, MACD, ATR and ADX+DI — plus Volume Profile and candle patterns.
 - **Drawing:** pick a tool on the left, then click in the chart (trend line / Fibonacci = 2 clicks). Drawings are saved per coin.
 - **Alerts:** bell in the top bar, or the bell tool on the left (then click the chart). When the price crosses your level: sound + popup. Manage them in the ALERTS tab.
 - **Bar replay:** "Replay" button, then click a candle — the chart rewinds to that moment. Play, step bar by bar, change speed, and watch how the market unfolded. ✕ exits.
@@ -82,6 +88,22 @@ tick ★ next to anything you want to monitor. Seven groups:
 
 Type 2+ letters in the Markets search and it looks up **any listed company worldwide**, not just
 the ones in the list. Everything you star lands in your watchlist and in the Observer's radar.
+
+## Second-by-second charts
+
+The timeframe row now starts at **1S** and **30S** — one candle per second, and one per
+30 seconds. These are for scalping: you see every tick forming the candle.
+
+Where they work:
+
+| Instrument | 1S / 30S |
+|---|---|
+| Crypto (and BTCUSD.m, ETHUSD.m …) | ✅ live from the Binance stream — about 33 minutes of 1-second history |
+| Anything through the **MT5 bridge** | ✅ built from your broker's real ticks |
+| Stocks, indices, metals and oil without the bridge | ❌ the free public feeds have no second data — the chart falls back to 1 minute and tells you |
+
+30-second candles are folded from the 1-second stream in the terminal, aligned to the clock
+(:00 and :30), so they line up with any other platform.
 
 ## Why prices sometimes look "behind" — and what to do about it
 

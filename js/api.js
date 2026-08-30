@@ -22,6 +22,9 @@ const API = {
   },
 
   async binanceKlines(symbol, interval, limit){
+    /* Binance has no 30-second candles — build them from 1-second ones */
+    if (interval === '30s') return this.subMinute(symbol, 30, limit || 200);
+    if (interval === '1s') return this.subMinute(symbol, 1, limit || 1800);
     const raw = await this.fetchJSON(`/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit || CFG.KLINE_LIMIT}`);
     return raw.map(k => ({
       rawTime: k[0] / 1000,
@@ -31,9 +34,55 @@ const API = {
     }));
   },
 
+  /* fetch enough 1-second candles (paged backwards) and fold them into `bucket` seconds */
+  async subMinute(symbol, bucket, wantBars){
+    const needSeconds = Math.min(12000, wantBars * bucket);
+    const pages = Math.min(6, Math.ceil(needSeconds / 1000));
+    let end = null, chunks = [];
+    for (let i = 0; i < pages; i++){
+      const q = `/api/v3/klines?symbol=${symbol}&interval=1s&limit=1000` + (end ? `&endTime=${end}` : '');
+      const raw = await this.fetchJSON(q);
+      if (!raw.length) break;
+      chunks.unshift(raw);
+      end = raw[0][0] - 1;
+      if (raw.length < 1000) break;
+    }
+    const flat = [].concat(...chunks).map(k => ({
+      t: k[0] / 1000, o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5], q: +k[7],
+    }));
+    if (bucket === 1)
+      return flat.map(k => ({ rawTime: k.t, time: k.t + TZ_OFF, open: k.o, high: k.h, low: k.l, close: k.c, volume: k.v, quoteVol: k.q }));
+    const out = [];
+    let cur = null, slot = -1;
+    for (const k of flat){
+      const s = Math.floor(k.t / bucket) * bucket;
+      if (s !== slot){
+        if (cur) out.push(cur);
+        cur = { rawTime: s, time: s + TZ_OFF, open: k.o, high: k.h, low: k.l, close: k.c, volume: k.v, quoteVol: k.q };
+        slot = s;
+      } else {
+        cur.high = Math.max(cur.high, k.h);
+        cur.low = Math.min(cur.low, k.l);
+        cur.close = k.c; cur.volume += k.v; cur.quoteVol += k.q;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  },
+
   async all24h(){ return this.fetchJSON('/api/v3/ticker/24hr'); },
 
+  /* CoinGecko blocks/limits direct browser calls, so prefer our own service */
   async gecko(path){
+    if (typeof Feed !== 'undefined' && Feed.apiReady){
+      try {
+        const r = await fetch(Feed.apiBase + '/api/market/gecko?path=' + encodeURIComponent(path));
+        if (r.ok){
+          const j = await r.json();
+          if (!j.error) return j;
+        }
+      } catch(e){}
+    }
     const r = await fetch('https://api.coingecko.com/api/v3' + path);
     if (!r.ok) throw new Error('coingecko ' + r.status);
     return r.json();

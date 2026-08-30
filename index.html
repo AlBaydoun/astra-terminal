@@ -162,10 +162,9 @@
             <button id="rpExit" title="Exit replay">✕</button>
           </div>
         </div>
-        <div id="rsiPane" class="pane"><div class="paneTag">RSI</div><div class="paneChart"></div></div>
-        <div id="macdPane" class="pane"><div class="paneTag">MACD</div><div class="paneChart"></div></div>
-        <div id="stochPane" class="pane"><div class="paneTag">STOCH</div><div class="paneChart"></div></div>
-        <div id="atrPane" class="pane"><div class="paneTag">ATR</div><div class="paneChart"></div></div>
+        <div id="pane-p1" class="pane"><div class="paneTag"></div><div class="paneChart"></div></div>
+        <div id="pane-p2" class="pane"><div class="paneTag"></div><div class="paneChart"></div></div>
+        <div id="pane-p3" class="pane"><div class="paneTag"></div><div class="paneChart"></div></div>
       </div>
       </div><!-- /chartGrid -->
 
@@ -382,19 +381,10 @@
   <div class="mBox">
     <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
     <div class="mBody">
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema1"><span class="chip" style="background:#00e5ff"></span>MA 1</label><select id="i_ema1type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema1len" min="2" max="500"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema2"><span class="chip" style="background:#ffb03a"></span>MA 2</label><select id="i_ema2type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema2len" min="2" max="500"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_ema3"><span class="chip" style="background:#ff6bd6"></span>MA 3</label><select id="i_ema3type" class="tsel"><option value="ema">EMA</option><option value="sma">SMA</option></select><input type="number" id="i_ema3len" min="2" max="500"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_bb"><span class="chip" style="background:#8b6cff"></span>Bollinger Bands</label>Len <input type="number" id="i_bblen" min="2" max="200"> ×<input type="number" id="i_bbmult" min="1" max="5" step="0.5" style="width:44px"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_vwap"><span class="chip" style="background:#ffd166"></span>VWAP (daily)</label></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_st"><span class="chip" style="background:linear-gradient(90deg,#00e5a0,#ff4d6d)"></span>SuperTrend</label>Len <input type="number" id="i_stlen" min="2" max="100"> ×<input type="number" id="i_stmult" min="1" max="10" step="0.5" style="width:44px"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_vol"><span class="chip" style="background:#3d5a80"></span>Volume</label></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_rsi"><span class="chip" style="background:#c084fc"></span>RSI <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_rsilen" min="2" max="100"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_macd"><span class="chip" style="background:#00e5ff"></span>MACD <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_macdf" min="2" max="100" style="width:44px"><input type="number" id="i_macds" min="2" max="200" style="width:44px"><input type="number" id="i_macdsig" min="2" max="100" style="width:44px"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_stoch"><span class="chip" style="background:#00b8cc"></span>Stochastic <small style="color:var(--dim)">(pane)</small></label><input type="number" id="i_stochk" min="2" max="100" style="width:44px"><input type="number" id="i_stochsm" min="1" max="50" style="width:44px"><input type="number" id="i_stochd" min="1" max="50" style="width:44px"></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_atr"><span class="chip" style="background:#ff9f6b"></span>ATR <small style="color:var(--dim)">(pane)</small></label>Length <input type="number" id="i_atrlen" min="2" max="100"></div>
+      <div class="indHint">Every indicator can sit on the price chart or in one of three windows — and two indicators may share the same window.</div>
+      <div id="indList"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_vp"><span class="chip" style="background:linear-gradient(90deg,#00e5ff,#ffd166)"></span>Volume Profile <small style="color:var(--dim)">(visible range)</small></label></div>
-      <div class="indRow"><label class="main"><input type="checkbox" id="i_pat"><span class="chip" style="background:linear-gradient(90deg,#00e5a0,#ff4d6d)"></span>Candle patterns <small style="color:var(--dim)">(markers on chart)</small></label></div>
+      <div class="indRow"><label class="main"><input type="checkbox" id="i_pat"><span class="chip" style="background:linear-gradient(90deg,#2ebd85,#f6465d)"></span>Candle patterns <small style="color:var(--dim)">(markers on chart)</small></label></div>
       <button class="mPrimary" id="indApply">APPLY</button>
     </div>
   </div>
@@ -461,6 +451,7 @@
 <script src="js/config.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/indicators.js"></script>
+<script src="js/indicatorDefs.js"></script>
 <script src="js/broker.js"></script>
 <script src="js/feed.js"></script>
 <script src="js/api.js"></script>
