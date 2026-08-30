@@ -75,6 +75,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-6 4 3 6-8"/><path d="M3 21l5-4 4 2 6-6" opacity="0.5"/></svg>
       Compare
     </button>
+    <button class="tbtn" id="mktBtn" title="Markets — choose what you monitor">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      Markets
+    </button>
     <button class="tbtn" id="layoutsBtn" title="Save / load named workspaces">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
     </button>
@@ -357,6 +361,7 @@
     <div class="stItem"><label>ETH.D</label><span class="stv" id="stEthD">—</span></div>
     <div class="stItem"><label>FEAR&amp;GREED</label><span class="stv" id="stFng">—</span></div>
     <div class="stItem"><label>NEWS</label><span class="stv" id="stNews">—</span></div>
+    <div class="stItem"><label>FEED</label><span class="stv" id="stFeed" title="Where prices come from — click to configure">…</span></div>
     <div class="stItem" id="stSyncWrap" title="Cloud sync — click to sign out" style="cursor:pointer"><label>SYNC</label><span class="stv" id="stSync">—</span></div>
     <span id="stClock"></span>
   </footer>
@@ -395,6 +400,33 @@
   </div>
 </div>
 
+<div class="modal" id="mktModal">
+  <div class="mBox mWide">
+    <div class="mHead">MARKETS <span>WHAT I WATCH</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div id="mktTabs"></div>
+      <div class="mktBar">
+        <input id="mktSearch" type="text" placeholder="Filter, or type 2+ letters to search worldwide…" spellcheck="false" autocomplete="off">
+        <span id="mktCount"></span>
+      </div>
+      <div id="mktList"></div>
+      <div class="mktHint">★ marks what you monitor — those appear in your watchlist and the Observer's radar. “Chart” opens it straight away.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="feedModal">
+  <div class="mBox">
+    <div class="mHead">DATA <span>SOURCES</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div id="feedState"></div>
+      <div class="formRow"><label>Data service</label><input id="feedUrl" type="text" placeholder="http://localhost:8642 or your own address" spellcheck="false"></div>
+      <div class="aiSub">Crypto always streams live from Binance and needs no service. Stocks, forex, indices and commodities need this small service — it runs automatically when you start the terminal with the desktop shortcut.</div>
+      <button class="mPrimary" id="feedSave">SAVE &amp; RECONNECT</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="layoutModal">
   <div class="mBox">
     <div class="mHead">SAVED <span>WORKSPACES</span><button class="mClose">×</button></div>
@@ -429,7 +461,10 @@
 <script src="js/config.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/indicators.js"></script>
+<script src="js/broker.js"></script>
+<script src="js/feed.js"></script>
 <script src="js/api.js"></script>
+<script src="js/markets.js"></script>
 <script src="js/alerts.js"></script>
 <script src="js/draw.js"></script>
 <script src="js/chart.js"></script>

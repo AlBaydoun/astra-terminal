@@ -17,6 +17,15 @@ const Book = {
     this.spreadEl.textContent = '';
     this.trades = [];
     this.tradesEl.innerHTML = '';
+    const route = typeof Feed !== 'undefined' ? Feed.route(STORE.symbol) : { kind: 'binance' };
+    if (route.kind !== 'binance'){
+      this.bidsEl.innerHTML =
+        '<div class="empty">Order book and trade tape are exchange data.<br><br>' +
+        (route.kind === 'bridge'
+          ? 'Your broker streams a single bid/ask, not a public book — see the price and spread on the chart.'
+          : esc(baseAsset(STORE.symbol)) + ' is not an exchange-traded crypto pair, so no public book exists.<br>Switch to a crypto pair to see live depth.') +
+        '</div>';
+    }
   },
 
   onDepth(d){

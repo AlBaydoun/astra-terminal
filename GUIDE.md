@@ -65,13 +65,74 @@ skips sync for that device.
 - **Volume profile:** in the Indicators dialog. Shows sideways volume bars on the right — where the most trading happened. The yellow line (POC) marks the busiest price level.
 - **Mini-chart EMA:** each side chart has a small "EMA" button for 20/50 EMA lines.
 
+## Markets — what you can chart
+
+ASTRA is no longer crypto-only. The **Markets** button (top bar) opens the browser where you
+tick ★ next to anything you want to monitor. Seven groups:
+
+| Group | What is in it |
+|---|---|
+| **JustMarkets** | Your MT5 instruments with their exact names — XAUUSD.m, XAGUSD.m, BTCUSD.m, US100.std, US30.std, WTI.m, BRENT.m, the forex majors and crosses, and more |
+| **Crypto** | All 650+ Binance USDT pairs |
+| **Forex** | Major and exotic currency pairs |
+| **US stocks** | Apple, Microsoft, NVIDIA, Tesla and ~50 more |
+| **Europe** | Germany, France, Netherlands, UK, Switzerland, Italy, Spain, Scandinavia |
+| **Indices** | S&P 500, Dow, Nasdaq, DAX, CAC, FTSE, Nikkei, Hang Seng … |
+| **Commodities** | Gold, silver, platinum, copper, oil, gas, wheat, coffee |
+
+Type 2+ letters in the Markets search and it looks up **any listed company worldwide**, not just
+the ones in the list. Everything you star lands in your watchlist and in the Observer's radar.
+
+## Why prices sometimes look "behind" — and what to do about it
+
+This is important, so here it is plainly. **Not all markets update at the same speed**, and ASTRA
+now tells you the truth on every chart with a small badge next to the symbol:
+
+| Badge | Meaning |
+|---|---|
+| **LIVE** (green) | Real time. Crypto from Binance, or anything coming from your own MT5 bridge. |
+| **DELAYED 15m** (amber) | The free public feed for that market runs behind the exchange — normal for indices, metals and oil. |
+| **CLOSED** (grey) | The market is shut (weekend, or outside its trading hours). The price is the last close, not a lag. |
+
+Most "lag" you saw was the third case: stock, index and commodity markets **close on Friday night
+and reopen Monday**, so gold, US100 and oil sit frozen all weekend. Crypto never does.
+
+**To remove the delay completely, use the MT5 bridge** (below). Then every instrument shows LIVE,
+straight from JustMarkets, exactly the prices you trade on.
+
+## The MT5 bridge — your broker's own prices, no delay
+
+You already run MetaTrader 5 for JustMarkets. The bridge lets ASTRA read the prices your terminal
+already receives. Nothing leaves your computer, and **it never places an order**.
+
+**One-time setup:**
+1. Open a command window and run: `pip install MetaTrader5`
+2. Make sure MetaTrader 5 is open and logged in.
+
+**Every time you want live broker data:** double-click **`START-MT5-Bridge.bat`** and leave that
+small window open. ASTRA notices it within seconds — the FEED indicator in the bottom bar turns
+green and reads `MT5 · <your server>`, and every badge flips to LIVE.
+
+When the bridge is running, XAUUSD.m, US100.std, WTI.m and the rest come from your broker with
+the same numbers your MT5 chart shows, at about one update per second.
+
+## Starting the terminal
+
+Double-click **`START-ASTRA-Terminal.bat`**. It now starts a small data service on your PC (that is
+what fetches stocks, forex, indices and commodities) and opens the terminal. Crypto never needs it.
+
+The **FEED** indicator in the bottom bar always shows where prices are coming from — click it to
+see all three sources and their status.
+
 ## What gets saved
 
 Watchlist, alerts, drawings, indicator settings, theme and the paper account are stored in the browser and restored on the next start.
 
 ## Honest limitations
 
-- Prices come from **Binance** (spot, USDT pairs). Coins not tradable there are missing.
+- Crypto comes from **Binance** (spot, USDT pairs) and is always real time.
+- Stocks, forex, indices and commodities come from free public feeds: usually **15 minutes delayed**, and closed at weekends. Run the MT5 bridge for real-time broker prices.
+- ASTRA reads prices only. **It cannot place a trade** — on purpose.
 - Alerts only work **while the window is open** (there is no server behind it).
 - It is an analysis and practice tool — **it cannot trade real money**, on purpose.
 - Without internet the chart will not load.

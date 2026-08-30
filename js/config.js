@@ -53,7 +53,11 @@ function fmtNum(n){
 }
 function fmtPct(p){ if (p == null || isNaN(p)) return '—'; return (p > 0 ? '+' : '') + p.toFixed(2) + '%'; }
 function pctClass(p){ return p > 0 ? 'up' : p < 0 ? 'down' : 'flat'; }
-function baseAsset(sym){ return sym.replace(/USDT$/, ''); }
+/* short display label — crypto drops USDT, other markets get a readable ticker */
+function baseAsset(sym){
+  if (typeof MK !== 'undefined' && !MK.isCrypto(sym)) return MK.short(sym);
+  return sym.replace(/USDT$/, '');
+}
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* toasts + sound */

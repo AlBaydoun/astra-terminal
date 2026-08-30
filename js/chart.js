@@ -119,6 +119,7 @@ const Chart = {
   precision(){
     const t = STORE.tickers.get(STORE.symbol);
     const p = t ? t.last : (this.raw.length ? this.raw[this.raw.length - 1].close : 1);
+    if (typeof MK !== 'undefined' && MK.group(STORE.symbol) === 'fx') return p >= 50 ? 3 : 5;
     if (p >= 100) return 2;
     if (p >= 1) return 4;
     if (p >= 0.01) return 6;
@@ -420,7 +421,20 @@ const Chart = {
   },
 
   resub(){
-    if (this.sock) this.sock.close();
+    if (this.sock){ this.sock.close(); this.sock = null; }
+    if (this.pollTimer){ clearInterval(this.pollTimer); this.pollTimer = null; }
+    if (this.quoteTimer){ clearInterval(this.quoteTimer); this.quoteTimer = null; }
+    /* anything without a public stream is polled: fast price ticks + slower full candles.
+       The MT5 bridge is on this machine, so it can be polled about once a second. */
+    const route = typeof Feed !== 'undefined' ? Feed.route(STORE.symbol) : { kind: 'binance' };
+    if (route.kind !== 'binance'){
+      BUS.emit('ws', { label: 'symbol', up: true, mode: 'poll' });
+      const fast = route.kind === 'bridge' ? 1000 : 6000;
+      this.quoteTimer = setInterval(() => this.quoteTick(), fast);
+      this.pollTimer = setInterval(() => this.pollUpdate(), route.kind === 'bridge' ? 20000 : 60000);
+      this.quoteTick();
+      return;
+    }
     const s = STORE.symbol.toLowerCase();
     this.sock = new Sock(
       [`${s}@kline_${STORE.tf}`, `${s}@depth20@1000ms`, `${s}@aggTrade`],
@@ -429,6 +443,49 @@ const Chart = {
         else if (stream.includes('@depth')) Book.onDepth(d);
         else if (stream.includes('@aggTrade')) Book.onTrade(d);
       }, 'symbol');
+  },
+
+  /* pull just the price and move the running candle — keeps the numbers alive
+     between full candle refreshes instead of freezing for a minute */
+  async quoteTick(){
+    if (this.replay.active || !this.raw.length) return;
+    const sym = STORE.symbol;
+    let q;
+    try { q = (await Feed.quotes([sym]))[0]; } catch(e){ return; }
+    if (!q || sym !== STORE.symbol || !(q.last > 0)) return;
+    const t = STORE.tickers.get(sym) || {};
+    Object.assign(t, {
+      last: q.last, open: q.prev != null ? q.prev : t.open,
+      high: q.high != null ? q.high : t.high, low: q.low != null ? q.low : t.low,
+      pct: q.pct != null ? q.pct : t.pct,
+    });
+    STORE.tickers.set(sym, t);
+    const c = this.raw[this.raw.length - 1];
+    if (c.close !== q.last){
+      c.close = q.last;
+      if (q.last > c.high) c.high = q.last;
+      if (q.last < c.low) c.low = q.last;
+      this.tickUpdate(c);
+    }
+    this.updateLegend(null);
+    BUS.emit('tickers', [sym]);
+  },
+
+  /* refresh the tail of a polled (non-crypto) chart */
+  async pollUpdate(){
+    if (this.replay.active) return;
+    const sym = STORE.symbol, tf = STORE.tf;
+    let fresh;
+    try { fresh = await API.klines(sym, tf); }
+    catch(e){ return; }
+    if (sym !== STORE.symbol || tf !== STORE.tf || !fresh.length) return;
+    this.raw = fresh;
+    this.priceSeries.setData(this.priceData());
+    this.renderIndicators();
+    this.renderPatternMarkers();
+    this.updateLegend(null);
+    Draw.redraw();
+    BUS.emit('candleClose', { sym, tf });
   },
 
   onKline(d){
@@ -525,10 +582,15 @@ const Chart = {
     const chg = c.close - c.open;
     const pct = c.open ? chg / c.open * 100 : 0;
     const cls = chg >= 0 ? 'up' : 'down';
+    const st = typeof Feed !== 'undefined' ? Feed.status(STORE.symbol) : { cls: 'live', label: 'LIVE', tip: '' };
+    const route = typeof Feed !== 'undefined' ? Feed.route(STORE.symbol) : { kind: 'binance', addr: STORE.symbol };
+    const srcName = route.kind === 'bridge' ? BROKER.name
+      : route.kind === 'binance' ? 'BINANCE' : String(route.addr).toUpperCase();
     el.innerHTML =
-      `<span class="lgSym">${esc(baseAsset(STORE.symbol))}<i>/USDT</i></span>` +
+      `<span class="lgSym">${esc(baseAsset(STORE.symbol))}${typeof MK !== 'undefined' && MK.isCrypto(STORE.symbol) ? '<i>/USDT</i>' : ''}</span>` +
       `<span class="lgTag">${esc(STORE.tf.toUpperCase())}</span>` +
-      `<span class="lgTag dim">BINANCE</span>` +
+      `<span class="lgTag dim" title="Where this price comes from">${esc(srcName)}</span>` +
+      `<span class="fdTag ${st.cls}" title="${esc(st.tip)}">${esc(st.label)}</span>` +
       `<span class="lgOhlc">O <b class="${cls}">${fmtPrice(c.open)}</b> H <b class="${cls}">${fmtPrice(c.high)}</b> L <b class="${cls}">${fmtPrice(c.low)}</b> C <b class="${cls}">${fmtPrice(c.close)}</b></span>` +
       `<span class="lgChg ${cls}">${(chg >= 0 ? '+' : '') + fmtPrice(chg)} (${fmtPct(pct)})</span>` +
       (c.volume != null ? `<span class="lgVol">Vol <b>${fmtNum(c.volume)}</b></span>` : '');

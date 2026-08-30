@@ -37,7 +37,7 @@ const Watch = {
       row.className = 'wrow' + (sym === STORE.symbol ? ' sel' : '');
       row.innerHTML =
         `<div class="wico" style="--hue:${this.hue(sym)}">${esc(baseAsset(sym).slice(0, 4))}</div>` +
-        `<div class="wname"><b>${esc(baseAsset(sym))}</b><span>USDT</span></div>` +
+        `<div class="wname"><b>${esc(baseAsset(sym))}</b><span>${esc(typeof MK !== 'undefined' ? MK.sub(sym) : 'USDT')}</span></div>` +
         `<canvas class="wspark" width="70" height="26"></canvas>` +
         `<div class="wpx"><b class="wlast"></b><span class="wpct"></span></div>` +
         `<button class="wdel" title="Remove">×</button>`;
@@ -70,6 +70,13 @@ const Watch = {
       }
       pctEl.textContent = fmtPct(t.pct);
       pctEl.className = 'wpct ' + pctClass(t.pct);
+      if (typeof Feed !== 'undefined'){
+        const st = Feed.status(sym);
+        if (st.cls !== 'live'){
+          lastEl.classList.add('stale');
+          lastEl.title = st.tip;
+        } else { lastEl.classList.remove('stale'); lastEl.title = ''; }
+      }
     }
   },
 

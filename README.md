@@ -1,7 +1,8 @@
-# ASTRA · Crypto Terminal
+# ASTRA · Markets Terminal
 
-A futuristic, real-time cryptocurrency trading terminal that runs entirely in the browser —
-no build step, no backend, no accounts.
+A futuristic, real-time multi-market trading terminal — crypto, forex, US and European
+stocks, indices and commodities, plus MetaTrader 5 broker instruments — that runs in the
+browser with no build step.
 
 **Live:** https://albaydoun.github.io/astra-terminal/
 
@@ -9,7 +10,10 @@ no build step, no backend, no accounts.
 
 ## Features
 
-- **Live charts** for 640+ Binance USDT pairs — candles, Heikin Ashi, bars, line, area; 1m to 1W
+- **Live charts** across markets — 650+ Binance crypto pairs, forex, US & European stocks, indices, commodities, and MetaTrader 5 broker instruments (XAUUSD.m, US100.std, WTI.m …) — candles, Heikin Ashi, bars, line, area; 1m to 1W
+- **Markets browser** — seven groups plus worldwide symbol search; star what you monitor
+- **Honest data status** — every instrument is labelled LIVE / DELAYED / CLOSED, never guessed
+- **MT5 bridge** — reads your own MetaTrader 5 terminal for real broker prices with no delay (read-only, never trades)
 - **12 indicators** — EMA/SMA ×3, Bollinger Bands, VWAP, SuperTrend, Volume, RSI, MACD, Stochastic, ATR
 - **Bar replay** — rewind to any candle and play history forward at 1–10×
 - **Multi-chart layouts** — 1, 2 or 4 live charts side by side, each with its own coin and timeframe
@@ -43,9 +47,18 @@ no build step, no backend, no accounts.
 
 | Source | Used for |
 |---|---|
-| Binance Spot REST + WebSocket | candles, tickers, order book, trades |
+| Binance Spot REST + WebSocket | crypto candles, tickers, order book, trades — real time |
+| ASTRA data service (`server/astra-api.cjs`) | stocks, forex, indices, commodities (public feeds, typically 15 min delayed) |
+| MT5 bridge (`bridge/astra_mt5.py`, optional) | your broker's own live prices, read-only |
 | CoinGecko | market caps, dominance, global stats |
 | alternative.me | Fear & Greed index |
+
+## Running
+
+- **Everything (recommended):** `START-ASTRA-Terminal.bat` — starts the data service and opens the terminal.
+- **Live broker prices:** `START-MT5-Bridge.bat` with MetaTrader 5 open (`pip install MetaTrader5` once).
+- **Hosted:** the page is static and can be served from anywhere; point it at a data service
+  (Settings → FEED) to enable the non-crypto markets. Crypto always works with no service.
 
 ## Tech
 

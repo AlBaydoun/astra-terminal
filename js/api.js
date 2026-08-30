@@ -15,7 +15,13 @@ const API = {
     throw new Error('all market data endpoints failed');
   },
 
+  /* candles for ANY instrument — the Feed router picks bridge / Binance / data service */
   async klines(symbol, interval, limit){
+    if (typeof Feed !== 'undefined') return Feed.klines(symbol, interval, limit);
+    return this.binanceKlines(symbol, interval, limit);
+  },
+
+  async binanceKlines(symbol, interval, limit){
     const raw = await this.fetchJSON(`/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit || CFG.KLINE_LIMIT}`);
     return raw.map(k => ({
       rawTime: k[0] / 1000,
@@ -90,8 +96,15 @@ async function bootMarketData(){
   STORE.universe = uni;
 }
 
-/* live prices for every symbol at once (1 message/second) */
+/* live prices for every symbol at once (1 message/second).
+   Broker instruments backed by a Binance pair (BTCUSD.m …) tick in real time too. */
 function startGlobalStream(){
+  const alias = {};                       // binance pair -> broker symbol
+  if (typeof BROKER !== 'undefined')
+    for (const s of BROKER.all()){
+      const i = BROKER.info(s);
+      if (/USDT$/.test(i.feed)) (alias[i.feed] = alias[i.feed] || []).push(s);
+    }
   new Sock(['!miniTicker@arr'], data => {
     if (!Array.isArray(data)) return;
     const changed = [];
@@ -99,10 +112,16 @@ function startGlobalStream(){
       const s = m.s;
       if (!s.endsWith('USDT')) continue;
       const t = STORE.tickers.get(s);
-      if (!t) continue;
-      t.last = +m.c; t.open = +m.o; t.high = +m.h; t.low = +m.l; t.vol = +m.v; t.quoteVol = +m.q;
-      t.pct = t.open ? (t.last - t.open) / t.open * 100 : 0;
-      changed.push(s);
+      const vals = { last: +m.c, open: +m.o, high: +m.h, low: +m.l, vol: +m.v, quoteVol: +m.q };
+      vals.pct = vals.open ? (vals.last - vals.open) / vals.open * 100 : 0;
+      if (t){ Object.assign(t, vals); changed.push(s); }
+      for (const b of alias[s] || []){
+        const bt = STORE.tickers.get(b) || {};
+        Object.assign(bt, vals, { count: 0 });
+        STORE.tickers.set(b, bt);
+        if (typeof Feed !== 'undefined') Feed.srcOf[b] = 'binance';
+        changed.push(b);
+      }
     }
     if (changed.length) BUS.emit('tickers', changed);
   }, 'global');

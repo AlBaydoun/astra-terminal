@@ -11,15 +11,28 @@ const SymbolSearch = {
   },
   render(q){
     q = q.trim().toUpperCase();
-    const list = STORE.universe.filter(s => s.includes(q)).slice(0, 100);
+    const match = s => !q || s.toUpperCase().includes(q) ||
+      (MK.names[s] || '').toUpperCase().includes(q) ||
+      (BROKER.is(s) && BROKER.info(s).name.toUpperCase().includes(q));
+    /* your broker instruments and what you monitor come first, then all of crypto */
+    const seen = new Set();
+    const list = [];
+    for (const s of [...BROKER.all(), ...MK.monitored, ...Watch.list, ...STORE.universe]){
+      if (seen.has(s) || !match(s)) continue;
+      seen.add(s);
+      list.push(s);
+      if (list.length >= 120) break;
+    }
     const host = document.getElementById('symList');
     host.innerHTML = list.map(s => {
       const t = STORE.tickers.get(s);
-      return `<div class="srow" data-sym="${s}">` +
+      const st = Feed.status(s);
+      return `<div class="srow" data-sym="${esc(s)}">` +
         `<div class="wico" style="--hue:${Watch.hue(s)}">${esc(baseAsset(s).slice(0, 4))}</div>` +
-        `<div class="sname"><b>${esc(baseAsset(s))}</b><span>/ USDT · Binance spot</span></div>` +
-        `<div class="spx"><b>${t ? fmtPrice(t.last) : '—'}</b><span class="${t ? pctClass(t.pct) : ''}">${t ? fmtPct(t.pct) : ''}</span></div></div>`;
-    }).join('') || '<div class="empty">No pair found</div>';
+        `<div class="sname"><b>${esc(baseAsset(s))}</b><span>${esc(MK.sub(s))}</span></div>` +
+        `<div class="spx"><b>${t ? fmtPrice(t.last) : '—'}</b><span class="${t ? pctClass(t.pct) : ''}">${t ? fmtPct(t.pct) : ''}</span></div>` +
+        `<span class="fdTag ${st.cls}" title="${esc(st.tip)}">${esc(st.label)}</span></div>`;
+    }).join('') || '<div class="empty">Nothing found.<br>Use the Markets button to browse every market.</div>';
     host.querySelectorAll('.srow').forEach(r =>
       r.addEventListener('click', () => { App.hideModal('symModal'); this.cb(r.dataset.sym); }));
   },
@@ -128,11 +141,14 @@ const App = {
     Chart.init();
     Draw.init();
     this.wireUI();
+    await Feed.init();
+    this.updateFeedChip();
     try {
       await bootMarketData();
     } catch(e){
       toast('Cannot reach the Binance market data API — check your internet connection.', 'error');
     }
+    MK.startPolling();
     startGlobalStream();
     Watch.init(); Screener.init(); Alerts.init(); Port.init(); Book.init(); Heat.wire();
     await Chart.load();
@@ -152,7 +168,10 @@ const App = {
   },
 
   setSymbol(sym){
-    if (sym === STORE.symbol || !STORE.tickers.has(sym)) return;
+    const known = STORE.tickers.has(sym) ||
+      (typeof MK !== 'undefined' && MK.isKnown(sym)) ||
+      (typeof BROKER !== 'undefined' && BROKER.is(sym));
+    if (sym === STORE.symbol || !known) return;
     STORE.symbol = sym;
     localStorage.setItem('astra_symbol', sym);
     this.updateSymBtn();
@@ -226,6 +245,18 @@ const App = {
     /* compare overlay */
     document.getElementById('cmpBtn').addEventListener('click', () =>
       SymbolSearch.open(sym => Chart.addCompare(sym)));
+
+    /* markets browser + data sources */
+    document.getElementById('mktBtn').addEventListener('click', () => MarketBrowser.open());
+    document.getElementById('mktSearch').addEventListener('input', e => MarketBrowser.onSearch(e.target.value));
+    document.getElementById('stFeed').addEventListener('click', () => this.openFeed());
+    document.getElementById('feedSave').addEventListener('click', async () => {
+      const ok = await Feed.setApi(document.getElementById('feedUrl').value);
+      toast(ok ? 'Data service connected' : 'Could not reach that address — crypto still works', ok ? 'ok' : 'warn');
+      this.renderFeed();
+      if (ok) MK.refresh();
+    });
+    BUS.on('feed', () => { this.updateFeedChip(); this.renderFeed(); });
 
     /* named workspaces */
     document.getElementById('layoutsBtn').addEventListener('click', () => Layouts.open());
@@ -363,6 +394,35 @@ const App = {
     const now = new Date();
     document.getElementById('stClock').textContent =
       now.toLocaleTimeString() + '  ·  ' + now.toUTCString().slice(17, 25) + ' UTC';
+  },
+
+  openFeed(){
+    document.getElementById('feedUrl').value = localStorage.getItem('astra_api') || '';
+    this.renderFeed();
+    this.showModal('feedModal');
+  },
+
+  renderFeed(){
+    const el = document.getElementById('feedState');
+    if (!el) return;
+    const row = (label, ok, text) =>
+      `<div class="feedRow"><i class="fdDot ${ok ? 'on' : 'off'}"></i><b>${esc(label)}</b><span>${esc(text)}</span></div>`;
+    const b = Feed.bridge;
+    el.innerHTML =
+      row('Crypto (Binance)', true, 'live stream · always on, no service needed') +
+      row('Data service', Feed.apiReady, Feed.apiReady
+        ? 'connected' + (Feed.apiBase ? ' · ' + Feed.apiBase : ' · this page') + ' — stocks, forex, indices, commodities'
+        : 'not reachable — only crypto is available') +
+      row('MT5 bridge (' + BROKER.name + ')', !!b, b
+        ? 'connected · account ' + (b.account || '?') + ' · ' + (b.server || '') + ' · ' + b.symbols.size + ' symbols, no delay'
+        : 'not running — start START-MT5-Bridge.bat for your broker\'s own live prices');
+  },
+
+  updateFeedChip(){
+    const el = document.getElementById('stFeed');
+    if (!el) return;
+    el.textContent = Feed.sourceLabel();
+    el.className = 'stv ' + (Feed.bridge ? 'up' : Feed.apiReady ? '' : 'down');
   },
 
   showModal(id){ document.getElementById(id).classList.add('show'); },
