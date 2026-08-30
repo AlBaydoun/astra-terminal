@@ -223,6 +223,274 @@ const IND = {
     return { tenkan: mid(t), kijun: mid(k) };
   },
 
+  /* ---------- price source ("Apply to", as in MetaTrader) ---------- */
+  SOURCES: [
+    ['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'],
+    ['median', 'Median (H+L)/2'], ['typical', 'Typical (H+L+C)/3'], ['weighted', 'Weighted (H+L+2C)/4'],
+  ],
+  src(candles, s){
+    switch (s){
+      case 'open':     return candles.map(c => c.open);
+      case 'high':     return candles.map(c => c.high);
+      case 'low':      return candles.map(c => c.low);
+      case 'median':   return candles.map(c => (c.high + c.low) / 2);
+      case 'typical':  return candles.map(c => (c.high + c.low + c.close) / 3);
+      case 'weighted': return candles.map(c => (c.high + c.low + 2 * c.close) / 4);
+      default:         return candles.map(c => c.close);
+    }
+  },
+
+  /* ---------- extra averages ---------- */
+  wma(v, n){
+    const out = new Array(v.length).fill(null);
+    const denom = n * (n + 1) / 2;
+    for (let i = n - 1; i < v.length; i++){
+      let s = 0;
+      for (let j = 0; j < n; j++) s += v[i - n + 1 + j] * (j + 1);
+      out[i] = s / denom;
+    }
+    return out;
+  },
+  /* Wilder's smoothed average, used by the Alligator */
+  smma(v, n){
+    const out = new Array(v.length).fill(null);
+    if (v.length < n) return out;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += v[i];
+    let prev = sum / n;
+    out[n - 1] = prev;
+    for (let i = n; i < v.length; i++){
+      prev = (prev * (n - 1) + v[i]) / n;
+      out[i] = prev;
+    }
+    return out;
+  },
+  /* move a series forward (+) or back (-) in time */
+  shift(arr, by){
+    const out = new Array(arr.length).fill(null);
+    for (let i = 0; i < arr.length; i++){
+      const j = i - by;
+      if (j >= 0 && j < arr.length) out[i] = arr[j];
+    }
+    return out;
+  },
+
+  stdev(v, n){
+    const m = IND.sma(v, n);
+    const out = new Array(v.length).fill(null);
+    for (let i = n - 1; i < v.length; i++){
+      let s = 0;
+      for (let j = i - n + 1; j <= i; j++) s += (v[j] - m[i]) ** 2;
+      out[i] = Math.sqrt(s / n);
+    }
+    return out;
+  },
+
+  momentum(v, n){
+    const out = new Array(v.length).fill(null);
+    for (let i = n; i < v.length; i++) out[i] = v[i - n] ? v[i] / v[i - n] * 100 : null;
+    return out;
+  },
+
+  envelopes(v, n, pct){
+    const m = IND.sma(v, n);
+    return {
+      mid: m,
+      up: m.map(x => x == null ? null : x * (1 + pct / 100)),
+      lo: m.map(x => x == null ? null : x * (1 - pct / 100)),
+    };
+  },
+
+  /* ---------- oscillators ---------- */
+  cci(candles, n){
+    const tp = candles.map(c => (c.high + c.low + c.close) / 3);
+    const m = IND.sma(tp, n);
+    const out = new Array(candles.length).fill(null);
+    for (let i = n - 1; i < candles.length; i++){
+      let dev = 0;
+      for (let j = i - n + 1; j <= i; j++) dev += Math.abs(tp[j] - m[i]);
+      dev /= n;
+      out[i] = dev ? (tp[i] - m[i]) / (0.015 * dev) : 0;
+    }
+    return out;
+  },
+
+  williamsR(candles, n){
+    const out = new Array(candles.length).fill(null);
+    for (let i = n - 1; i < candles.length; i++){
+      let hi = -Infinity, lo = Infinity;
+      for (let j = i - n + 1; j <= i; j++){
+        if (candles[j].high > hi) hi = candles[j].high;
+        if (candles[j].low < lo) lo = candles[j].low;
+      }
+      out[i] = hi === lo ? -50 : (hi - candles[i].close) / (hi - lo) * -100;
+    }
+    return out;
+  },
+
+  demarker(candles, n){
+    const len = candles.length;
+    const deMax = new Array(len).fill(0), deMin = new Array(len).fill(0);
+    for (let i = 1; i < len; i++){
+      deMax[i] = Math.max(candles[i].high - candles[i - 1].high, 0);
+      deMin[i] = Math.max(candles[i - 1].low - candles[i].low, 0);
+    }
+    const a = IND.sma(deMax, n), b = IND.sma(deMin, n);
+    return a.map((x, i) => (x == null || b[i] == null) ? null : ((x + b[i]) ? x / (x + b[i]) : 0.5));
+  },
+
+  ao(candles){
+    const hl2 = candles.map(c => (c.high + c.low) / 2);
+    const f = IND.sma(hl2, 5), s = IND.sma(hl2, 34);
+    return f.map((x, i) => (x == null || s[i] == null) ? null : x - s[i]);
+  },
+
+  /* ---------- volume based ---------- */
+  obv(candles){
+    const out = new Array(candles.length).fill(null);
+    let v = 0;
+    out[0] = 0;
+    for (let i = 1; i < candles.length; i++){
+      if (candles[i].close > candles[i - 1].close) v += candles[i].volume;
+      else if (candles[i].close < candles[i - 1].close) v -= candles[i].volume;
+      out[i] = v;
+    }
+    return out;
+  },
+
+  mfi(candles, n){
+    const len = candles.length;
+    const out = new Array(len).fill(null);
+    const tp = candles.map(c => (c.high + c.low + c.close) / 3);
+    for (let i = n; i < len; i++){
+      let pos = 0, neg = 0;
+      for (let j = i - n + 1; j <= i; j++){
+        const flow = tp[j] * candles[j].volume;
+        if (tp[j] > tp[j - 1]) pos += flow;
+        else if (tp[j] < tp[j - 1]) neg += flow;
+      }
+      out[i] = neg === 0 ? 100 : 100 - 100 / (1 + pos / neg);
+    }
+    return out;
+  },
+
+  forceIndex(candles, n){
+    const raw = candles.map((c, i) => i === 0 ? 0 : (c.close - candles[i - 1].close) * c.volume);
+    return IND.emaOver(raw, n);
+  },
+
+  /* ---------- channels and stops ---------- */
+  keltner(candles, n, mult){
+    const closes = candles.map(c => c.close);
+    const mid = IND.ema(closes, n);
+    const atr = IND.atr(candles, n);
+    return {
+      mid,
+      up: mid.map((m, i) => (m == null || atr[i] == null) ? null : m + mult * atr[i]),
+      lo: mid.map((m, i) => (m == null || atr[i] == null) ? null : m - mult * atr[i]),
+    };
+  },
+
+  /* Parabolic SAR — the classic trailing stop */
+  psar(candles, step, max){
+    const len = candles.length;
+    const out = new Array(len).fill(null);
+    if (len < 3) return out;
+    let up = candles[1].close >= candles[0].close;
+    let sar = up ? candles[0].low : candles[0].high;
+    let ep = up ? candles[0].high : candles[0].low;
+    let af = step;
+    for (let i = 1; i < len; i++){
+      sar = sar + af * (ep - sar);
+      if (up){
+        sar = Math.min(sar, candles[i - 1].low, candles[i > 1 ? i - 2 : 0].low);
+        if (candles[i].low < sar){ up = false; sar = ep; ep = candles[i].low; af = step; }
+        else if (candles[i].high > ep){ ep = candles[i].high; af = Math.min(af + step, max); }
+      } else {
+        sar = Math.max(sar, candles[i - 1].high, candles[i > 1 ? i - 2 : 0].high);
+        if (candles[i].high > sar){ up = true; sar = ep; ep = candles[i].high; af = step; }
+        else if (candles[i].low < ep){ ep = candles[i].low; af = Math.min(af + step, max); }
+      }
+      out[i] = sar;
+    }
+    return out;
+  },
+
+  /* Bill Williams Alligator — three smoothed averages pushed into the future */
+  alligator(candles){
+    const med = candles.map(c => (c.high + c.low) / 2);
+    return {
+      jaw: IND.shift(IND.smma(med, 13), 8),
+      teeth: IND.shift(IND.smma(med, 8), 5),
+      lips: IND.shift(IND.smma(med, 5), 3),
+    };
+  },
+
+  /* five-bar fractals (turning points) */
+  fractals(candles){
+    const len = candles.length;
+    const up = new Array(len).fill(null), dn = new Array(len).fill(null);
+    for (let i = 2; i < len - 2; i++){
+      const h = candles[i].high, l = candles[i].low;
+      if (h > candles[i-1].high && h > candles[i-2].high && h > candles[i+1].high && h > candles[i+2].high) up[i] = h;
+      if (l < candles[i-1].low && l < candles[i-2].low && l < candles[i+1].low && l < candles[i+2].low) dn[i] = l;
+    }
+    return { up, dn };
+  },
+
+  /* full Ichimoku, including the cloud and the lagging line */
+  ichimokuFull(candles, t, k, b){
+    const mid = n => {
+      const out = new Array(candles.length).fill(null);
+      for (let i = n - 1; i < candles.length; i++){
+        let hi = -Infinity, lo = Infinity;
+        for (let j = i - n + 1; j <= i; j++){
+          if (candles[j].high > hi) hi = candles[j].high;
+          if (candles[j].low < lo) lo = candles[j].low;
+        }
+        out[i] = (hi + lo) / 2;
+      }
+      return out;
+    };
+    const tenkan = mid(t), kijun = mid(k);
+    const spanA = tenkan.map((x, i) => (x == null || kijun[i] == null) ? null : (x + kijun[i]) / 2);
+    return {
+      tenkan, kijun,
+      senkouA: IND.shift(spanA, k),
+      senkouB: IND.shift(mid(b), k),
+      chikou: IND.shift(candles.map(c => c.close), -k),
+    };
+  },
+
+  /* classic daily pivot levels, drawn on every bar of the day */
+  pivots(candles){
+    const len = candles.length;
+    const keys = ['p', 'r1', 's1', 'r2', 's2'];
+    const out = {}; keys.forEach(k => out[k] = new Array(len).fill(null));
+    let day = -1, prev = null, cur = null;
+    for (let i = 0; i < len; i++){
+      const d = Math.floor(candles[i].rawTime / 86400);
+      if (d !== day){
+        if (cur) prev = cur;
+        day = d;
+        cur = { h: candles[i].high, l: candles[i].low, c: candles[i].close };
+      } else {
+        cur.h = Math.max(cur.h, candles[i].high);
+        cur.l = Math.min(cur.l, candles[i].low);
+        cur.c = candles[i].close;
+      }
+      if (prev){
+        const p = (prev.h + prev.l + prev.c) / 3;
+        out.p[i] = p;
+        out.r1[i] = 2 * p - prev.l;
+        out.s1[i] = 2 * p - prev.h;
+        out.r2[i] = p + (prev.h - prev.l);
+        out.s2[i] = p - (prev.h - prev.l);
+      }
+    }
+    return out;
+  },
+
   heikinAshi(candles){
     const out = [];
     let prevO = null, prevC = null;

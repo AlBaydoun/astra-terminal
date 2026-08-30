@@ -943,3 +943,54 @@ select#chartType {
 .indParams { display: flex; gap: 4px; align-items: center; }
 .indTarget { min-width: 96px; }
 #indList .indRow label.main { flex: 1; min-width: 120px; }
+
+/* ============ DROPDOWN READABILITY ============
+   Native dropdown lists are drawn by the operating system, not the page. Telling
+   the browser which colour scheme we use makes it paint them dark; the explicit
+   option colours are the belt-and-braces fallback. */
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+select, select.tsel, #chartType, .miniTf, #rpSpeed, #alCond {
+  color-scheme: dark;
+}
+[data-theme="light"] select, [data-theme="light"] select.tsel { color-scheme: light; }
+select option {
+  background-color: #0b1122;
+  color: #d6e4ff;
+}
+[data-theme="light"] select option {
+  background-color: #ffffff;
+  color: #16233f;
+}
+
+/* ============ INDICATOR STYLE CONTROLS ============ */
+.indStyleBtn {
+  background: var(--field); border: 1px solid var(--border-soft); color: var(--dim);
+  border-radius: 6px; width: 26px; height: 24px; cursor: pointer; font-size: 12px; line-height: 1;
+}
+.indStyleBtn:hover { color: var(--accent); border-color: rgba(0, 229, 255, 0.4); }
+.indStyleBtn.on { color: var(--accent); border-color: rgba(0, 229, 255, 0.45); background: rgba(0, 229, 255, 0.08); }
+.indStyle {
+  display: none; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 8px 10px; margin: -2px 0 6px; border-radius: 8px;
+  background: var(--field); border: 1px solid var(--border-soft);
+}
+.indStyle.open { display: flex; }
+.stCol { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--dim); }
+.stCol input[type="color"] {
+  width: 26px; height: 20px; padding: 0; border: 1px solid var(--border-soft);
+  border-radius: 4px; background: transparent; cursor: pointer;
+}
+.stCol input[type="number"] {
+  background: var(--panel-solid); border: 1px solid var(--border-soft); border-radius: 5px;
+  color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 3px 5px; outline: none;
+}
+#indList { max-height: 56vh; overflow-y: auto; padding-right: 4px; }
+#indList .indRow { gap: 8px; }
+.indParams { flex-wrap: wrap; }
+.indNote {
+  display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 6px;
+  border-radius: 50%; border: 1px solid var(--border-soft); color: var(--dim);
+  font-style: normal; font-size: 9px; cursor: help;
+}
+.indNote:hover { color: var(--accent); border-color: rgba(0, 229, 255, 0.5); }

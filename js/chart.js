@@ -309,6 +309,10 @@ const Chart = {
           color: spec.color || def.color || '#8fa3c8',
           lineWidth: spec.width || 1,
           lineStyle: spec.lineStyle || 0,
+          /* dotted indicators (Parabolic SAR, Fractals) hide the line and show points */
+          lineVisible: !spec.dots,
+          pointMarkersVisible: !!spec.dots,
+          pointMarkersRadius: spec.radius || 1.6,
         }));
     if (scaleId !== 'right'){
       const margins = spec.margins || { top: 0.72, bottom: 0 };
@@ -328,6 +332,8 @@ const Chart = {
     const ctx = {
       v, closes: v.map(c => c.close),
       line: arr => this.lineData(arr, v),
+      /* "Apply to" — the price each indicator reads, as in MetaTrader */
+      srcOf: cfg => IND.src(v, cfg.src || 'close'),
     };
     this.ensurePanes();
 
@@ -340,24 +346,47 @@ const Chart = {
       if (!chart) continue;
       let specs;
       try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
+      /* apply the look chosen in the dialog: colour per line, thickness, dash */
+      const chosen = cfg.colors || {};
+      for (const spec of specs){
+        const part = (def.parts || []).find(p => p.key === spec.key);
+        spec.color = chosen[spec.key] || spec.color || (part && part.color) || def.color;
+        if (cfg.width) spec.width = cfg.width;
+        if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
+      }
       for (const spec of specs){
         const id = def.id + '|' + spec.key;
+        /* an indicator with nothing to show (e.g. daily pivots on a one-day range)
+           gets no series at all rather than an empty one */
+        if (!spec.data || !spec.data.length) continue;
         alive[id] = true;
         let entry = this.series[id];
         if (entry && entry.target !== target){          /* moved to another window */
           try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}
           entry = null;
         }
+        const look = [spec.color, spec.width || 1, spec.lineStyle || 0, spec.dots ? 1 : 0].join('|');
         if (!entry){
-          entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def), target };
-          entry.s.setData(spec.data);
+          try {
+            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def), target, look };
+            entry.s.setData(spec.data);
+          } catch(e){ delete this.series[id]; }
           continue;
+        }
+        if (entry.look !== look){                       /* colour / thickness / dash changed */
+          entry.look = look;
+          try {
+            entry.s.applyOptions(spec.type === 'hist' ? { color: spec.color } : {
+              color: spec.color, lineWidth: spec.width || 1, lineStyle: spec.lineStyle || 0,
+              lineVisible: !spec.dots, pointMarkersVisible: !!spec.dots, pointMarkersRadius: spec.radius || 1.6,
+            });
+          } catch(e){}
         }
         if (tickOnly){
           const last = spec.data[spec.data.length - 1];
           if (last) { try { entry.s.update(last); } catch(e){} }
         } else {
-          entry.s.setData(spec.data);
+          try { entry.s.setData(spec.data); } catch(e){}
         }
       }
     }

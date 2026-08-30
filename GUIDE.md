@@ -35,13 +35,26 @@ skips sync for that device.
 ## The essentials
 
 - **Switch coin:** just start typing (e.g. `SOL`) — the search opens by itself. Or click the coin button top-left.
-- **Indicators:** the "Indicators" button. Every indicator has a **"Show in"** box on its right:
-  **Price chart**, or **Window 1 / 2 / 3** underneath. Two indicators pointed at the same window
-  are drawn **together in that one window** (RSI + Stochastic side by side, for example), and an
-  oscillator can also be laid straight over the price chart. Windows appear and disappear by
-  themselves, and each one is labelled with what it holds.
-  Available: 3 moving averages (EMA or SMA), Bollinger Bands, VWAP, SuperTrend, Volume,
-  RSI, Stochastic, MACD, ATR and ADX+DI — plus Volume Profile and candle patterns.
+- **Indicators:** the "Indicators" button opens the full catalogue — **29 indicators**. Each row has:
+  - a **tick box** to switch it on,
+  - its **settings** (lengths, multipliers, and the average type: EMA / SMA / WMA / SMMA),
+  - **"Apply to"** — exactly like MetaTrader: Close, Open, High, Low, Median (H+L)/2,
+    Typical (H+L+C)/3 or Weighted (H+L+2C)/4,
+  - a **◑ style button** — pick the **colour of every single line**, the **thickness** (1–5) and
+    **solid / dotted / dashed**,
+  - **"Show in"** — *Price chart*, *Window 1*, *Window 2* or *Window 3*.
+
+  Two indicators pointed at the same window are drawn **together in that one window**, an
+  oscillator can be laid straight **over the price chart**, and windows appear and vanish by
+  themselves, each labelled with what it holds.
+
+  **On the price:** 3 moving averages, Bollinger Bands, Envelopes, Keltner Channel,
+  Donchian Channel, VWAP, SuperTrend, Parabolic SAR, Alligator, Ichimoku Cloud,
+  Pivot Points and Fractals.
+  **In a window:** Volume, RSI, Stochastic, MACD, CCI, Williams %R, Money Flow Index,
+  On Balance Volume, Momentum, Awesome Oscillator, DeMarker, Force Index, ATR,
+  Standard Deviation and ADX + DI.
+  Plus Volume Profile and candle-pattern markers at the bottom of the dialog.
 - **Drawing:** pick a tool on the left, then click in the chart (trend line / Fibonacci = 2 clicks). Drawings are saved per coin.
 - **Alerts:** bell in the top bar, or the bell tool on the left (then click the chart). When the price crosses your level: sound + popup. Manage them in the ALERTS tab.
 - **Bar replay:** "Replay" button, then click a candle — the chart rewinds to that moment. Play, step bar by bar, change speed, and watch how the market unfolded. ✕ exits.

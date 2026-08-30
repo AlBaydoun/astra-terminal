@@ -327,27 +327,59 @@ const App = {
     });
   },
 
+  /* colour inputs need plain hex, but a default may be an rgba() string */
+  toHex(col){
+    if (!col) return '#8fa3c8';
+    if (col[0] === '#') return col.length === 4
+      ? '#' + col[1] + col[1] + col[2] + col[2] + col[3] + col[3] : col.slice(0, 7);
+    const m = col.match(/rgba?\(([^)]+)\)/);
+    if (!m) return '#8fa3c8';
+    const [r, g, b] = m[1].split(',').map(x => Math.round(parseFloat(x)));
+    return '#' + [r, g, b].map(x => Math.max(0, Math.min(255, x || 0)).toString(16).padStart(2, '0')).join('');
+  },
+
   openIndicators(){
     const host = document.getElementById('indList');
     host.innerHTML = INDS.map(def => {
       const c = Chart.settings[def.id] || def.def;
+      const parts = def.parts || [];
       const params = (def.params || []).map(p => {
         const val = c[p.k];
         if (p.kind === 'sel')
           return `<select class="tsel" data-id="${def.id}" data-k="${p.k}">` +
             p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>';
         return `<input type="number" data-id="${def.id}" data-k="${p.k}" value="${val}" ` +
-          `min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''} style="width:52px">`;
+          `min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''} style="width:52px" title="${p.k}">`;
       }).join('');
+      const applyTo = def.applyTo
+        ? `<select class="tsel" data-id="${def.id}" data-k="src" title="Apply to — which price this reads">` +
+          IND.SOURCES.map(([v, l]) => `<option value="${v}"${v === (c.src || 'close') ? ' selected' : ''}>${l}</option>`).join('') +
+          '</select>'
+        : '';
       const targets = IND_TARGETS.map(([v, l]) =>
         `<option value="${v}"${v === c.target ? ' selected' : ''}>${l}</option>`).join('');
+      const colors = parts.map(pt =>
+        `<label class="stCol"><input type="color" data-id="${def.id}" data-ck="${pt.key}" ` +
+        `value="${this.toHex((c.colors || {})[pt.key] || pt.color)}"><span>${esc(pt.label)}</span></label>`).join('');
+      const styleRow = `<div class="indStyle" id="ist-${def.id}">` + colors +
+        `<label class="stCol"><input type="number" data-id="${def.id}" data-k="width" value="${c.width || 1}" min="1" max="5" style="width:44px"><span>Thickness</span></label>` +
+        `<label class="stCol"><select class="tsel" data-id="${def.id}" data-k="style">` +
+        IND_STYLES.map(([v, l]) => `<option value="${v}"${v === (c.style || 0) ? ' selected' : ''}>${l}</option>`).join('') +
+        `</select><span>Line</span></label></div>`;
       return `<div class="indRow">` +
         `<label class="main"><input type="checkbox" data-id="${def.id}" data-k="on"${c.on ? ' checked' : ''}>` +
-        `<span class="chip" style="background:${def.color || '#3d5a80'}"></span>${esc(def.label)}</label>` +
-        `<span class="indParams">${params}</span>` +
+        `<span class="chip" style="background:${this.toHex(parts[0] ? parts[0].color : '#3d5a80')}"></span>${esc(def.label)}` +
+        (def.note ? `<i class="indNote" title="${esc(def.note)}">?</i>` : '') + `</label>` +
+        `<span class="indParams">${params}${applyTo}</span>` +
+        `<button class="indStyleBtn" data-style="${def.id}" title="Colours and line style">◑</button>` +
         `<select class="tsel indTarget" data-id="${def.id}" data-k="target" title="Which window to draw it in">${targets}</select>` +
-        `</div>`;
+        `</div>` + styleRow;
     }).join('');
+    host.querySelectorAll('.indStyleBtn').forEach(b => b.addEventListener('click', () => {
+      const el = document.getElementById('ist-' + b.dataset.style);
+      el.classList.toggle('open');
+      b.classList.toggle('on', el.classList.contains('open'));
+    }));
     document.getElementById('i_vp').checked = Chart.settings.vp.on;
     document.getElementById('i_pat').checked = Chart.settings.patterns.on;
     this.showModal('indModal');
@@ -358,12 +390,18 @@ const App = {
     document.querySelectorAll('#indList [data-id]').forEach(el => {
       const cfg = S[el.dataset.id];
       if (!cfg) return;
+      if (el.dataset.ck){                       /* a colour for one line of this indicator */
+        cfg.colors = cfg.colors || {};
+        cfg.colors[el.dataset.ck] = el.value;
+        return;
+      }
       const k = el.dataset.k;
       if (el.type === 'checkbox') cfg[k] = el.checked;
       else if (el.type === 'number'){
         const v = parseFloat(el.value);
         if (!isNaN(v) && v > 0) cfg[k] = v;
-      } else cfg[k] = el.value;
+      } else if (k === 'style') cfg[k] = parseInt(el.value, 10) || 0;
+      else cfg[k] = el.value;
     });
     S.vp = { on: document.getElementById('i_vp').checked };
     S.patterns = { on: document.getElementById('i_pat').checked };
