@@ -65,6 +65,67 @@ const BROKER = {
   map: {},        // symbol -> {sym,name,group,feed,digits,alt}
   bridgeSymbols: null,   // what the live MT5 bridge reports, when connected
 
+  /* ---------- what a trade actually costs on YOUR account ----------
+     Backtests are only worth reading if the costs match reality. When the MT5
+     bridge is running the spread is taken from your terminal's live bid/ask —
+     the real number, on your real account type. These figures are only the
+     fallback used when the bridge is closed, and they can be edited in the
+     interface. JustMarkets Pro is a raw-spread account: tight spreads with a
+     commission, which is very different from a standard account.        */
+  account: lsGet('astra_account', 'pro'),      // 'pro' | 'standard'
+  COSTS: {
+    /* typical raw spread as a % of price, and commission per side as % of notional */
+    pro: {
+      metal:  { spreadPct: 0.012, commissionPct: 0.0030 },
+      energy: { spreadPct: 0.030, commissionPct: 0.0030 },
+      index:  { spreadPct: 0.010, commissionPct: 0.0000 },
+      fx:     { spreadPct: 0.002, commissionPct: 0.0030 },
+      crypto: { spreadPct: 0.050, commissionPct: 0.0000 },
+      other:  { spreadPct: 0.020, commissionPct: 0.0020 },
+    },
+    standard: {
+      metal:  { spreadPct: 0.030, commissionPct: 0 },
+      energy: { spreadPct: 0.060, commissionPct: 0 },
+      index:  { spreadPct: 0.025, commissionPct: 0 },
+      fx:     { spreadPct: 0.018, commissionPct: 0 },
+      crypto: { spreadPct: 0.080, commissionPct: 0 },
+      other:  { spreadPct: 0.040, commissionPct: 0 },
+    },
+  },
+
+  /* group used for costing — broker instruments know their own, others are guessed */
+  costGroup(sym){
+    const i = this.map[sym];
+    if (i) return this.COSTS[this.account][i.group] ? i.group : 'other';
+    if (typeof MK === 'undefined') return 'other';
+    const g = MK.group(sym);
+    if (g === 'crypto') return 'crypto';
+    if (g === 'fx') return 'fx';
+    if (g === 'index') return 'index';
+    if (g === 'comm') return 'energy';
+    return 'other';
+  },
+
+  /* the cost model for one instrument, preferring the live spread from MT5 */
+  costsFor(sym, liveSpreadPct){
+    const table = this.COSTS[this.account] || this.COSTS.pro;
+    const c = table[this.costGroup(sym)] || table.other;
+    const overrides = lsGet('astra_costOverride', {});
+    const o = overrides[sym] || {};
+    return {
+      spreadPct: o.spreadPct != null ? o.spreadPct
+        : (liveSpreadPct != null && liveSpreadPct > 0 ? liveSpreadPct : c.spreadPct),
+      commissionPct: o.commissionPct != null ? o.commissionPct : c.commissionPct,
+      source: o.spreadPct != null ? 'your override'
+        : (liveSpreadPct != null && liveSpreadPct > 0 ? 'live from MT5' : 'JustMarkets ' + this.account + ' estimate'),
+    };
+  },
+
+  setAccount(kind){
+    this.account = kind;
+    lsSet('astra_account', kind);
+  },
+
   init(){
     for (const [sym, name, group, feed, digits, alt] of this.LIST)
       this.map[sym] = { sym, name, group, feed, digits, alt };

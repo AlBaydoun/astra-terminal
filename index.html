@@ -389,7 +389,12 @@
   <div class="mBox">
     <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
     <div class="mBody">
-      <div class="indHint">Every indicator can sit on the price chart or in one of three windows — and two indicators may share the same window.</div>
+      <div id="indTabs">
+        <button data-itab="inputs" class="active">Inputs</button>
+        <button data-itab="style">Style</button>
+        <button data-itab="vis">Visibility</button>
+      </div>
+      <div class="indHint" id="indHint">Settings and the price each indicator reads. “Show in” chooses the price chart or one of three windows — two indicators pointed at the same window are drawn together.</div>
       <div id="indList"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_vp"><span class="chip" style="background:linear-gradient(90deg,#00e5ff,#ffd166)"></span>Volume Profile <small style="color:var(--dim)">(visible range)</small></label></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_pat"><span class="chip" style="background:linear-gradient(90deg,#2ebd85,#f6465d)"></span>Candle patterns <small style="color:var(--dim)">(markers on chart)</small></label></div>
@@ -418,6 +423,11 @@
     <div class="mHead">DATA <span>SOURCES</span><button class="mClose">×</button></div>
     <div class="mBody">
       <div id="feedState"></div>
+      <div class="formRow"><label>Account type</label>
+        <select id="acctType" title="Changes the spread and commission used by backtests and paper trades">
+          <option value="pro">JustMarkets Pro (raw spread + commission)</option>
+          <option value="standard">JustMarkets Standard (wider spread, no commission)</option>
+        </select></div>
       <div class="formRow"><label>Data service</label><input id="feedUrl" type="text" placeholder="http://localhost:8642 or your own address" spellcheck="false"></div>
       <div class="aiSub">Crypto always streams live from Binance and needs no service. Stocks, forex, indices and commodities need this small service — it runs automatically when you start the terminal with the desktop shortcut.</div>
       <button class="mPrimary" id="feedSave">SAVE &amp; RECONNECT</button>

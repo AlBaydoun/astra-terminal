@@ -97,6 +97,10 @@ const Bots = {
   universe(){
     const out = [];
     const seen = new Set();
+    /* when your MT5 terminal is connected its instruments lead, because those
+       are the ones you can actually trade and their prices are exact */
+    if (Feed.bridge)
+      for (const s of BotEngine.PRIORITY) if (Feed.bridgeHas(s) && !seen.has(s)){ seen.add(s); out.push(s); }
     for (const s of BotEngine.PRIORITY) if (!seen.has(s) && (BROKER.is(s) || STORE.tickers.has(s))){ seen.add(s); out.push(s); }
     for (const s of (Watch.list || [])) if (!seen.has(s)){ seen.add(s); out.push(s); }
     for (const s of (MK.monitored || [])) if (!seen.has(s)){ seen.add(s); out.push(s); }
@@ -110,8 +114,10 @@ const Bots = {
     if (!t || !(t.last > 0)) return null;
     const qt = Feed.quoteTime[sym];
     const ageSec = qt ? Math.max(0, Date.now() / 1000 - qt) : (Feed.srcOf[sym] === 'binance' ? 0 : null);
-    const spread = t.spread != null ? t.spread : t.last * 0.0002;
-    return { price: t.last, spread, ageSec };
+    const livePct = (t.spread > 0) ? t.spread / t.last * 100 : null;
+    const costs = BROKER.costsFor(sym, livePct);
+    const spread = t.spread != null && t.spread > 0 ? t.spread : t.last * costs.spreadPct / 100;
+    return { price: t.last, spread, ageSec, bid: t.bid, ask: t.ask, costs };
   },
 
   /* ---------- the periodic pass ---------- */
@@ -241,6 +247,7 @@ const Bots = {
       sig.sym = sym; sig.tf = tf;
       sig.state = MarketState.of(candles, candles.length - 2);
       const q = this.quoteFor(sym);
+      if (q && q.costs) cfg.risk = Object.assign({}, cfg.risk, { commissionPct: q.costs.commissionPct });
       const gate = BotEngine.check(L, cfg, sig, q);
       if (!gate.ok){
         BotEngine.note(L, 'reject', baseAsset(sym) + ' ' + tf + ' rejected — ' + gate.reason, { sym, tf, score: sig.score });

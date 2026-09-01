@@ -147,6 +147,42 @@ and reopen Monday**, so gold, US100 and oil sit frozen all weekend. Crypto never
 **To remove the delay completely, use the MT5 bridge** (below). Then every instrument shows LIVE,
 straight from JustMarkets, exactly the prices you trade on.
 
+## Linking ASTRA to your JustMarkets account
+
+ASTRA reads your MetaTrader 5 terminal directly. **No password, login or investor
+number is ever needed, asked for, or stored** — the bridge simply reads the terminal
+you are already signed into, on your own computer. Nothing leaves the machine, and
+there is no order path: it can look, never touch.
+
+**Do this once:**
+
+1. Open a command window and run: `pip install MetaTrader5`
+2. Open MetaTrader 5 and log in to your JustMarkets account as normal.
+3. In MT5, right-click the **Market Watch** panel → **Show All**, so every instrument
+   you want ASTRA to see is available (XAUUSD.m, US100.std, WTI.m and the rest).
+
+**Then, each time you want live broker data:**
+
+1. Double-click **`START-MT5-Bridge.bat`** and leave that small window open.
+2. Within a few seconds the **FEED** light in ASTRA's bottom bar turns green and reads
+   `MT5 · <your server>`. Every price badge flips to **LIVE**.
+
+**Tell ASTRA which account type you have.** Click the **FEED** light → *Account type* →
+**JustMarkets Pro**. This matters more than it sounds: Pro is a raw-spread account
+(tight spreads plus a commission), Standard is wider spreads with no commission. Bots
+and backtests price every trade using that profile, so choosing the wrong one makes
+every result wrong. When the bridge is running ASTRA uses the **real spread from your
+terminal** instead of any estimate, and says so.
+
+What the link gives you:
+
+| | Without the bridge | With the bridge |
+|---|---|---|
+| Prices | Public feeds, ~15 min delayed, closed at weekends | Your broker's live tick prices |
+| Symbols | Public equivalents (GC=F for gold) | Your exact instruments (XAUUSD.m) |
+| Spread used in tests | Estimated for your account type | The real spread your account pays |
+| Seconds charts | Crypto only | Every instrument, built from real ticks |
+
 ## The MT5 bridge — your broker's own prices, no delay
 
 You already run MetaTrader 5 for JustMarkets. The bridge lets ASTRA read the prices your terminal

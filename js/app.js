@@ -340,11 +340,16 @@ const App = {
     return '#' + [r, g, b].map(x => Math.max(0, Math.min(255, x || 0)).toString(16).padStart(2, '0')).join('');
   },
 
+  indTab: 'inputs',
+
   openIndicators(){
     const host = document.getElementById('indList');
     host.innerHTML = INDS.map(def => {
       const c = Chart.settings[def.id] || def.def;
       const parts = def.parts || [];
+      const on = c.on ? ' checked' : '';
+
+      /* --- INPUTS: parameters and which price the indicator reads --- */
       const params = (def.params || []).map(p => {
         const val = c[p.k];
         if (p.kind === 'sel')
@@ -356,45 +361,86 @@ const App = {
       const applyTo = def.applyTo
         ? `<select class="tsel" data-id="${def.id}" data-k="src" title="Apply to — which price this reads">` +
           IND.SOURCES.map(([v, l]) => `<option value="${v}"${v === (c.src || 'close') ? ' selected' : ''}>${l}</option>`).join('') +
-          '</select>'
-        : '';
-      const targets = IND_TARGETS.map(([v, l]) =>
-        `<option value="${v}"${v === c.target ? ' selected' : ''}>${l}</option>`).join('');
-      const colors = parts.map(pt =>
-        `<label class="stCol"><input type="color" data-id="${def.id}" data-ck="${pt.key}" ` +
-        `value="${this.toHex((c.colors || {})[pt.key] || pt.color)}"><span>${esc(pt.label)}</span></label>`).join('');
-      const styleRow = `<div class="indStyle" id="ist-${def.id}">` + colors +
-        `<label class="stCol"><input type="number" data-id="${def.id}" data-k="width" value="${c.width || 1}" min="1" max="5" style="width:44px"><span>Thickness</span></label>` +
-        `<label class="stCol"><select class="tsel" data-id="${def.id}" data-k="style">` +
+          '</select>' : '';
+      const target = `<select class="tsel indTarget" data-id="${def.id}" data-k="target" title="Which window to draw it in">` +
+        IND_TARGETS.map(([v, l]) => `<option value="${v}"${v === c.target ? ' selected' : ''}>${l}</option>`).join('') + '</select>';
+
+      /* --- STYLE: colour, thickness, dash and per-line visibility --- */
+      const hidden = c.hidden || {};
+      const style = parts.map(pt =>
+        `<span class="stLine">
+           <label class="stEye" title="Show this line"><input type="checkbox" data-id="${def.id}" data-hide="${pt.key}"${hidden[pt.key] ? '' : ' checked'}></label>
+           <input type="color" data-id="${def.id}" data-ck="${pt.key}" value="${this.toHex((c.colors || {})[pt.key] || pt.color)}">
+           <i>${esc(pt.label)}</i>
+         </span>`).join('') +
+        `<span class="stLine"><input type="number" data-id="${def.id}" data-k="width" value="${c.width || 1}" min="1" max="5" style="width:44px"><i>Thickness</i></span>` +
+        `<span class="stLine"><select class="tsel" data-id="${def.id}" data-k="style">` +
         IND_STYLES.map(([v, l]) => `<option value="${v}"${v === (c.style || 0) ? ' selected' : ''}>${l}</option>`).join('') +
-        `</select><span>Line</span></label></div>`;
+        `</select><i>Line</i></span>`;
+
+      /* --- VISIBILITY: which timeframes it appears on --- */
+      const tfs = c.tfs || CFG.TFS.map(t => t[0]);
+      const vis = CFG.TFS.map(([v, lbl]) =>
+        `<label class="stTf"><input type="checkbox" data-id="${def.id}" data-tf="${v}"${tfs.includes(v) ? ' checked' : ''}>${lbl}</label>`).join('') +
+        `<button class="bMini" data-alltf="${def.id}">All</button>`;
+
       return `<div class="indRow">` +
-        `<label class="main"><input type="checkbox" data-id="${def.id}" data-k="on"${c.on ? ' checked' : ''}>` +
+        `<label class="main"><input type="checkbox" data-id="${def.id}" data-k="on"${on}>` +
         `<span class="chip" style="background:${this.toHex(parts[0] ? parts[0].color : '#3d5a80')}"></span>${esc(def.label)}` +
         (def.note ? `<i class="indNote" title="${esc(def.note)}">?</i>` : '') + `</label>` +
-        `<span class="indParams">${params}${applyTo}</span>` +
-        `<button class="indStyleBtn" data-style="${def.id}" title="Colours and line style">◑</button>` +
-        `<select class="tsel indTarget" data-id="${def.id}" data-k="target" title="Which window to draw it in">${targets}</select>` +
-        `</div>` + styleRow;
+        `<span class="indPane inputs"><span class="indParams">${params}${applyTo}</span>${target}</span>` +
+        `<span class="indPane style">${style}</span>` +
+        `<span class="indPane vis">${vis}</span>` +
+        `</div>`;
     }).join('');
-    host.querySelectorAll('.indStyleBtn').forEach(b => b.addEventListener('click', () => {
-      const el = document.getElementById('ist-' + b.dataset.style);
-      el.classList.toggle('open');
-      b.classList.toggle('on', el.classList.contains('open'));
+
+    host.querySelectorAll('[data-alltf]').forEach(b => b.addEventListener('click', () => {
+      host.querySelectorAll(`[data-id="${b.dataset.alltf}"][data-tf]`).forEach(x => { x.checked = true; });
     }));
+
+    const tabs = document.getElementById('indTabs');
+    tabs.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.itab === this.indTab);
+      btn.onclick = () => { this.indTab = btn.dataset.itab; this.applyIndTab(); };
+    });
+    this.applyIndTab();
+
     document.getElementById('i_vp').checked = Chart.settings.vp.on;
     document.getElementById('i_pat').checked = Chart.settings.patterns.on;
     this.showModal('indModal');
   },
 
+  applyIndTab(){
+    const t = this.indTab;
+    document.getElementById('indList').className = 'showing-' + t;
+    document.getElementById('indTabs').querySelectorAll('button')
+      .forEach(b => b.classList.toggle('active', b.dataset.itab === t));
+    document.getElementById('indHint').textContent =
+      t === 'inputs' ? 'Settings and the price each indicator reads. “Show in” chooses the price chart or one of three windows — two indicators pointed at the same window are drawn together.'
+      : t === 'style' ? 'Colour of every individual line, its thickness and whether it is solid or dashed. The tick beside a colour hides just that line while keeping the rest.'
+      : 'Choose the timeframes each indicator appears on — for example show a 200-period average only from 15m upwards, so it does not clutter a 1-second chart.';
+  },
+
   applyIndicators(){
     const S = Chart.settings;
+    const tfSeen = {};
     document.querySelectorAll('#indList [data-id]').forEach(el => {
       const cfg = S[el.dataset.id];
       if (!cfg) return;
-      if (el.dataset.ck){                       /* a colour for one line of this indicator */
+      if (el.dataset.ck){                       /* a colour for one line */
         cfg.colors = cfg.colors || {};
         cfg.colors[el.dataset.ck] = el.value;
+        return;
+      }
+      if (el.dataset.hide){                     /* per-line visibility */
+        cfg.hidden = cfg.hidden || {};
+        if (el.checked) delete cfg.hidden[el.dataset.hide];
+        else cfg.hidden[el.dataset.hide] = true;
+        return;
+      }
+      if (el.dataset.tf){                       /* timeframe visibility */
+        const list = tfSeen[el.dataset.id] = tfSeen[el.dataset.id] || [];
+        if (el.checked) list.push(el.dataset.tf);
         return;
       }
       const k = el.dataset.k;
@@ -405,6 +451,7 @@ const App = {
       } else if (k === 'style') cfg[k] = parseInt(el.value, 10) || 0;
       else cfg[k] = el.value;
     });
+    for (const [id, list] of Object.entries(tfSeen)) if (S[id]) S[id].tfs = list;
     S.vp = { on: document.getElementById('i_vp').checked };
     S.patterns = { on: document.getElementById('i_pat').checked };
     lsSet('astra_ind', S);
@@ -441,6 +488,15 @@ const App = {
   },
 
   openFeed(){
+    const acct = document.getElementById('acctType');
+    if (acct && !acct.dataset.wired){
+      acct.dataset.wired = '1';
+      acct.addEventListener('change', () => {
+        BROKER.setAccount(acct.value);
+        toast('Costs now modelled as a JustMarkets ' + acct.value + ' account', 'ok');
+      });
+    }
+    if (acct) acct.value = BROKER.account;
     document.getElementById('feedUrl').value = localStorage.getItem('astra_api') || '';
     this.renderFeed();
     this.showModal('feedModal');

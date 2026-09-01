@@ -29,7 +29,14 @@ const Backtest = {
 
     const ledger = BotEngine.blank('bt');
     const warm = botDef.warmup || 220;
-    const spread = candles[candles.length - 1].close * (opts.spreadPct != null ? opts.spreadPct : 0.02) / 100;
+    /* cost model for this instrument: live spread from MT5 when the bridge is
+       running, otherwise the profile for your JustMarkets account type */
+    const liveT = STORE.tickers.get(sym);
+    const livePct = (liveT && liveT.spread > 0 && liveT.last > 0) ? liveT.spread / liveT.last * 100 : null;
+    const costs = (typeof BROKER !== 'undefined') ? BROKER.costsFor(sym, livePct)
+      : { spreadPct: 0.02, commissionPct: 0.001, source: 'default' };
+    const spread = candles[candles.length - 1].close * (opts.spreadPct != null ? opts.spreadPct : costs.spreadPct) / 100;
+    cfg.risk = Object.assign({}, cfg.risk, { commissionPct: costs.commissionPct });
     let evaluated = 0, signals = 0, rejected = 0;
     const rejectReasons = {};
 
@@ -74,7 +81,7 @@ const Backtest = {
 
     const st = BotEngine.stats(ledger);
     return {
-      sym, tf, bars: candles.length,
+      sym, tf, bars: candles.length, costs,
       from: candles[warm].rawTime, to: lastBar.rawTime,
       evaluated, signals, rejected,
       rejectReasons: Object.entries(rejectReasons).sort((a, b) => b[1] - a[1]).slice(0, 6),

@@ -366,6 +366,9 @@ const Chart = {
     for (const def of INDS){
       const cfg = this.settings[def.id];
       if (!cfg || !cfg.on) continue;
+      /* an indicator can be restricted to certain timeframes, so a 200-period
+         average need not clutter a 1-second chart */
+      if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
       const target = this.chartFor(cfg.target) ? cfg.target : 'main';
       const chart = this.chartFor(target);
       if (!chart) continue;
@@ -383,6 +386,8 @@ const Chart = {
       this.specCache[def.id] = { def, cfg, specs };
       for (const spec of specs){
         const id = def.id + '|' + spec.key;
+        /* individual lines can be switched off (Bollinger middle band, say) */
+        if (cfg.hidden && cfg.hidden[spec.key]) continue;
         /* an indicator with nothing to show (e.g. daily pivots on a one-day range)
            gets no series at all rather than an empty one */
         if (!spec.data || !spec.data.length) continue;
@@ -466,6 +471,7 @@ const Chart = {
       const c = this.specCache[def.id];
       if (!c) continue;
       if ((c.cfg.target || 'main') !== target) continue;
+      if (c.cfg.tfs && c.cfg.tfs.length && !c.cfg.tfs.includes(STORE.tf)) continue;
       if (target === 'main' && def.id === 'vol') continue;   // volume already in the main legend
       const vals = c.specs.map(sp =>
         `<b style="color:${sp.color}">${esc(this.fmtInd(this.valueAt(sp.data, time)))}</b>`).join(' ');

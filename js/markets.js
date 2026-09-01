@@ -170,6 +170,9 @@ const MK = {
         last: q.last, open: q.prev, high: q.high != null ? q.high : q.last,
         low: q.low != null ? q.low : q.last,
         vol: 0, quoteVol: prev ? prev.quoteVol : 0, pct: q.pct, count: 0,
+        /* the broker's real spread, when the MT5 bridge supplies bid and ask */
+        bid: q.bid, ask: q.ask,
+        spread: (q.bid > 0 && q.ask > 0) ? Math.max(0, q.ask - q.bid) : (prev ? prev.spread : undefined),
       });
       this.meta[q.symbol] = { currency: q.currency, exchange: q.exchange };
       changed.push(q.symbol);
