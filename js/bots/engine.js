@@ -10,7 +10,11 @@
 const BotEngine = {
   /* ---------- defaults every bot inherits ---------- */
   RISK: {
-    riskPct: 0.05,            // % of virtual equity risked per trade
+    /* 0.5% per trade. Chosen deliberately: on an 800 USD account the smallest lot
+       your broker will accept already risks roughly 0.4–1.1% on most instruments,
+       so anything tighter simply refuses every trade. This is the floor the
+       contract sizes impose, not a preference. */
+    riskPct: 0.5,             // % of virtual equity risked per trade
     maxOpen: 3,               // open positions per bot
     maxPerSymbol: 1,          // positions in the same instrument
     maxDailyLossPct: 2,       // lock the bot for the day past this loss

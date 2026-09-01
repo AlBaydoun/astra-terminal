@@ -195,11 +195,33 @@ const Bots = {
     this.render();
   },
 
+  /* which instruments is this bot allowed to trade?
+     Evidence beats hope: a strategy that earns on one market and bleeds on
+     another should simply not be let near the second one. */
+  allowed(b){
+    const cfg = this.cfg(b.id);
+    const all = this.universe();
+    if (!cfg.instruments || !cfg.instruments.length) return all;
+    return all.filter(s => cfg.instruments.includes(s));
+  },
+
+  /* how this bot has actually done per instrument, from its own closed trades */
+  perInstrument(id){
+    const L = this.ledger(id);
+    const out = {};
+    for (const t of L.closed){
+      const k = t.sym;
+      const o = out[k] = out[k] || { n: 0, net: 0, wins: 0 };
+      o.n++; o.net += t.pnl; if (t.pnl > 0) o.wins++;
+    }
+    return out;
+  },
+
   /* ---------- one automated bot pass ---------- */
   async runBot(b, manual){
     const cfg = this.cfg(b.id);
     const L = this.ledgers[b.id];
-    const syms = this.universe().slice(0, cfg.scanDepth || 24);
+    const syms = this.allowed(b).slice(0, cfg.scanDepth || 24);
     let acted = false;
 
     for (const sym of syms){

@@ -68,7 +68,9 @@ const Feed = {
       if (!r.ok) throw new Error('bad');
       const j = await r.json();
       const was = !!this.bridge;
-      this.bridge = { account: j.account || '', server: j.server || '', symbols: new Set(j.symbols || []) };
+      this.bridge = { account: j.account || '', server: j.server || '', symbols: new Set(j.symbols || []),
+                      balance: j.balance, currency: j.currency };
+      this.buildAliases();
       this.bridgeMisses = 0;
       if (!was){ toast('MT5 bridge connected — live broker prices' + (j.server ? ' (' + j.server + ')' : ''), 'ok'); BUS.emit('feed'); }
     } catch(e){
@@ -77,15 +79,55 @@ const Feed = {
     }
   },
   bridgeOn(){ return !!this.bridge; },
-  bridgeHas(sym){ return !!(this.bridge && this.bridge.symbols.has(sym)); },
+
+  /* ---------- broker symbol naming ----------
+     The same instrument is named differently on different account types. On this
+     broker a Standard account calls gold XAUUSD.m and the Nasdaq US100.std, while
+     a Pro account calls them XAUUSD.s and US100.s. Hard-coding either one breaks
+     silently on the other — the bots simply find nothing. So the account's own
+     symbol list is matched by base name and an alias map is built at connect
+     time. ASTRA keeps one internal name; the broker gets whatever it calls it. */
+  alias: {},
+  baseOf(sym){ return String(sym).replace(/\.[A-Za-z]{1,4}$/, '').toUpperCase(); },
+
+  buildAliases(){
+    this.alias = {};
+    if (!this.bridge) return;
+    const byBase = {};
+    for (const s of this.bridge.symbols){
+      const b = this.baseOf(s);
+      /* prefer the shortest name for a base — the plain contract, not a variant */
+      if (!byBase[b] || s.length < byBase[b].length) byBase[b] = s;
+    }
+    const wanted = (typeof BROKER !== 'undefined') ? BROKER.all() : [];
+    let mapped = 0;
+    for (const want of wanted){
+      if (this.bridge.symbols.has(want)){ this.alias[want] = want; mapped++; continue; }
+      const hit = byBase[this.baseOf(want)];
+      if (hit){ this.alias[want] = hit; mapped++; }
+    }
+    this.aliasCount = mapped;
+  },
+
+  /* the name to send to the broker for one of our internal names */
+  brokerName(sym){
+    if (!this.bridge) return sym;
+    if (this.bridge.symbols.has(sym)) return sym;
+    return this.alias[sym] || sym;
+  },
+  bridgeHas(sym){
+    if (!this.bridge) return false;
+    if (this.bridge.symbols.has(sym)) return true;
+    return !!this.alias[sym] && this.bridge.symbols.has(this.alias[sym]);
+  },
 
   /* ---------- routing ---------- */
   route(sym){
     if (typeof BROKER !== 'undefined' && BROKER.is(sym)){
       const f = BROKER.feedFor(sym);
-      if (f) return f;
+      if (f) return f.kind === 'bridge' ? { kind: 'bridge', addr: this.brokerName(sym) } : f;
     }
-    if (this.bridgeHas(sym)) return { kind: 'bridge', addr: sym };
+    if (this.bridgeHas(sym)) return { kind: 'bridge', addr: this.brokerName(sym) };
     if (/USDT$/.test(sym)) return { kind: 'binance', addr: sym };
     return { kind: 'proxy', addr: sym };
   },
@@ -170,10 +212,13 @@ const Feed = {
     const want = (symbols || []).filter(s => this.bridgeHas(s) && !this.specs[s]);
     if (!want.length) return this.specs;
     try {
-      const r = await fetch(this.BRIDGE_URL + '/specs?symbols=' + encodeURIComponent(want.join(',')));
+      const back = {};
+      for (const s2 of want) back[this.brokerName(s2)] = s2;
+      const r = await fetch(this.BRIDGE_URL + '/specs?symbols=' + encodeURIComponent(Object.keys(back).join(',')));
       if (!r.ok) return this.specs;
       const j = await r.json();
-      Object.assign(this.specs, j.specs || {});
+      for (const [brokerSym, spec] of Object.entries(j.specs || {}))
+        this.specs[back[brokerSym] || brokerSym] = spec;
       if (j.account) this.account = j.account;
       BUS.emit('feed');
     } catch(e){}

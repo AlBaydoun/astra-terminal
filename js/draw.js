@@ -19,7 +19,7 @@ const Draw = {
     const clr = document.getElementById('toolClear');
     if (clr) clr.addEventListener('click', () => { this.items = []; this.save(); this.redraw(); toast('All drawings removed', 'info'); });
     window.addEventListener('keydown', e => {
-      if (e.key === 'Escape'){ this.temp = null; this.stroke = null; this.setTool(null); this.redraw(); }
+      if (e.key === 'Escape'){ this.temp = null; this.stroke = null; this.measure = null; this.setTool(null); this.redraw(); }
     });
     /* freehand pencil: canvas captures the mouse while the tool is active */
     this.canvas.addEventListener('mousedown', e => {
@@ -109,6 +109,16 @@ const Draw = {
       this.setTool(null);
       return;
     }
+    /* measure: two clicks give price move, %, bars and elapsed time */
+    if (this.tool === 'measure'){
+      if (!this.temp) this.measure = null;
+      if (time == null){ toast('Click inside the chart area', 'warn'); return; }
+      if (!this.temp){ this.temp = { time, price }; this.redraw(); return; }
+      this.measure = { p1: this.temp, p2: { time, price } };
+      this.temp = null;
+      this.redraw();
+      return;
+    }
     if (this.tool === 'hline'){
       this.items.push({ type: 'hline', price });
       this.save(); this.redraw(); this.setTool(null);
@@ -131,7 +141,11 @@ const Draw = {
   },
 
   onMove(p){
-    if (this.temp && p && p.point){ this.cursor = { x: p.point.x, y: p.point.y }; this.redraw(); }
+    if (!p || !p.point) return;
+    if (this.temp || this.tool === 'measure'){
+      this.cursor = { x: p.point.x, y: p.point.y };
+      if (this.temp) this.redraw();
+    }
   },
 
   /* --- coordinate mapping (logical index based, so lines survive scrolling off-screen) --- */
@@ -165,12 +179,70 @@ const Draw = {
     if (!Chart.priceSeries) return;
     this.drawVP(ctx);
     for (const it of this.items) this.drawItem(ctx, it, false);
+    if (this.measure) this.drawMeasure(ctx, this.measure);
+    if (this.tool === 'measure' && this.temp && this.cursor)
+      this.drawMeasure(ctx, { p1: this.temp, _to: this.cursor });
     if (this.stroke && this.stroke.length > 1) this.drawPencil(ctx, this.stroke);
-    if (this.temp && this.cursor && this.tool && this.tool !== 'hline' && this.tool !== 'pencil' && this.tool !== 'text'){
+    if (this.temp && this.cursor && this.tool && this.tool !== 'hline' && this.tool !== 'pencil' && this.tool !== 'text' && this.tool !== 'measure'){
       const a = this.toXY(this.temp);
       if (a) this.drawItem(ctx, { type: this.tool, p1: this.temp,
         p2: { time: 0, price: 0 }, _previewTo: this.cursor }, true, a);
     }
+  },
+
+  /* the measuring box, as in TradingView: a shaded rectangle from A to B with
+     the price move, the percentage, the number of bars and the time between them */
+  drawMeasure(ctx, m){
+    const a = this.toXY(m.p1);
+    const b = m._to || this.toXY(m.p2);
+    if (!a || !b) return;
+    const p1 = m.p1.price;
+    const p2 = m._to ? Chart.priceSeries.coordinateToPrice(b.y) : m.p2.price;
+    const t1 = m.p1.time;
+    const t2 = m._to ? this.timeForX(b.x) : m.p2.time;
+    if (p2 == null) return;
+    const up = p2 >= p1;
+    const col = up ? 'rgba(46,189,133,' : 'rgba(246,70,93,';
+
+    ctx.save();
+    ctx.fillStyle = col + '0.13)';
+    ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    ctx.strokeStyle = col + '0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+
+    /* arrow along the move */
+    ctx.beginPath(); ctx.moveTo((a.x + b.x) / 2, a.y); ctx.lineTo((a.x + b.x) / 2, b.y); ctx.stroke();
+
+    const diff = p2 - p1;
+    const pct = p1 ? diff / p1 * 100 : 0;
+    let bars = '', dur = '';
+    if (t1 != null && t2 != null){
+      const raw = Chart.raw;
+      const step = raw.length > 1 ? raw[1].time - raw[0].time : 60;
+      bars = Math.abs(Math.round((t2 - t1) / step)) + ' bars';
+      const secs = Math.abs(t2 - t1);
+      dur = secs < 3600 ? Math.round(secs / 60) + 'm'
+          : secs < 86400 ? (secs / 3600).toFixed(1) + 'h'
+          : (secs / 86400).toFixed(1) + 'd';
+    }
+    const lines = [
+      (diff >= 0 ? '+' : '') + fmtPrice(diff) + '  (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)',
+      [bars, dur].filter(Boolean).join('  ·  '),
+    ].filter(Boolean);
+
+    ctx.font = '600 12px Rajdhani, sans-serif';
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16;
+    const h = lines.length * 16 + 8;
+    const bx = Math.min(Math.max((a.x + b.x) / 2 - w / 2, 2), this.cssW - w - 2);
+    const by = up ? Math.min(a.y, b.y) - h - 6 : Math.max(a.y, b.y) + 6;
+    ctx.fillStyle = col + '0.95)';
+    if (ctx.roundRect){ ctx.beginPath(); ctx.roundRect(bx, by, w, h, 5); ctx.fill(); }
+    else ctx.fillRect(bx, by, w, h);
+    ctx.fillStyle = '#04060d';
+    ctx.textAlign = 'center';
+    lines.forEach((l, i) => ctx.fillText(l, bx + w / 2, by + 17 + i * 16));
+    ctx.restore();
   },
 
   drawPencil(ctx, pts){

@@ -66,7 +66,24 @@ Object.assign(Bots, {
       <button class="bBtn" data-act="run">Run now</button>
       <button class="bBtn" data-act="bt">Backtest</button>
       <button class="bBtn danger" data-act="reset">Reset</button>
-    </div>`;
+    </div>` + this.instrumentBar(b, cfg);
+  },
+
+  /* one chip per instrument: click to allow or forbid, with its real record */
+  instrumentBar(b, cfg){
+    const uni = this.universe();
+    const stats = this.perInstrument(b.id);
+    const on = cfg.instruments && cfg.instruments.length ? cfg.instruments : null;
+    const chips = uni.slice(0, 14).map(sym => {
+      const enabled = !on || on.includes(sym);
+      const st = stats[sym];
+      const rec = st ? (st.net >= 0 ? '+' : '') + fmtNum(st.net) + ' · ' + st.n : 'no trades';
+      const cls = st ? (st.net > 0 ? ' good' : st.net < 0 ? ' bad' : '') : '';
+      return `<button class="insChip${enabled ? ' on' : ''}${cls}" data-ins="${esc(sym)}" title="${esc(rec)}">` +
+        `${esc(baseAsset(sym))}<i>${esc(rec)}</i></button>`;
+    }).join('');
+    return `<div class="insBar"><span class="insLbl">Trades:</span>${chips}` +
+      `<button class="bMini" data-insall="1">${on ? 'Allow all' : 'Only winners'}</button></div>`;
   },
 
   tfSel(cfg){
@@ -346,6 +363,30 @@ Object.assign(Bots, {
       if (a === 'harvest') this.harvest();
       if (a === 'brainreset'){ if (confirm('Make the Master Brain forget every example it has learned?')){ MasterBrain.reset(); this.render(); } }
     }));
+    host.querySelectorAll('[data-ins]').forEach(el => el.addEventListener('click', () => {
+      const cfg = this.cfg(b.id);
+      const uni = this.universe();
+      let list = (cfg.instruments && cfg.instruments.length) ? cfg.instruments.slice() : uni.slice();
+      const sym = el.dataset.ins;
+      list = list.includes(sym) ? list.filter(x => x !== sym) : list.concat([sym]);
+      cfg.instruments = list.length === uni.length ? null : list;
+      this.saveCfg(b.id);
+      this.render();
+    }));
+    const allBtn = host.querySelector('[data-insall]');
+    if (allBtn) allBtn.addEventListener('click', () => {
+      const cfg = this.cfg(b.id);
+      if (cfg.instruments && cfg.instruments.length) cfg.instruments = null;      // allow everything again
+      else {
+        const stats = this.perInstrument(b.id);
+        const winners = Object.entries(stats).filter(([, v]) => v.net > 0).map(([k]) => k);
+        if (!winners.length) return toast('No instrument has made money yet — nothing to narrow to', 'warn');
+        cfg.instruments = winners;
+        toast('Now trading only where it has actually earned: ' + winners.map(baseAsset).join(', '), 'ok');
+      }
+      this.saveCfg(b.id);
+      this.render();
+    });
     host.querySelectorAll('[data-open]').forEach(el =>
       el.addEventListener('click', () => App.setSymbol(el.dataset.open)));
     host.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => {

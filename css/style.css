@@ -1121,3 +1121,20 @@ select option {
 .stEye input { accent-color: #00b8cc; width: 13px; height: 13px; cursor: pointer; }
 .stTf { display: inline-flex; align-items: center; gap: 3px; color: var(--dim); font-family: var(--font-mono); font-size: 10px; }
 .stTf input { accent-color: #00b8cc; width: 12px; height: 12px; cursor: pointer; }
+/* ============ RESIZE GRIPS ============ */
+.paneGrip { position: absolute; top: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 9; }
+.paneGrip::after { content: ""; position: absolute; left: 50%; top: 2px; width: 40px; height: 2px; margin-left: -20px; border-radius: 2px; background: var(--border-soft); transition: background 0.12s; }
+.paneGrip:hover::after { background: var(--accent); }
+#bottomPanel { position: relative; }
+.bottomGrip { top: -3px; }
+body.resizing { cursor: ns-resize; user-select: none; }
+body.resizing iframe, body.resizing canvas { pointer-events: none; }
+/* ============ PER-INSTRUMENT ENABLEMENT ============ */
+.insBar { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: -4px 0 10px; }
+.insLbl { color: var(--dim); font-size: 10.5px; letter-spacing: 1px; margin-right: 2px; }
+.insChip { background: var(--field); border: 1px solid var(--border-soft); color: var(--dim); border-radius: 7px; padding: 3px 9px; cursor: pointer; font-family: var(--font-head); font-size: 11px; line-height: 1.25; text-align: left; opacity: 0.5; transition: all 0.12s; }
+.insChip i { display: block; font-style: normal; font-family: var(--font-mono); font-size: 8.5px; opacity: 0.8; }
+.insChip.on { opacity: 1; color: var(--text); border-color: rgba(0,229,255,0.35); background: rgba(0,229,255,0.07); }
+.insChip.on.good { border-color: rgba(46,189,133,0.55); color: var(--up); }
+.insChip.on.bad { border-color: rgba(246,70,93,0.5); color: var(--down); }
+.insChip:hover { opacity: 1; }

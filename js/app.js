@@ -154,6 +154,7 @@ const App = {
     await Chart.load();
     Screener.build();
     Multi.init();
+    Resize.init();
     Strip.init();
     Notes.init();
     Intel.init();
