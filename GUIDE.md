@@ -55,6 +55,18 @@ skips sync for that device.
   On Balance Volume, Momentum, Awesome Oscillator, DeMarker, Force Index, ATR,
   Standard Deviation and ADX + DI.
   Plus Volume Profile and candle-pattern markers at the bottom of the dialog.
+
+  **Reading the values (like MetaTrader's window title):** each window shows its indicators
+  with their settings and their current numbers — for example `RSI(14) 39.46   MACD(12,26,9)
+  -100.75 -131.55 -30.79` — in the line colours. Move the crosshair and the numbers follow the
+  bar under your mouse; move away and they snap back to the newest bar. Indicators placed on the
+  price chart get the same line just under the main legend.
+
+  **Mixing very different indicators in one window:** RSI runs 0–100 while MACD may sit at 0.18.
+  Put them in the same window and each keeps **its own scale**, so neither flattens the other —
+  the visible axis on the right belongs to the first one. Indicators that share a natural range
+  (RSI, Stochastic, Money Flow, Williams %R, ADX) deliberately share **one** axis instead, so
+  they stay directly comparable.
 - **Drawing:** pick a tool on the left, then click in the chart (trend line / Fibonacci = 2 clicks). Drawings are saved per coin.
 - **Alerts:** bell in the top bar, or the bell tool on the left (then click the chart). When the price crosses your level: sound + popup. Manage them in the ALERTS tab.
 - **Bar replay:** "Replay" button, then click a candle — the chart rewinds to that moment. Play, step bar by bar, change speed, and watch how the market unfolded. ✕ exits.

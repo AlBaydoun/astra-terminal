@@ -994,3 +994,22 @@ select option {
   font-style: normal; font-size: 9px; cursor: help;
 }
 .indNote:hover { color: var(--accent); border-color: rgba(0, 229, 255, 0.5); }
+
+/* ============ INDICATOR VALUE LEGENDS ============ */
+#indLegend {
+  position: absolute; top: 34px; left: 8px; z-index: 6; pointer-events: none;
+  display: flex; gap: 12px; flex-wrap: wrap; max-width: calc(100% - 90px);
+}
+#indLegend:empty { display: none; }
+.ilg { font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.ilg i { font-style: normal; opacity: 0.95; }
+.ilg b { font-weight: 500; }
+#indLegend .ilg {
+  background: rgba(6, 10, 22, 0.55); backdrop-filter: blur(6px);
+  padding: 2px 7px; border-radius: 5px;
+}
+[data-theme="light"] #indLegend .ilg { background: rgba(255, 255, 255, 0.7); }
+.paneTag {
+  display: flex; gap: 14px; flex-wrap: wrap; max-width: calc(100% - 70px);
+  line-height: 1.35;
+}

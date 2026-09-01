@@ -278,6 +278,7 @@ const Chart = {
       el.classList.add('open');
       const chart = this.makePane(el.querySelector('.paneChart'), false);
       chart.timeScale().subscribeVisibleLogicalRangeChange(r => this.syncFrom(key, r));
+      chart.subscribeCrosshairMove(p => this.renderIndLegends(p && p.time != null ? p.time : null));
       this.panes[key] = { el, chart };
     }
     /* name each window after what it holds */
@@ -289,10 +290,32 @@ const Chart = {
     }
   },
 
-  makeSeries(chart, spec, target, def){
+  /* Which price scale should this indicator use?
+     Indicators that share a natural range (RSI, Stochastic, MFI — all 0–100) sit on
+     ONE axis so they can be compared. Anything unbounded (MACD, ATR, OBV…) gets its
+     own hidden axis, so a 0–100 line and a 0.18 line can share a window without
+     one flattening the other. The first axis in a window is the visible one. */
+  scaleKey(def){
+    return def.range ? 'r' + def.range.join('_') : 'i' + def.id;
+  },
+  assignScales(){
+    const map = {};                       // target -> {scaleKey -> scaleId}
+    for (const def of INDS){
+      const cfg = this.settings[def.id];
+      if (!cfg || !cfg.on) continue;
+      const t = cfg.target || 'main';
+      if (t === 'main') continue;
+      const m = map[t] = map[t] || {};
+      const key = this.scaleKey(def);
+      if (!m[key]) m[key] = Object.keys(m).length === 0 ? 'right' : 'ov_' + key;
+    }
+    return map;
+  },
+
+  makeSeries(chart, spec, target, def, scaleOverride){
     const scaleId = spec.scale === 'vol' ? 'vol'
       : (target === 'main' && def.kind === 'osc') ? 'osc_' + def.id
-      : 'right';
+      : (scaleOverride || 'right');
     const priceFormat = spec.precision != null
       ? { type: 'price', precision: spec.precision, minMove: Math.pow(10, -spec.precision) }
       : (spec.scale === 'vol' ? { type: 'volume' } : undefined);
@@ -337,13 +360,16 @@ const Chart = {
     };
     this.ensurePanes();
 
+    const scales = this.assignScales();
     const alive = {};
+    this.specCache = {};
     for (const def of INDS){
       const cfg = this.settings[def.id];
       if (!cfg || !cfg.on) continue;
       const target = this.chartFor(cfg.target) ? cfg.target : 'main';
       const chart = this.chartFor(target);
       if (!chart) continue;
+      const scaleId = (scales[target] || {})[this.scaleKey(def)] || 'right';
       let specs;
       try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
       /* apply the look chosen in the dialog: colour per line, thickness, dash */
@@ -354,6 +380,7 @@ const Chart = {
         if (cfg.width) spec.width = cfg.width;
         if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
       }
+      this.specCache[def.id] = { def, cfg, specs };
       for (const spec of specs){
         const id = def.id + '|' + spec.key;
         /* an indicator with nothing to show (e.g. daily pivots on a one-day range)
@@ -361,14 +388,14 @@ const Chart = {
         if (!spec.data || !spec.data.length) continue;
         alive[id] = true;
         let entry = this.series[id];
-        if (entry && entry.target !== target){          /* moved to another window */
-          try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}
+        if (entry && (entry.target !== target || entry.scaleId !== scaleId)){
+          try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}   /* moved window or axis */
           entry = null;
         }
         const look = [spec.color, spec.width || 1, spec.lineStyle || 0, spec.dots ? 1 : 0].join('|');
         if (!entry){
           try {
-            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def), target, look };
+            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def, scaleId), target, look, scaleId };
             entry.s.setData(spec.data);
           } catch(e){ delete this.series[id]; }
           continue;
@@ -399,6 +426,63 @@ const Chart = {
       delete this.series[id];
     }
     this.updateTimeAxes();
+    this.renderIndLegends();
+  },
+
+  /* ---------- live value legends, MetaTrader style ----------
+     "RSI(14) 47.32   MACD(12,26,9) 0.18 0.18" above each window, and the
+     indicators sitting on the price chart listed under the main legend.
+     Values follow the crosshair, or show the newest bar when it is away. */
+  paramText(def, cfg){
+    const nums = (def.params || []).filter(p => p.kind === 'num').map(p => cfg[p.k]);
+    return nums.length ? '(' + nums.join(',') + ')' : '';
+  },
+
+  valueAt(data, time){
+    if (!data || !data.length) return null;
+    if (time == null) return data[data.length - 1].value;
+    let lo = 0, hi = data.length - 1;
+    if (time <= data[0].time) return data[0].value;
+    if (time >= data[hi].time) return data[hi].value;
+    while (hi - lo > 1){
+      const m = (hi + lo) >> 1;
+      if (data[m].time <= time) lo = m; else hi = m;
+    }
+    return data[lo].value;
+  },
+
+  fmtInd(x){
+    if (x == null || isNaN(x)) return '—';
+    const a = Math.abs(x);
+    if (a >= 1e6) return fmtNum(x);
+    if (a >= 100) return x.toFixed(2);
+    if (a >= 1) return x.toFixed(3);
+    return x.toFixed(5).replace(/0+$/, '').replace(/\.$/, '');
+  },
+
+  legendFor(target, time){
+    const out = [];
+    for (const def of INDS){
+      const c = this.specCache[def.id];
+      if (!c) continue;
+      if ((c.cfg.target || 'main') !== target) continue;
+      if (target === 'main' && def.id === 'vol') continue;   // volume already in the main legend
+      const vals = c.specs.map(sp =>
+        `<b style="color:${sp.color}">${esc(this.fmtInd(this.valueAt(sp.data, time)))}</b>`).join(' ');
+      out.push(`<span class="ilg"><i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
+        `${esc(def.label)}${esc(this.paramText(def, c.cfg))}</i> ${vals}</span>`);
+    }
+    return out.join('');
+  },
+
+  renderIndLegends(time){
+    if (!this.specCache) return;
+    for (const key of Object.keys(this.panes)){
+      const tag = this.panes[key].el.querySelector('.paneTag');
+      if (tag) tag.innerHTML = this.legendFor(key, time);
+    }
+    const el = document.getElementById('indLegend');
+    if (el) el.innerHTML = this.legendFor('main', time);
   },
 
   updateTimeAxes(){
@@ -580,6 +664,7 @@ const Chart = {
       else this.priceSeries.update({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close });
 
       this.renderIndicators(true);
+      this.renderIndLegends();
     } catch(e){ console.warn('tick update', e); }
   },
 
@@ -607,6 +692,7 @@ const Chart = {
   },
 
   onCross(p){
+    this.renderIndLegends(p && p.time != null ? p.time : null);
     if (!p || !p.time || !p.seriesData || !this.priceSeries){ this.updateLegend(null); return; }
     const sd = p.seriesData.get(this.priceSeries);
     if (sd && sd.open !== undefined){

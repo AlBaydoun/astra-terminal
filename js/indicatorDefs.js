@@ -151,7 +151,7 @@ const INDS = [
 
   /* ============================ IN A WINDOW ============================ */
   {
-    id: 'rsi', label: 'RSI', kind: 'osc', applyTo: true,
+    id: 'rsi', label: 'RSI', kind: 'osc', applyTo: true, range: [0, 100],
     def: { on: true, len: 14, src: 'close', target: 'p1' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#c084fc' }],
@@ -161,7 +161,7 @@ const INDS = [
     },
   },
   {
-    id: 'stoch', label: 'Stochastic', kind: 'osc',
+    id: 'stoch', label: 'Stochastic', kind: 'osc', range: [0, 100],
     def: { on: false, k: 14, smooth: 3, d: 3, target: 'p1' },
     params: [{ k: 'k', kind: 'num', min: 2, max: 100 }, { k: 'smooth', kind: 'num', min: 1, max: 50 }, { k: 'd', kind: 'num', min: 1, max: 50 }],
     parts: [{ key: 'k', label: '%K', color: '#00e5ff' }, { key: 'd', label: '%D', color: '#ffb03a' }],
@@ -199,7 +199,7 @@ const INDS = [
     },
   },
   {
-    id: 'wpr', label: 'Williams %R', kind: 'osc',
+    id: 'wpr', label: 'Williams %R', kind: 'osc', range: [-100, 0],
     def: { on: false, len: 14, target: 'p2' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#facc15' }],
@@ -209,7 +209,7 @@ const INDS = [
     },
   },
   {
-    id: 'mfi', label: 'Money Flow Index', kind: 'osc',
+    id: 'mfi', label: 'Money Flow Index', kind: 'osc', range: [0, 100],
     def: { on: false, len: 14, target: 'p2' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#34d399' }],
@@ -248,7 +248,7 @@ const INDS = [
     },
   },
   {
-    id: 'dem', label: 'DeMarker', kind: 'osc',
+    id: 'dem', label: 'DeMarker', kind: 'osc', range: [0, 1],
     def: { on: false, len: 14, target: 'p3' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#f0abfc' }],
@@ -279,7 +279,7 @@ const INDS = [
     build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.stdev(ctx.srcOf(c), c.len)) }]; },
   },
   {
-    id: 'adx', label: 'ADX + DI', kind: 'osc',
+    id: 'adx', label: 'ADX + DI', kind: 'osc', range: [0, 100],
     def: { on: false, len: 14, target: 'p3' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'a', label: 'ADX', color: '#7dd3fc' }, { key: 'p', label: '+DI', color: '#2ebd85' }, { key: 'm', label: '−DI', color: '#f6465d' }],
