@@ -257,7 +257,7 @@ Object.assign(Bots, {
       return `<div class="botRow">
         <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))}</b>
         <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}</span>
-        <span>${+p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
+        <span>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
         <span class="dim2">SL ${fmtPrice(p.sl)} · TP ${fmtPrice(p.tp)}${p.tp1Done ? ' · half banked, stop at breakeven' : ''}</span>
         <span class="${pctClass(u)}">${(u >= 0 ? '+' : '') + fmtNum(u)}</span>
         <span class="dim2">opened ${this.when(p.entryTime)}</span>

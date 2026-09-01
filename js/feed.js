@@ -159,6 +159,28 @@ const Feed = {
     return out;
   },
 
+  /* ---------- contract specifications from the broker ----------
+     Lot sizes are not a detail. A strategy that "risks 0.05%" is fiction if the
+     smallest trade your broker accepts risks 1.1%. These specs let the risk
+     engine size in REAL lots and refuse trades the account cannot carry. */
+  specs: {},
+  account: null,
+  async loadSpecs(symbols){
+    if (!this.bridge) return null;
+    const want = (symbols || []).filter(s => this.bridgeHas(s) && !this.specs[s]);
+    if (!want.length) return this.specs;
+    try {
+      const r = await fetch(this.BRIDGE_URL + '/specs?symbols=' + encodeURIComponent(want.join(',')));
+      if (!r.ok) return this.specs;
+      const j = await r.json();
+      Object.assign(this.specs, j.specs || {});
+      if (j.account) this.account = j.account;
+      BUS.emit('feed');
+    } catch(e){}
+    return this.specs;
+  },
+  specFor(sym){ return this.specs[sym] || null; },
+
   async search(q){
     if (!this.apiReady) return [];
     try {

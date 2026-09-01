@@ -346,6 +346,33 @@ class Handler(BaseHTTPRequestHandler):
                     "symbols": all_symbols(),
                 })
 
+            if u.path == "/specs":
+                # contract sizes and lot limits — what the broker will actually accept
+                names = [s for s in (q.get("symbols", [""])[0]).split(",") if s and SAFE.match(s)][:60]
+                out = {}
+                for s in names:
+                    if not ensure_selected(s):
+                        continue
+                    with _lock:
+                        i = mt5.symbol_info(s)
+                    if i is None:
+                        continue
+                    out[s] = {
+                        "volumeMin": i.volume_min, "volumeMax": i.volume_max, "volumeStep": i.volume_step,
+                        "contractSize": i.trade_contract_size,
+                        "tickSize": i.trade_tick_size, "tickValue": i.trade_tick_value,
+                        "digits": i.digits, "stopsLevel": i.trade_stops_level,
+                        "currency": i.currency_profit,
+                    }
+                acc = mt5.account_info()
+                return self._send({"specs": out,
+                                   "account": {"login": getattr(acc, "login", None),
+                                               "balance": getattr(acc, "balance", None),
+                                               "equity": getattr(acc, "equity", None),
+                                               "currency": getattr(acc, "currency", ""),
+                                               "leverage": getattr(acc, "leverage", None),
+                                               "server": getattr(acc, "server", "")}})
+
             if u.path == "/quotes":
                 names = [s for s in (q.get("symbols", [""])[0]).split(",") if s and SAFE.match(s)][:60]
                 out = []

@@ -105,6 +105,32 @@ const BotEngine = {
       return { ok: false, reason: 'Spread is ' + (spread / stopDist * 100).toFixed(0) + '% of the stop distance (limit ' + R.maxSpreadAtrPct + '%)' };
 
     const riskCash = ledger.equity * R.riskPct / 100;
+
+    /* ---- size in real lots when the broker's contract specs are known ----
+       Rounding down to the lot step and honouring the minimum is what makes a
+       paper result reproducible on the live account. If even the smallest
+       permitted trade risks more than allowed, the honest answer is to refuse
+       rather than pretend a fractional position was opened. */
+    const spec = (typeof Feed !== 'undefined' && Feed.specFor) ? Feed.specFor(sig.sym) : null;
+    if (spec && spec.tickSize > 0 && spec.tickValue > 0){
+      const riskPerLot = (stopDist / spec.tickSize) * spec.tickValue;
+      if (!(riskPerLot > 0)) return { ok: false, reason: 'Contract value could not be resolved for ' + baseAsset(sig.sym) };
+      const step = spec.volumeStep || 0.01;
+      const raw = riskCash / riskPerLot;
+      const lots = Math.floor(raw / step) * step;
+      const minLot = spec.volumeMin || step;
+      if (lots < minLot){
+        const minRisk = minLot * riskPerLot;
+        return { ok: false, reason:
+          'Smallest tradable size (' + minLot + ' lot) would risk ' + fmtNum(minRisk) +
+          ' = ' + (minRisk / ledger.equity * 100).toFixed(2) + '% of equity, above the ' +
+          R.riskPct + '% limit. Raise the risk limit, or trade an instrument with a smaller contract.' };
+      }
+      const capped = Math.min(lots, spec.volumeMax || lots);
+      return { ok: true, qty: capped * (spec.contractSize || 1), lots: capped,
+               riskCash: capped * riskPerLot, stopDist, spread, R, spec };
+    }
+
     const qty = riskCash / stopDist;
     if (!(qty > 0) || !isFinite(qty))
       return { ok: false, reason: 'Position size could not be calculated' };
@@ -126,7 +152,7 @@ const BotEngine = {
     const pos = {
       id: ledger.seq++,
       sym: sig.sym, tf: sig.tf, dir,
-      qty: gate.qty, entry: fill, entryTime: Date.now(),
+      qty: gate.qty, lots: gate.lots || null, entry: fill, entryTime: Date.now(),
       sl: sig.sl, tp: sig.tp, tp1: sig.tp1 || null, tp1Done: false, beMoved: false,
       score: sig.score, reasons: sig.reasons || [], model: sig.model || '',
       feeIn, fees: feeIn, slippage: Math.abs(fill - quote.price) * gate.qty,
@@ -140,7 +166,8 @@ const BotEngine = {
     this.note(ledger, 'entry',
       (dir > 0 ? 'BUY ' : 'SELL ') + baseAsset(sig.sym) + ' ' + sig.tf + ' @ ' + fmtPrice(fill) +
       ' · stop ' + fmtPrice(sig.sl) + ' · target ' + fmtPrice(sig.tp) +
-      ' · size ' + (+gate.qty.toPrecision(4)) + ' · risk ' + fmtNum(gate.riskCash),
+      ' · size ' + (gate.lots ? gate.lots + ' lot' : (+gate.qty.toPrecision(4))) +
+      ' · risk ' + fmtNum(gate.riskCash),
       { sym: sig.sym, tf: sig.tf, score: sig.score, reasons: sig.reasons });
     this.mark(ledger);
     return pos;
@@ -205,7 +232,7 @@ const BotEngine = {
 
     const rec = {
       id: pos.id, sym: pos.sym, tf: pos.tf, dir, model: pos.model,
-      qty: pos.qty, entry: pos.entry, exit: slipped,
+      qty: pos.qty, lots: pos.lots || null, entry: pos.entry, exit: slipped,
       entryTime: pos.entryTime, exitTime: Date.now(),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       sl: pos.sl, tp: pos.tp, fees: +fees.toFixed(4), slippage: +(pos.slippage || 0).toFixed(4),

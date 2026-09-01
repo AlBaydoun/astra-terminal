@@ -122,6 +122,8 @@ const Bots = {
 
   /* ---------- the periodic pass ---------- */
   async tick(){
+    /* contract sizes first — without them the risk engine cannot size in lots */
+    if (Feed.bridge) await Feed.loadSpecs(this.universe().slice(0, 40));
     /* keep open paper positions marked to market first */
     for (const b of BOTS){
       const L = this.ledgers[b.id];
