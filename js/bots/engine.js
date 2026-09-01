@@ -133,7 +133,7 @@ const BotEngine = {
       riskCash: gate.riskCash, stopDist: gate.stopDist,
       mfe: 0, mae: 0, note: sig.note || '',
       barsHeld: 0, timeLimitBars: cfg.timeLimitBars || R.timeLimitBars,
-      factors: sig.factors || {}, meta: sig.meta || {},
+      factors: sig.factors || {}, meta: sig.meta || {}, state: sig.state || null,
     };
     ledger.open.push(pos);
     ledger.equity -= feeIn;
@@ -212,7 +212,7 @@ const BotEngine = {
       pnl: +pnl.toFixed(4), r: pos.riskCash ? +(pnl / pos.riskCash).toFixed(2) : 0,
       mfe: +pos.mfe.toFixed(4), mae: +pos.mae.toFixed(4),
       reason, reasons: pos.reasons, score: pos.score, note: pos.note,
-      barsHeld: pos.barsHeld, factors: pos.factors, meta: pos.meta || {},
+      barsHeld: pos.barsHeld, factors: pos.factors, meta: pos.meta || {}, state: pos.state || null,
     };
     ledger.closed.unshift(rec);
 
@@ -226,8 +226,8 @@ const BotEngine = {
       try {
         MasterBrain.addSample(
           { sym: rec.sym, tf: rec.tf, dir, entry: pos.entry, sl: pos.sl, tp: pos.tp,
-            score: pos.score, model: pos.model, factors: pos.factors, meta: pos.meta },
-          cfg, { time: pos.entryTime },
+            score: pos.score, model: pos.model, factors: pos.factors, meta: pos.meta, state: pos.state },
+          cfg, { time: pos.entryTime, live: true, state: pos.state },
           { r: rec.r, t: pos.entryTime, src: 'paper' });
         MasterBrain.save();
       } catch(e){}

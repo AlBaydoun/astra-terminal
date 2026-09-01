@@ -127,7 +127,12 @@ Object.assign(Bots, {
         ${this.stat('VETOED', S.vetoed || 0)}
       </div>`;
 
-    if (!m) return head + counts +
+    const cov = (typeof MarketState !== 'undefined') ? MarketState.coverage(S.samples) : null;
+    const covRow = cov && cov.n ? `<div class="botNote">Context coverage — market regime on <b>${cov.state.toFixed(0)}%</b> of examples,
+      Fear &amp; Greed on <b>${cov.fng.toFixed(0)}%</b>, live news mood on <b>${cov.news.toFixed(0)}%</b>.
+      Regime and Fear &amp; Greed can be reconstructed for past trades, so backtests carry them; news has no archive, so only trades taken live carry it.</div>` : '';
+
+    if (!m) return head + counts + covRow +
       `<div class="botNote">It needs ${MasterBrain.MIN_TRAIN} finished trades before it may train. Press <b>Learn from history</b> to backtest several strategies across a set of instruments — that produces hundreds of labelled examples in one pass.</div>`;
 
     const of = m.overfit, ofWarn = of != null && of > 12, f = m.filtered;
@@ -143,7 +148,7 @@ Object.assign(Bots, {
       `<span class="dim2">${x.w > 0 ? 'raises' : 'lowers'} the estimated chance of a win</span></div>`).join('')
       || '<div class="empty">No weight has moved far from zero yet</div>';
 
-    return head + counts +
+    return head + counts + covRow +
       `<div class="botGrid">
         <div class="botCol">
           <div class="botH">HONEST SCORE — ON DATA IT NEVER SAW</div>

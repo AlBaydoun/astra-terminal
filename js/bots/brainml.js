@@ -34,10 +34,16 @@ const MasterBrain = {
      Everything is scaled into roughly -1..1 so no single input dominates the
      gradient. Adding a feature here is all it takes for the brain to use it. */
   FEATURES: [
+    /* --- the signal itself --- */
     'score', 'long', 'adx', 'rsiDev', 'atrPct', 'volRatio', 'spread',
     'fTrend', 'fPullback', 'fBreakout', 'fMomentum', 'fDirection', 'fVolume', 'fVolatility',
     'stopPct', 'rr', 'hourSin', 'hourCos', 'tfIdx', 'isCrypto',
     'sCandle', 'sEngulf', 'sJdub', 'sRigor', 'sMaMacd', 'sScanner',
+    /* --- what kind of market it was (reconstructable for any past bar) --- */
+    'atrPctile', 'regimeSlope', 'htf', 'rangePos', 'distVwap',
+    'sessAsia', 'sessLondon', 'sessNY', 'sessOverlap', 'dow',
+    /* --- how the world felt (Fear & Greed has a real archive; news does not) --- */
+    'fng', 'fngAvail', 'newsMood', 'riskLvl', 'ctxAvail',
   ],
 
   featurize(sig, cfg, ctx){
@@ -51,6 +57,11 @@ const MasterBrain = {
     const tfIdx = Math.max(0, BotEngine.TFS.indexOf(sig.tf || cfg.tf || '15m'));
     const model = (sig.model || '').toLowerCase();
     const has = k => Object.keys(f).some(x => x.toLowerCase().includes(k));
+    /* regime captured at the moment of the signal, and the day's sentiment */
+    const S = sig.state || ctx.state || {};
+    const C = (typeof MarketState !== 'undefined')
+      ? MarketState.context(ctx.time || Date.now(), !!ctx.live)
+      : { fng: 0.5, fngAvail: 0, newsMood: 0, riskLvl: 0, ctxAvail: 0 };
 
     return {
       score: Math.max(0, Math.min(1, (sig.score || 0) / 100)),
@@ -79,6 +90,20 @@ const MasterBrain = {
       sRigor: /rigor/.test(model) ? 1 : 0,
       sMaMacd: /ribbon|macd/.test(model) ? 1 : 0,
       sScanner: /regime/.test(model) ? 1 : 0,
+
+      atrPctile: S.atrPctile != null ? S.atrPctile : 0,
+      regimeSlope: S.slope != null ? S.slope / 3 : 0,
+      htf: S.htf != null ? S.htf : 0,
+      rangePos: S.rangePos != null ? S.rangePos : 0.5,
+      distVwap: S.distVwap != null ? S.distVwap / 3 : 0,
+      sessAsia: S.asia || 0,
+      sessLondon: S.london || 0,
+      sessNY: S.ny || 0,
+      sessOverlap: S.overlap || 0,
+      dow: S.dow != null ? S.dow : 0,
+
+      fng: C.fng, fngAvail: C.fngAvail,
+      newsMood: C.newsMood, riskLvl: C.riskLvl, ctxAvail: C.ctxAvail,
     };
   },
 
@@ -92,7 +117,29 @@ const MasterBrain = {
       approved: 0, vetoed: 0, log: [],
     };
   },
-  load(){ this.state = Object.assign(this.blank(), lsGet('astra_brainml', {})); return this.state; },
+  load(){
+    this.state = Object.assign(this.blank(), lsGet('astra_brainml', {}));
+    const n = this.FEATURES.length;
+    /* When new features are added the old vectors are the wrong length. Mixing
+       them would train nonsense, so short ones are padded with neutral zeros and
+       any stale weights are discarded — the brain retrains from scratch. */
+    let migrated = 0;
+    for (const s of this.state.samples){
+      if (!s.x || s.x.length === n) continue;
+      if (s.x.length < n){ while (s.x.length < n) s.x.push(0); migrated++; }
+      else { s.x = s.x.slice(0, n); migrated++; }
+    }
+    if (this.state.w.length !== n || migrated){
+      this.state.w = new Array(n).fill(0);
+      this.state.b = 0;
+      this.state.metrics = null;
+      this.state.trained = 0;
+      if (migrated) this.state.log.unshift({ t: Date.now(),
+        text: 'The brain gained new senses (market regime and sentiment), so ' + migrated +
+              ' older examples were carried over as neutral and the model was reset for retraining.' });
+    }
+    return this.state;
+  },
   save(){
     const s = this.state;
     if (s.samples.length > this.MAX_SAMPLES) s.samples.splice(0, s.samples.length - this.MAX_SAMPLES);
@@ -119,7 +166,7 @@ const MasterBrain = {
     for (const t of result.closed){
       const sig = {
         sym: t.sym, tf: t.tf, dir: t.dir, entry: t.entry, sl: t.sl, tp: t.tp,
-        score: t.score, model: t.model, factors: t.factors || {}, meta: t.meta || {},
+        score: t.score, model: t.model, factors: t.factors || {}, meta: t.meta || {}, state: t.state || null,
       };
       this.state.samples.push({
         x: this.vec(this.featurize(sig, botDef ? botDef.defaults : {}, { time: t.entryTime })),

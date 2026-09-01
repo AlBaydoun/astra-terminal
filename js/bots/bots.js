@@ -239,6 +239,7 @@ const Bots = {
       }
 
       sig.sym = sym; sig.tf = tf;
+      sig.state = MarketState.of(candles, candles.length - 2);
       const q = this.quoteFor(sym);
       const gate = BotEngine.check(L, cfg, sig, q);
       if (!gate.ok){
@@ -246,7 +247,7 @@ const Bots = {
         continue;
       }
       /* the Master Brain has the last word — it may veto or shrink, never enlarge */
-      const brain = MasterBrain.approve(sig, cfg, { time: Date.now(), spreadPct: q && q.price ? q.spread / q.price * 100 : 0.02 });
+      const brain = MasterBrain.approve(sig, cfg, { time: Date.now(), live: true, state: sig.state, spreadPct: q && q.price ? q.spread / q.price * 100 : 0.02 });
       if (!brain.take){
         BotEngine.note(L, 'brain', baseAsset(sym) + ' ' + tf + ' vetoed by the Master Brain — ' + brain.why,
           { sym, tf, score: sig.score });

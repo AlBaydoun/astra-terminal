@@ -47,6 +47,7 @@ const Backtest = {
         sig = botDef.signal(window, cfg, ledger, higher ? higher.filter(h => h.rawTime <= bar.rawTime) : null);
       } catch(e){ continue; }
       if (!sig) continue;
+      if (sig.dir) sig.state = MarketState.of(window, window.length - 2);
 
       if (sig.closeLongs){
         for (const pos of ledger.open.filter(p => p.dir > 0)) BotEngine.close(ledger, cfg, pos, bar.close, 'opposite signal');
