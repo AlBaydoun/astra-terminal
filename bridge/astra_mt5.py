@@ -34,6 +34,14 @@ except ImportError:
         "Open a command window and run:  pip install MetaTrader5\n"
     )
 
+# The Windows console defaults to a legacy codepage, which turns dashes and
+# arrows into question marks. Ask for UTF-8 so the messages read properly.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 PORT = 8644
 TF = {
     "1m": mt5.TIMEFRAME_M1,

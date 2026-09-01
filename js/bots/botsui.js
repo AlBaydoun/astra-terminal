@@ -181,7 +181,12 @@ Object.assign(Bots, {
 
   /* backtest a spread of strategies and instruments, then retrain on the result */
   async harvest(){
-    const syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+    /* study what you actually trade. When the MT5 bridge is connected these are
+       your own instruments at your own spreads; crypto is only the fallback. */
+    const syms = Feed.bridge
+      ? BotEngine.PRIORITY.filter(s => Feed.bridgeHas(s))
+      : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+    if (!syms.length) syms.push('BTCUSDT', 'ETHUSDT', 'SOLUSDT');
     const bots = ['candle', 'bullEng', 'bearEng', 'rigor', 'maMacd'];
     let total = 0;
     toast('Backtesting ' + bots.length + ' strategies across ' + syms.length + ' instruments…', 'info');

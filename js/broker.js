@@ -75,10 +75,12 @@ const BROKER = {
   account: lsGet('astra_account', 'pro'),      // 'pro' | 'standard'
   COSTS: {
     /* typical raw spread as a % of price, and commission per side as % of notional */
+    /* measured from the live account on 2026-08-31 with the bridge connected:
+       XAUUSD.m 0.0060%, US100.std 0.0093%, BRENT.m 0.0212%, WTI.m 0.0335% */
     pro: {
-      metal:  { spreadPct: 0.012, commissionPct: 0.0030 },
-      energy: { spreadPct: 0.030, commissionPct: 0.0030 },
-      index:  { spreadPct: 0.010, commissionPct: 0.0000 },
+      metal:  { spreadPct: 0.006, commissionPct: 0.0030 },
+      energy: { spreadPct: 0.028, commissionPct: 0.0030 },
+      index:  { spreadPct: 0.009, commissionPct: 0.0000 },
       fx:     { spreadPct: 0.002, commissionPct: 0.0030 },
       crypto: { spreadPct: 0.050, commissionPct: 0.0000 },
       other:  { spreadPct: 0.020, commissionPct: 0.0020 },
