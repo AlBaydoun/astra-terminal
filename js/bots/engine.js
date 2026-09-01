@@ -133,7 +133,7 @@ const BotEngine = {
       riskCash: gate.riskCash, stopDist: gate.stopDist,
       mfe: 0, mae: 0, note: sig.note || '',
       barsHeld: 0, timeLimitBars: cfg.timeLimitBars || R.timeLimitBars,
-      factors: sig.factors || {},
+      factors: sig.factors || {}, meta: sig.meta || {},
     };
     ledger.open.push(pos);
     ledger.equity -= feeIn;
@@ -212,7 +212,7 @@ const BotEngine = {
       pnl: +pnl.toFixed(4), r: pos.riskCash ? +(pnl / pos.riskCash).toFixed(2) : 0,
       mfe: +pos.mfe.toFixed(4), mae: +pos.mae.toFixed(4),
       reason, reasons: pos.reasons, score: pos.score, note: pos.note,
-      barsHeld: pos.barsHeld, factors: pos.factors,
+      barsHeld: pos.barsHeld, factors: pos.factors, meta: pos.meta || {},
     };
     ledger.closed.unshift(rec);
 
@@ -222,6 +222,16 @@ const BotEngine = {
     pnl >= 0 ? d.wins++ : d.losses++;
 
     this.learn(ledger, rec);
+    if (typeof MasterBrain !== 'undefined' && !cfg.noLearn){
+      try {
+        MasterBrain.addSample(
+          { sym: rec.sym, tf: rec.tf, dir, entry: pos.entry, sl: pos.sl, tp: pos.tp,
+            score: pos.score, model: pos.model, factors: pos.factors, meta: pos.meta },
+          cfg, { time: pos.entryTime },
+          { r: rec.r, t: pos.entryTime, src: 'paper' });
+        MasterBrain.save();
+      } catch(e){}
+    }
     this.note(ledger, pnl >= 0 ? 'win' : 'loss',
       'Closed ' + baseAsset(pos.sym) + ' ' + (dir > 0 ? 'long' : 'short') + ' at ' + fmtPrice(slipped) +
       ' — ' + reason + ' · ' + (pnl >= 0 ? '+' : '') + fmtNum(pnl) + ' (' + rec.r + 'R) after ' + fmtNum(fees) + ' costs',

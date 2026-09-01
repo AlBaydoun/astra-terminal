@@ -14,7 +14,7 @@ const Backtest = {
     opts = opts || {};
     const sym = opts.sym || STORE.symbol;
     const tf = opts.tf || botDef.defaults.tf;
-    const cfg = Object.assign({}, botDef.defaults, opts.cfg || {}, { sym });
+    const cfg = Object.assign({}, botDef.defaults, opts.cfg || {}, { sym, noLearn: true });
 
     let candles;
     try { candles = await API.klines(sym, tf, opts.limit || 1000); }

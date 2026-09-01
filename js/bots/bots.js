@@ -4,6 +4,12 @@
    broker anywhere in this application. */
 const BOTS = [
   {
+    id: 'brain', name: '★ Master Brain', brain: true,
+    blurb: 'Learns from every finished trade and every backtest, then decides which signals are worth taking. It can veto or shrink a trade — never create one.',
+    defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 0 },
+    warmup: 0, signal: () => null,
+  },
+  {
     id: 'scanner', name: 'Market Scanner', scan: true,
     blurb: 'Ranks the whole broker universe with the Regime-Aligned Pullback engine. It never opens a trade.',
     defaults: { tf: '15m', tfAuto: false, minScore: 92, maxOpen: 0, threshold: 0.92 },
@@ -64,7 +70,7 @@ const BOT_BY_ID = {};
 for (const b of BOTS) BOT_BY_ID[b.id] = b;
 
 const Bots = {
-  active: 'scanner',
+  active: 'brain',
   ledgers: {},
   cfgs: {},
   scan: { rows: [], at: 0, busy: false, universe: 0 },
@@ -128,7 +134,7 @@ const Bots = {
     if (this.scanShouldRun()) this.runScan();
 
     for (const b of BOTS){
-      if (b.scan || b.manual) continue;
+      if (b.scan || b.manual || b.brain) continue;
       const cfg = this.cfg(b.id);
       if (cfg.paused) continue;
       await this.runBot(b, false);
@@ -239,6 +245,15 @@ const Bots = {
         BotEngine.note(L, 'reject', baseAsset(sym) + ' ' + tf + ' rejected — ' + gate.reason, { sym, tf, score: sig.score });
         continue;
       }
+      /* the Master Brain has the last word — it may veto or shrink, never enlarge */
+      const brain = MasterBrain.approve(sig, cfg, { time: Date.now(), spreadPct: q && q.price ? q.spread / q.price * 100 : 0.02 });
+      if (!brain.take){
+        BotEngine.note(L, 'brain', baseAsset(sym) + ' ' + tf + ' vetoed by the Master Brain — ' + brain.why,
+          { sym, tf, score: sig.score });
+        continue;
+      }
+      if (brain.gated && brain.sizeMult < 1) gate.qty *= brain.sizeMult;
+      sig.reasons = (sig.reasons || []).concat([brain.why]);
       BotEngine.open(L, cfg, sig, q, gate);
       if (b.sessionGuard && sig.session){ L.guards = L.guards || {}; L.guards[sym + '|' + sig.session] = true; }
       acted = true;
@@ -308,6 +323,8 @@ const Bots = {
     if (host) host.innerHTML = '<div class="empty">Running the strategy over history…</div>';
     const r = await Backtest.run(b, { sym: cfg.btSym || STORE.symbol, tf: cfg.tf, cfg });
     this.bt[id] = r;
+    const learned = MasterBrain.ingestBacktest(r, b);
+    if (learned) toast('Master Brain learned from ' + learned + ' backtested trades', 'ok');
     this.render();
     if (r.error) toast('Backtest: ' + r.error, 'warn');
   },

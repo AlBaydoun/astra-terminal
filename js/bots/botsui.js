@@ -29,12 +29,21 @@ Object.assign(Bots, {
          <span class="paperTag" title="No part of this application can send an order to a broker">PAPER ONLY</span>
        </div>` +
       this.controls(b, cfg) +
-      (b.scan ? this.scannerView() : b.manual ? this.manualView(L, st) : this.botView(b, L, st));
+      (b.brain ? this.brainView() : b.scan ? this.scannerView() : b.manual ? this.manualView(L, st) : this.botView(b, L, st));
 
     this.bind(b);
   },
 
   controls(b, cfg){
+    if (b.brain){
+      const S = MasterBrain.state || MasterBrain.load();
+      return `<div class="botCtl">
+        <button class="bBtn" data-act="train">Train now</button>
+        <button class="bBtn" data-act="harvest">Learn from history</button>
+        <button class="bBtn danger" data-act="brainreset">Forget everything</button>
+        <span class="bcNote">${S.samples.length} examples · last trained ${S.trainedAt ? this.when(S.trainedAt) : 'never'}</span>
+      </div>`;
+    }
     if (b.scan)
       return `<div class="botCtl">
         ${this.tfSel(cfg)}
@@ -98,6 +107,90 @@ Object.assign(Bots, {
         ${idle.slice(0, 60).map(row).join('')}
       </tbody></table>
       <div class="botNote">The scanner ranks and explains. It never opens a trade.</div></div>`;
+  },
+
+  /* ---------------- Master Brain ---------------- */
+  brainView(){
+    const S = MasterBrain.state || MasterBrain.load();
+    const st = MasterBrain.status();
+    const m = S.metrics;
+    const paper = S.samples.filter(x => x.src === 'paper').length;
+    const back = S.samples.length - paper;
+
+    const head = `<div class="brainState ${st.cls}"><div class="bsTop"><b>${esc(st.label)}</b><span>${esc(st.text)}</span></div></div>`;
+    const counts = `<div class="botStats">
+        ${this.stat('EXAMPLES', S.samples.length)}
+        ${this.stat('FROM PAPER', paper)}
+        ${this.stat('FROM BACKTESTS', back)}
+        ${this.stat('TRAINED ON', S.trained || 0)}
+        ${this.stat('APPROVED', S.approved || 0)}
+        ${this.stat('VETOED', S.vetoed || 0)}
+      </div>`;
+
+    if (!m) return head + counts +
+      `<div class="botNote">It needs ${MasterBrain.MIN_TRAIN} finished trades before it may train. Press <b>Learn from history</b> to backtest several strategies across a set of instruments — that produces hundreds of labelled examples in one pass.</div>`;
+
+    const of = m.overfit, ofWarn = of != null && of > 12, f = m.filtered;
+    const calib = (m.calib || []).map(c =>
+      `<div class="botRow"><b>${Math.round(c.lo * 100)}–${Math.round(c.hi * 100)}% predicted</b>` +
+      `<span>${c.n} trades</span>` +
+      `<span class="${c.actual != null && c.actual >= c.lo * 100 ? 'up' : 'down'}">actually won ${c.actual == null ? '—' : c.actual.toFixed(0) + '%'}</span></div>`).join('')
+      || '<div class="empty">Not enough validation trades to check calibration</div>';
+
+    const weights = MasterBrain.topWeights(12).map(x =>
+      `<div class="botRow"><b>${esc(x.f)}</b>` +
+      `<span class="${x.w > 0 ? 'up' : 'down'}">${x.w > 0 ? '+' : ''}${x.w.toFixed(3)}</span>` +
+      `<span class="dim2">${x.w > 0 ? 'raises' : 'lowers'} the estimated chance of a win</span></div>`).join('')
+      || '<div class="empty">No weight has moved far from zero yet</div>';
+
+    return head + counts +
+      `<div class="botGrid">
+        <div class="botCol">
+          <div class="botH">HONEST SCORE — ON DATA IT NEVER SAW</div>
+          <div class="botRow"><b>Out-of-sample accuracy</b>
+            <span class="${m.edge > 1 ? 'up' : 'down'}">${m.val ? m.val.acc.toFixed(1) + '%' : '—'} on ${m.val ? m.val.n : 0} trades</span>
+            <span class="dim2">against ${m.baseline.toFixed(1)}% for always guessing the majority — edge ${m.edge > 0 ? '+' : ''}${m.edge}</span></div>
+          <div class="botRow"><b>In-sample accuracy</b>
+            <span>${m.train ? m.train.acc.toFixed(1) + '%' : '—'}</span>
+            <span class="${ofWarn ? 'down' : 'dim2'}">${of == null ? '' : 'gap of ' + of + ' points' + (ofWarn ? ' — it is memorising, not generalising' : ' — acceptable')}</span></div>
+          <div class="botRow"><b>Log loss</b><span>${m.val ? m.val.logLoss.toFixed(4) : '—'}</span>
+            <span class="dim2">0.693 is a coin toss — lower is better</span></div>
+          <div class="botH">EFFECT OF THE FILTER</div>
+          <div class="botRow"><b>Every signal</b><span class="${pctClass(f.avgRAll)}">${f.avgRAll}R average</span>
+            <span class="dim2">${m.val ? m.val.n : 0} unseen trades</span></div>
+          <div class="botRow"><b>Only what it approves</b><span class="${pctClass(f.avgR)}">${f.avgR}R average</span>
+            <span class="dim2">${f.taken} of ${f.of} taken</span></div>
+          <div class="botNote${f.avgR > f.avgRAll ? '' : ' warn'}">${f.avgR > f.avgRAll
+            ? 'On unseen data the filter improved the average result. Encouraging — not proof.'
+            : 'On unseen data the filter did not improve the result. This is exactly why it abstains instead of trading.'}</div>
+        </div>
+        <div class="botCol"><div class="botH">IS IT CALIBRATED?</div>${calib}
+          <div class="botNote">If it says 60% and roughly 60% actually win, the number means something. If not, the number is noise.</div></div>
+        <div class="botCol"><div class="botH">WHAT IT HAS LEARNED TO WEIGH</div>${weights}
+          <div class="botNote">The model is linear, so these weights are the entire explanation — nothing is hidden.</div></div>
+        <div class="botCol"><div class="botH">LEARNING LOG</div>
+          ${(S.log || []).slice(0, 12).map(l => `<div class="botLog"><span class="dim2">${new Date(l.t).toLocaleString()}</span> ${esc(l.text)}</div>`).join('') || '<div class="empty">Nothing yet</div>'}</div>
+      </div>
+      <div class="botNote warn">A statistical model fitted to past trades — not a forecaster. It may only refuse or shrink a trade, never invent one, and everything it touches is play money.</div>`;
+  },
+
+  /* backtest a spread of strategies and instruments, then retrain on the result */
+  async harvest(){
+    const syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'];
+    const bots = ['candle', 'bullEng', 'bearEng', 'rigor', 'maMacd'];
+    let total = 0;
+    toast('Backtesting ' + bots.length + ' strategies across ' + syms.length + ' instruments…', 'info');
+    for (const bid of bots){
+      for (const sym of syms){
+        const b = BOT_BY_ID[bid];
+        const r = await Backtest.run(b, { sym, tf: b.defaults.tf });
+        total += MasterBrain.ingestBacktest(r, b);
+      }
+    }
+    const res = MasterBrain.train();
+    toast(res.ok ? 'Learned from ' + total + ' trades and retrained' : 'Collected ' + total + ' trades — ' + res.reason,
+      res.ok ? 'ok' : 'warn');
+    this.render();
   },
 
   /* ---------------- Manual bot ---------------- */
@@ -239,6 +332,9 @@ Object.assign(Bots, {
       if (a === 'bt') this.backtest(b.id);
       if (a === 'reset') this.resetBot(b.id);
       if (a === 'mopen') this.manualOpen();
+      if (a === 'train'){ const r = MasterBrain.train(); toast(r.ok ? 'Retrained on every example it holds' : r.reason, r.ok ? 'ok' : 'warn'); this.render(); }
+      if (a === 'harvest') this.harvest();
+      if (a === 'brainreset'){ if (confirm('Make the Master Brain forget every example it has learned?')){ MasterBrain.reset(); this.render(); } }
     }));
     host.querySelectorAll('[data-open]').forEach(el =>
       el.addEventListener('click', () => App.setSymbol(el.dataset.open)));
