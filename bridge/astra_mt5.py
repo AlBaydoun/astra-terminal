@@ -17,7 +17,9 @@ Endpoints (localhost only):
     /positions                    open positions (read-only, for later steps)
 """
 import json
+import os
 import re
+import sys
 import time
 import threading
 from datetime import datetime, timedelta, timezone
@@ -49,14 +51,135 @@ _lock = threading.Lock()
 _symbols_cache = {"t": 0.0, "list": []}
 
 
+CONFIG = os.path.join(os.path.expanduser("~"), "astra-data", "mt5-path.txt")
+
+
+def candidate_terminals():
+    """Where a broker-branded MetaTrader 5 might live.
+
+    JustMarkets (and every other broker) ships the same MetaQuotes terminal under
+    its own name, in its own folder. The Python package's automatic search looks
+    for a standard MetaTrader 5 install, so on a broker build it often finds
+    nothing — or worse, finds a different terminal you also have installed.
+    So we look properly, and we say what we found."""
+    seen, out = set(), []
+
+    def add(p):
+        if p and p not in seen and os.path.isfile(p):
+            seen.add(p)
+            out.append(p)
+
+    # 1. an explicit choice always wins
+    add(os.environ.get("ASTRA_MT5_PATH"))
+    try:
+        with open(CONFIG, "r", encoding="utf-8") as fh:
+            add(fh.read().strip())
+    except OSError:
+        pass
+
+    # 2. every Program Files folder that mentions a terminal
+    roots = [os.environ.get("ProgramFiles", r"C:\Program Files"),
+             os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+             os.path.join(os.path.expanduser("~"), "AppData", "Local", "Programs")]
+    for root in roots:
+        if not root or not os.path.isdir(root):
+            continue
+        try:
+            entries = os.listdir(root)
+        except OSError:
+            continue
+        # brokers first, so a branded build beats a plain MetaTrader install
+        entries.sort(key=lambda d: (0 if "just" in d.lower() else
+                                    1 if "mt5" in d.lower() or "meta" in d.lower() else 2))
+        for d in entries:
+            low = d.lower()
+            if "meta" in low or "mt5" in low or "trader" in low or "just" in low:
+                add(os.path.join(root, d, "terminal64.exe"))
+                add(os.path.join(root, d, "terminal.exe"))
+
+    # 3. portable installs registered under MetaQuotes
+    base = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "MetaQuotes", "Terminal")
+    if os.path.isdir(base):
+        try:
+            for d in os.listdir(base):
+                add(os.path.join(base, d, "terminal64.exe"))
+        except OSError:
+            pass
+    return out
+
+
 def connect():
-    """Attach to the running MetaTrader 5 terminal."""
-    if not mt5.initialize():
-        raise RuntimeError("cannot reach MetaTrader 5 — is it open and logged in? (%s)" % (mt5.last_error(),))
-    info = mt5.account_info()
+    """Attach to the running MetaTrader 5 terminal, wherever the broker put it.
+
+    Order matters here. If more than one terminal is installed — very common, a
+    broker build beside a plain MetaTrader 5 — the package's automatic search can
+    silently attach to the WRONG one and report success. That failure is invisible:
+    prices would arrive from another broker's terminal. So explicit, broker-first
+    paths are tried before falling back to the automatic search."""
+    tried = []
+    candidates = candidate_terminals()
+
+    if len(candidates) > 1:
+        print("more than one MetaTrader terminal is installed — trying the broker build first:")
+        for c in candidates:
+            print("   ", c)
+
+    for path in candidates:
+        if mt5.initialize(path=path):
+            try:
+                os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+                with open(CONFIG, "w", encoding="utf-8") as fh:
+                    fh.write(path)          # remember it for next time
+            except OSError:
+                pass
+            return report(path)
+        tried.append((path, mt5.last_error()))
+
+    # nothing explicit worked — let the package look for itself
+    if mt5.initialize():
+        return report(None)
+    tried.append(("automatic search", mt5.last_error()))
+
+    print("\n  Could not attach to MetaTrader 5. Here is exactly what was tried:\n")
+    for where, err in tried:
+        print("    x %s\n        -> %s" % (where, err))
+    print("""
+  Two things are needed:
+    1. The JustMarkets MT5 terminal must be OPEN and LOGGED IN.
+    2. This bridge must be pointed at that terminal.
+
+  If your terminal is not in the list above, find terminal64.exe inside its
+  installation folder (in MT5: File -> Open Data Folder shows you where it lives),
+  then start the bridge with the path, once:
+
+      python astra_mt5.py --path "C:\\Program Files\\JustMarkets MT5 Terminal\\terminal64.exe"
+
+  The path is remembered afterwards, so a plain double-click works from then on.
+""")
+    raise SystemExit(1)
+
+
+def report(path):
     term = mt5.terminal_info()
-    print("connected:", getattr(info, "server", "?"), "account", getattr(info, "login", "?"),
-          "| terminal", getattr(term, "name", "?"))
+    info = mt5.account_info()
+    print("connected to:", getattr(term, "name", "?"), "|", getattr(term, "company", "?"))
+    if path:
+        print("terminal:", path)
+    if info is None:
+        print("\n  The terminal is open, but no account is logged in.\n"
+              "  Log in to your JustMarkets account in MetaTrader 5, then restart this bridge.\n")
+        raise SystemExit(1)
+    print("account:", info.login, "on", info.server, "|", info.currency, info.balance)
+
+    # a wrong-terminal connection is the one failure that looks like success
+    who = (str(getattr(info, "server", "")) + " " + str(getattr(term, "company", ""))).lower()
+    if "just" not in who:
+        print("\n  WARNING — this does not look like a JustMarkets account.\n"
+              "  Server: %s   Company: %s\n"
+              "  You may have more than one MetaTrader terminal installed and this is the\n"
+              "  wrong one. Point the bridge at the right terminal once:\n"
+              "      python astra_mt5.py --path \"C:\\\\Program Files\\\\JustMarkets MetaTrader 5\\\\terminal64.exe\"\n"
+              % (getattr(info, "server", "?"), getattr(term, "company", "?")))
     return info
 
 
@@ -250,6 +373,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    # let the operator point at the terminal explicitly, once
+    if "--path" in sys.argv:
+        try:
+            chosen = sys.argv[sys.argv.index("--path") + 1]
+            os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+            with open(CONFIG, "w", encoding="utf-8") as fh:
+                fh.write(chosen)
+            print("terminal path saved:", chosen)
+        except (IndexError, OSError) as e:
+            print("could not save the path:", e)
     connect()
     names = all_symbols()
     print("%d symbols available. Bridge listening on http://127.0.0.1:%d" % (len(names), PORT))

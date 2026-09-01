@@ -164,6 +164,17 @@ there is no order path: it can look, never touch.
 **Then, each time you want live broker data:**
 
 1. Double-click **`START-MT5-Bridge.bat`** and leave that small window open.
+
+**A note that matters on your PC:** you have two MetaTrader terminals installed —
+`JustMarkets MetaTrader 5` and a plain `MetaTrader 5`. The bridge deliberately tries the
+**broker build first** and prints which one it attached to, plus the account number and
+server. If it ever connects to the wrong one it says so in capital letters rather than
+pretending to work — that is the one failure that would otherwise look like success.
+If you ever need to force it:
+
+    python astra_mt5.py --path "C:\Program Files\JustMarkets MetaTrader 5	erminal64.exe"
+
+The choice is remembered, so afterwards a plain double-click is enough.
 2. Within a few seconds the **FEED** light in ASTRA's bottom bar turns green and reads
    `MT5 · <your server>`. Every price badge flips to **LIVE**.
 
