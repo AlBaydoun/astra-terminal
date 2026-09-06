@@ -3,7 +3,11 @@
    account, the Observer's brain and fund…) is mirrored to the terminal's own
    private backend, gated by the account credentials. Last write wins. */
 const Sync = {
-  API: 'https://astra-terminal.higgsfield.app/api/sync',
+  /* The terminal's own server, same origin. This used to point at a hosted
+     endpoint that no longer exists, so every push failed CORS and filled the
+     console with errors while silently syncing nothing. Relative keeps it
+     working locally and on whatever host it is served from. */
+  API: '/api/sync',
   EXCLUDE: ['astra_auth', 'astra_btc1d', 'astra_syncTs', 'astra_localTs'],
   auth: lsGet('astra_auth', null),
   timer: null,

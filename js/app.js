@@ -17,14 +17,30 @@ const SymbolSearch = {
     /* your broker instruments and what you monitor come first, then all of crypto */
     const seen = new Set();
     const list = [];
+    let hidden = 0;
     for (const s of [...BROKER.all(), ...MK.monitored, ...Watch.list, ...STORE.universe]){
       if (seen.has(s) || !match(s)) continue;
       seen.add(s);
+      /* live-only: a delayed instrument is not offered at all, because choosing
+         one is the first step towards trading on a price that no longer exists */
+      if (Feed.liveOnly && !Feed.isLive(s)){ hidden++; continue; }
       list.push(s);
       if (list.length >= 120) break;
     }
     const host = document.getElementById('symList');
-    host.innerHTML = list.map(s => {
+    const banner = Feed.liveOnly
+      ? `<div class="symLive${Feed.bridge ? ' on' : ' warn'}">
+           <b>LIVE ONLY</b>
+           <span>${Feed.bridge
+             ? 'Showing real-time instruments only.'
+             : 'Showing real-time instruments only — ' + hidden + ' delayed one' + (hidden === 1 ? '' : 's') +
+               ' hidden. Start <b>START-MT5-Bridge.bat</b> for live JustMarkets prices.'}</span>
+           <button class="bMini" id="symLiveOff">Show delayed too</button>
+         </div>`
+      : `<div class="symLive off"><b>ALL FEEDS</b>
+           <span>Delayed instruments are shown and can be traded. A delayed price is not the price you would be filled at.</span>
+           <button class="bMini" id="symLiveOn">Live only</button></div>`;
+    host.innerHTML = banner + list.map(s => {
       const t = STORE.tickers.get(s);
       const st = Feed.status(s);
       return `<div class="srow" data-sym="${esc(s)}">` +
@@ -35,6 +51,10 @@ const SymbolSearch = {
     }).join('') || '<div class="empty">Nothing found.<br>Use the Markets button to browse every market.</div>';
     host.querySelectorAll('.srow').forEach(r =>
       r.addEventListener('click', () => { App.hideModal('symModal'); this.cb(r.dataset.sym); }));
+    const off = document.getElementById('symLiveOff');
+    if (off) off.addEventListener('click', () => { Feed.setLiveOnly(false); this.render(q); });
+    const on = document.getElementById('symLiveOn');
+    if (on) on.addEventListener('click', () => { Feed.setLiveOnly(true); this.render(q); });
   },
 };
 
@@ -140,6 +160,7 @@ const App = {
     }
     Chart.init();
     Draw.init();
+    if (typeof Popout !== 'undefined') Popout.init();
     this.wireUI();
     await Feed.init();
     this.updateFeedChip();
@@ -178,6 +199,7 @@ const App = {
     localStorage.setItem('astra_symbol', sym);
     this.updateSymBtn();
     Chart.load();
+    BUS.emit('symbol', sym);          // torn-off windows follow this
   },
   setTf(tf){
     if (tf === STORE.tf) return;
@@ -273,10 +295,21 @@ const App = {
     document.getElementById('rpSpeed').addEventListener('change', e => Chart.replaySetSpeed(+e.target.value));
 
     /* theme toggle — dark is default */
+    const brandHome = document.getElementById('brand');
+    if (brandHome){
+      brandHome.title = 'Back to the main terminal (reloads it)';
+      brandHome.addEventListener('click', () => {
+        /* a torn-off window comes back as the full terminal; the main window
+           simply reloads to a clean start */
+        location.href = location.pathname;
+      });
+    }
+
     document.getElementById('themeBtn').addEventListener('click', () => {
       STORE.theme = STORE.theme === 'dark' ? 'light' : 'dark';
       localStorage.setItem('astra_theme', STORE.theme);
       document.documentElement.dataset.theme = STORE.theme;
+      BUS.emit('theme', STORE.theme);
       Chart.applyTheme();
       Multi.applyTheme();
       if (Heat.data) Heat.draw();
@@ -311,6 +344,38 @@ const App = {
       const bp = document.getElementById('bottomPanel');
       bp.classList.toggle('collapsed');
       if (!bp.classList.contains('collapsed') && document.getElementById('bot-heatmap').classList.contains('active')) Heat.show();
+    });
+
+    /* ---------- maximise the chart ----------
+       Hides the movers strip, the bottom panel and the side rail so the candles
+       get the whole window. The drawing toolbar stays — the whole point of a big
+       chart is to draw on it. M toggles, Escape comes back out. */
+    const setMax = on => {
+      document.documentElement.dataset.chartmax = on ? '1' : '';
+      if (!on) delete document.documentElement.dataset.chartmax;
+      localStorage.setItem('astra_chartmax', on ? '1' : '');
+      /* the chart measures itself against its box, so it has to be told */
+      setTimeout(() => {
+        try { Chart.main.applyOptions({}); } catch(e){}
+        if (typeof Draw !== 'undefined'){ Draw.resize(); Draw.redraw(); }
+        window.dispatchEvent(new Event('resize'));
+      }, 60);
+    };
+    const maxBtn = document.getElementById('maxBtn');
+    if (maxBtn) maxBtn.addEventListener('click', () =>
+      setMax(document.documentElement.dataset.chartmax !== '1'));
+    if (localStorage.getItem('astra_chartmax') === '1') setMax(true);
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && document.documentElement.dataset.chartmax === '1') setMax(false);
+      const t = (e.target && e.target.tagName) || '';
+      if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
+      if ((e.key === 'm' || e.key === 'M') && (e.altKey || (typeof Draw !== 'undefined' && Draw.singleKeys && Draw.singleKeys()))){
+        /* M is the measure tool's own key when single letters are on, so the
+           maximise toggle takes Alt+M there and plain M only otherwise */
+        if (typeof Draw !== 'undefined' && Draw.singleKeys && Draw.singleKeys() && !e.altKey) return;
+        e.preventDefault();
+        setMax(document.documentElement.dataset.chartmax !== '1');
+      }
     });
 
     /* close modals on overlay click / X */
@@ -370,7 +435,7 @@ const App = {
       const hidden = c.hidden || {};
       const style = parts.map(pt =>
         `<span class="stLine">
-           <label class="stEye" title="Show this line"><input type="checkbox" data-id="${def.id}" data-hide="${pt.key}"${hidden[pt.key] ? '' : ' checked'}></label>
+           ${pt.noHide ? '' : `<label class="stEye" title="Show this line"><input type="checkbox" data-id="${def.id}" data-hide="${pt.key}"${hidden[pt.key] ? '' : ' checked'}></label>`}
            <input type="color" data-id="${def.id}" data-ck="${pt.key}" value="${this.toHex((c.colors || {})[pt.key] || pt.color)}">
            <i>${esc(pt.label)}</i>
          </span>`).join('') +
@@ -422,10 +487,93 @@ const App = {
       : 'Choose the timeframes each indicator appears on — for example show a 200-period average only from 15m upwards, so it does not clutter a 1-second chart.';
   },
 
-  applyIndicators(){
+  /* ---------- one indicator's own properties ----------
+     Clicking the name of an indicator on the chart opens just that one, with
+     everything about it on a single card: its numbers, the price it reads, the
+     window it lives in, the colour and thickness of every individual line, and
+     the timeframes it appears on. */
+  /* the catalogue stores short keys — spell them out in the properties card */
+  PARAM_NAMES: {
+    len: 'Length', f: 'Fast length', s: 'Slow length', sig: 'Signal length',
+    k: '%K length', d: '%D length', smooth: 'Smoothing', mult: 'Multiplier',
+    b: 'Bands (deviations)', pct: 'Percent', step: 'Step', max: 'Maximum step',
+    t: 'Trigger length', type: 'Type', bars: 'Candles to score', minScore: 'Minimum to trade',
+    width: 'Thickness',
+  },
+
+  openIndProps(id){
+    const def = IND_BY_ID[id];
+    if (!def) return;
+    const c = Chart.settings[id] || def.def;
+    const parts = def.parts || [];
+
+    const params = (def.params || []).map(p => {
+      const val = c[p.k];
+      const label = p.label || this.PARAM_NAMES[p.k] || p.k;
+      const field = p.kind === 'sel'
+        ? `<select class="tsel" data-id="${id}" data-k="${p.k}">` +
+          p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>'
+        : `<input type="number" data-id="${id}" data-k="${p.k}" value="${val}" min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''}>`;
+      return `<label class="ipRow"><span>${esc(label)}</span>${field}</label>`;
+    }).join('');
+
+    const applyTo = def.applyTo
+      ? `<label class="ipRow"><span>Apply to</span><select class="tsel" data-id="${id}" data-k="src">` +
+        IND.SOURCES.map(([v, l]) => `<option value="${v}"${v === (c.src || 'close') ? ' selected' : ''}>${l}</option>`).join('') +
+        '</select></label>' : '';
+
+    const target = `<label class="ipRow"><span>Show in</span><select class="tsel" data-id="${id}" data-k="target">` +
+      IND_TARGETS.map(([v, l]) => `<option value="${v}"${v === (c.target || 'main') ? ' selected' : ''}>${l}</option>`).join('') + '</select></label>';
+
+    const hidden = c.hidden || {};
+    const lines = parts.map(pt =>
+      `<label class="ipRow"><span>${esc(pt.label)}</span>
+         <span class="ipLine">
+           ${pt.noHide ? '' : `<input type="checkbox" data-id="${id}" data-hide="${pt.key}"${hidden[pt.key] ? '' : ' checked'} title="Show this line">`}
+           <input type="color" data-id="${id}" data-ck="${pt.key}" value="${this.toHex((c.colors || {})[pt.key] || pt.color)}">
+         </span></label>`).join('');
+
+    const look = `<label class="ipRow"><span>Thickness</span><input type="number" data-id="${id}" data-k="width" value="${c.width || 1}" min="1" max="5"></label>` +
+      `<label class="ipRow"><span>Line style</span><select class="tsel" data-id="${id}" data-k="style">` +
+      IND_STYLES.map(([v, l]) => `<option value="${v}"${v === (c.style || 0) ? ' selected' : ''}>${l}</option>`).join('') + '</select></label>';
+
+    const tfs = c.tfs || CFG.TFS.map(t => t[0]);
+    const vis = CFG.TFS.map(([v, lbl]) =>
+      `<label class="stTf"><input type="checkbox" data-id="${id}" data-tf="${v}"${tfs.includes(v) ? ' checked' : ''}>${lbl}</label>`).join('') +
+      `<button class="bMini" id="ipAllTf">All</button>`;
+
+    document.getElementById('indPropTitle').textContent = def.label;
+    document.getElementById('indPropBody').innerHTML =
+      (def.note ? `<div class="indHint">${esc(def.note)}</div>` : '') +
+      (params || applyTo ? `<div class="ipSec"><h4>Inputs</h4>${params}${applyTo}</div>` : '') +
+      `<div class="ipSec"><h4>Window</h4>${target}</div>` +
+      `<div class="ipSec"><h4>Style</h4>${lines}${look}</div>` +
+      `<div class="ipSec"><h4>Timeframes</h4><div class="ipTfs">${vis}</div></div>`;
+
+    const all = document.getElementById('ipAllTf');
+    if (all) all.onclick = () => document.querySelectorAll('#indPropBody [data-tf]').forEach(x => { x.checked = true; });
+    document.getElementById('indPropApply').onclick = () => {
+      this.readIndControls('#indPropBody');
+      lsSet('astra_ind', Chart.settings);
+      this.hideModal('indPropModal');
+      Chart.renderAll();
+    };
+    document.getElementById('indPropRemove').onclick = () => {
+      const cfg = Chart.settings[id];
+      if (cfg) cfg.on = false;
+      lsSet('astra_ind', Chart.settings);
+      this.hideModal('indPropModal');
+      Chart.renderAll();
+    };
+    this.showModal('indPropModal');
+  },
+
+  /* reads the controls of one card or of the whole list — both dialogs share the
+     same data- attributes, so the writing side exists exactly once */
+  readIndControls(sel){
     const S = Chart.settings;
     const tfSeen = {};
-    document.querySelectorAll('#indList [data-id]').forEach(el => {
+    document.querySelectorAll(sel + ' [data-id]').forEach(el => {
       const cfg = S[el.dataset.id];
       if (!cfg) return;
       if (el.dataset.ck){                       /* a colour for one line */
@@ -453,6 +601,11 @@ const App = {
       else cfg[k] = el.value;
     });
     for (const [id, list] of Object.entries(tfSeen)) if (S[id]) S[id].tfs = list;
+  },
+
+  applyIndicators(){
+    const S = Chart.settings;
+    this.readIndControls('#indList');
     S.vp = { on: document.getElementById('i_vp').checked };
     S.patterns = { on: document.getElementById('i_pat').checked };
     lsSet('astra_ind', S);

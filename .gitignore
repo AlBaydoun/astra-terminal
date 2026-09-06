@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# ASTRA Terminal — what git should never carry
+#
+# Without this file GitHub Desktop offered to commit 968 files, because the
+# Electron runtime under node_modules/ is 273 MB and holds a 100 MB+
+# electron.exe. GitHub refuses any file over 100 MB, so committing it would
+# have made the repository impossible to push — permanently, since the file
+# would stay in the history even after being deleted.
+#
+# Everything ignored here is re-created by "npm install" or by running the app.
+# Nothing you have written by hand is excluded.
+# ---------------------------------------------------------------------------
+
+# the Electron runtime and every other installed package
+node_modules/
+
+# Python bytecode from the MT5 bridge
+__pycache__/
+*.pyc
+*.pyo
+
+# Electron build output, if a packaged app is ever produced
+dist/
+out/
+release/
+desktop/cache/
+
+# editor and operating-system litter
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# logs and scratch
+*.log
+npm-debug.log*
+_to_delete/

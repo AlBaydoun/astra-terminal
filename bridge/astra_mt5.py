@@ -14,7 +14,17 @@ Endpoints (localhost only):
     /health                       is the bridge up, which account, which symbols
     /quotes?symbols=A,B           current prices
     /candles?symbol=X&tf=1h       candles
-    /positions                    open positions (read-only, for later steps)
+    /positions                    open positions
+
+REAL ORDERS
+    By default this bridge CANNOT place an order — the endpoint refuses every
+    request. It only works when the program is started with --enable-trading,
+    which is what START-LIVE-TRADING.bat does and nothing else does. A six-digit
+    code is then printed in this window and ASTRA must be given that code before
+    it may send anything. Closing this window stops live trading at once.
+
+    POST /order   {code, symbol, side, lots, sl, tp, comment}
+    POST /close   {code, ticket}
 """
 import json
 import os
@@ -57,6 +67,17 @@ SAFE = re.compile(r"^[A-Za-z0-9._#/-]{1,32}$")
 
 _lock = threading.Lock()
 _symbols_cache = {"t": 0.0, "list": []}
+
+# ---------------------------------------------------------------------------
+# Real orders are off unless this program was started with --enable-trading,
+# which only START-LIVE-TRADING.bat does. When it is on, a six-digit code is
+# generated for this run and printed in this console window only; ASTRA has to
+# be given that code before the order endpoint will accept anything. Closing
+# this window ends live trading immediately.
+TRADING_ENABLED = False
+SESSION_CODE = ""
+MAGIC = 20260902          # stamps every order ASTRA sends, so they are identifiable
+ORDER_LOG = os.path.join(os.path.expanduser("~"), "astra-data", "live-orders.log")
 
 
 CONFIG = os.path.join(os.path.expanduser("~"), "astra-data", "mt5-path.txt")
@@ -114,6 +135,20 @@ def candidate_terminals():
         except OSError:
             pass
     return out
+
+
+def log_order(line):
+    """Every order attempt, accepted or refused, written outside the app.
+
+    If the interface and the broker ever disagree about what happened, this file
+    is the independent record.
+    """
+    try:
+        os.makedirs(os.path.dirname(ORDER_LOG), exist_ok=True)
+        with open(ORDER_LOG, "a", encoding="utf-8") as fh:
+            fh.write("%s  %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), line))
+    except OSError:
+        pass
 
 
 def connect():
@@ -302,9 +337,38 @@ def positions():
     return [
         {"ticket": p.ticket, "symbol": p.symbol, "volume": p.volume,
          "type": "buy" if p.type == 0 else "sell", "price_open": p.price_open,
-         "price_current": p.price_current, "profit": p.profit, "time": p.time}
+         "price_current": p.price_current, "profit": p.profit, "time": p.time,
+         "sl": p.sl, "tp": p.tp, "magic": p.magic, "comment": p.comment,
+         "swap": getattr(p, "swap", 0)}
         for p in pos
     ]
+
+
+def deals(days=30):
+    """Closed deals straight from MetaTrader's own history.
+
+    Live results must be read from the broker's record, never from ASTRA's
+    simulation of it. This is what the live reporting is built on.
+    """
+    to = datetime.now() + timedelta(days=1)
+    frm = datetime.now() - timedelta(days=max(1, min(365, days)))
+    with _lock:
+        rows = mt5.history_deals_get(frm, to) or []
+    out = []
+    for d in rows:
+        # entry 1 = a deal that closed a position; that is what carries the result
+        if getattr(d, "entry", None) != 1:
+            continue
+        out.append({
+            "ticket": d.ticket, "position": d.position_id, "order": d.order,
+            "symbol": d.symbol, "volume": d.volume, "price": d.price,
+            "type": "buy" if d.type == 0 else "sell",
+            "profit": d.profit, "commission": d.commission, "swap": d.swap,
+            "fee": getattr(d, "fee", 0), "time": d.time,
+            "magic": d.magic, "comment": d.comment,
+        })
+    out.sort(key=lambda r: r["time"], reverse=True)
+    return out[:500]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -324,11 +388,157 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "content-type")
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def _read_json(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > 20000:
+                return None
+            return json.loads(self.rfile.read(n).decode("utf-8"))
+        except Exception:
+            return None
+
+    def do_POST(self):
+        """The only place in ASTRA where real money can move.
+
+        Nothing here is convenient by design. Two independent gates have to be
+        open: this program must have been started with --enable-trading, and the
+        caller must know the code printed in this window.
+        """
+        u = urlparse(self.path)
+
+        if not TRADING_ENABLED:
+            return self._send({"error": "trading_disabled",
+                               "message": "This bridge is read-only. Close it and run "
+                                          "START-LIVE-TRADING.bat if you really mean to trade."}, 403)
+
+        body = self._read_json()
+        if body is None:
+            return self._send({"error": "bad_body"}, 400)
+        if str(body.get("code", "")).strip() != SESSION_CODE:
+            log_order("REFUSED wrong session code for %s" % u.path)
+            return self._send({"error": "bad_code",
+                               "message": "Wrong session code. Read the six digits in the bridge window."}, 403)
+
+        if u.path == "/order":
+            return self._order(body)
+        if u.path == "/close":
+            return self._close(body)
+        return self._send({"error": "not_found"}, 404)
+
+    def _order(self, b):
+        sym = str(b.get("symbol", "")).strip()
+        side = str(b.get("side", "")).lower()
+        if not SAFE.match(sym):
+            return self._send({"error": "bad_symbol"}, 400)
+        if side not in ("buy", "sell"):
+            return self._send({"error": "bad_side"}, 400)
+        try:
+            lots = float(b.get("lots", 0))
+            sl = float(b.get("sl", 0))
+            tp = float(b.get("tp", 0) or 0)
+        except (TypeError, ValueError):
+            return self._send({"error": "bad_numbers"}, 400)
+
+        if not (lots > 0):
+            return self._send({"error": "bad_lots"}, 400)
+        # A stop is not optional. Not here, not ever.
+        if not (sl > 0):
+            return self._send({"error": "stop_required",
+                               "message": "An order without a stop-loss is refused by the bridge."}, 400)
+        if not ensure_selected(sym):
+            return self._send({"error": "symbol_not_found"}, 404)
+
+        with _lock:
+            info = mt5.symbol_info(sym)
+            tick = mt5.symbol_info_tick(sym)
+        if info is None or tick is None:
+            return self._send({"error": "no_quote"}, 503)
+
+        # the broker's own limits win over whatever the interface asked for
+        step = info.volume_step or 0.01
+        lots = round(max(info.volume_min, min(info.volume_max, round(lots / step) * step)), 4)
+        price = tick.ask if side == "buy" else tick.bid
+        if not (price > 0):
+            return self._send({"error": "no_price"}, 503)
+        if (side == "buy" and sl >= price) or (side == "sell" and sl <= price):
+            return self._send({"error": "stop_wrong_side",
+                               "message": "The stop is on the wrong side of the price."}, 400)
+
+        req = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": sym,
+            "volume": lots,
+            "type": mt5.ORDER_TYPE_BUY if side == "buy" else mt5.ORDER_TYPE_SELL,
+            "price": price,
+            "sl": sl,
+            "deviation": int(b.get("deviation", 20)),
+            "magic": MAGIC,
+            "comment": str(b.get("comment", "ASTRA"))[:31],
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        if tp > 0:
+            req["tp"] = tp
+
+        log_order("SEND %s %s %s lots sl=%s tp=%s" % (side, sym, lots, sl, tp))
+        with _lock:
+            r = mt5.order_send(req)
+        if r is None:
+            log_order("FAILED no response: %s" % (mt5.last_error(),))
+            return self._send({"error": "send_failed", "message": str(mt5.last_error())}, 502)
+
+        ok = r.retcode == mt5.TRADE_RETCODE_DONE
+        log_order("RESULT %s retcode=%s ticket=%s price=%s" % (
+            "OK" if ok else "REJECTED", r.retcode, getattr(r, "order", None), getattr(r, "price", None)))
+        return self._send({
+            "ok": ok, "retcode": r.retcode, "comment": r.comment,
+            "ticket": getattr(r, "order", None), "deal": getattr(r, "deal", None),
+            "price": getattr(r, "price", None), "volume": getattr(r, "volume", None),
+        }, 200 if ok else 502)
+
+    def _close(self, b):
+        try:
+            ticket = int(b.get("ticket", 0))
+        except (TypeError, ValueError):
+            return self._send({"error": "bad_ticket"}, 400)
+        with _lock:
+            poss = mt5.positions_get(ticket=ticket)
+        if not poss:
+            return self._send({"error": "not_found", "message": "No open position with that ticket."}, 404)
+        pos = poss[0]
+        with _lock:
+            tick = mt5.symbol_info_tick(pos.symbol)
+        if tick is None:
+            return self._send({"error": "no_quote"}, 503)
+
+        closing_buy = pos.type == mt5.POSITION_TYPE_SELL
+        req = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": pos.symbol,
+            "volume": pos.volume,
+            "type": mt5.ORDER_TYPE_BUY if closing_buy else mt5.ORDER_TYPE_SELL,
+            "position": ticket,
+            "price": tick.ask if closing_buy else tick.bid,
+            "deviation": 20,
+            "magic": MAGIC,
+            "comment": "ASTRA close",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        log_order("CLOSE ticket=%s %s %s" % (ticket, pos.symbol, pos.volume))
+        with _lock:
+            r = mt5.order_send(req)
+        if r is None:
+            return self._send({"error": "send_failed", "message": str(mt5.last_error())}, 502)
+        ok = r.retcode == mt5.TRADE_RETCODE_DONE
+        log_order("CLOSE RESULT %s retcode=%s" % ("OK" if ok else "REJECTED", r.retcode))
+        return self._send({"ok": ok, "retcode": r.retcode, "comment": r.comment}, 200 if ok else 502)
 
     def do_GET(self):
         u = urlparse(self.path)
@@ -344,6 +554,8 @@ class Handler(BaseHTTPRequestHandler):
                     "balance": getattr(acc, "balance", None),
                     "equity": getattr(acc, "equity", None),
                     "symbols": all_symbols(),
+                    "trading": TRADING_ENABLED,
+                    "magic": MAGIC,
                 })
 
             if u.path == "/specs":
@@ -399,6 +611,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/positions":
                 return self._send({"positions": positions()})
 
+            if u.path == "/deals":
+                days = int(q.get("days", ["30"])[0] or 30)
+                return self._send({"deals": deals(days)})
+
             return self._send({"error": "not_found"}, 404)
         except Exception as e:
             return self._send({"error": str(e)}, 500)
@@ -418,9 +634,36 @@ def main():
             print("terminal path saved:", chosen)
         except (IndexError, OSError) as e:
             print("could not save the path:", e)
+    global TRADING_ENABLED, SESSION_CODE
+    if "--enable-trading" in sys.argv:
+        import random
+        TRADING_ENABLED = True
+        SESSION_CODE = "%06d" % random.randint(0, 999999)
+
     connect()
     names = all_symbols()
     print("%d symbols available. Bridge listening on http://127.0.0.1:%d" % (len(names), PORT))
+
+    if TRADING_ENABLED:
+        acc = mt5.account_info()
+        print("")
+        print("=" * 64)
+        print("  REAL TRADING IS ENABLED ON THIS BRIDGE")
+        print("  Account %s   %s   balance %s %s" % (
+            getattr(acc, "login", "?"), getattr(acc, "server", "?"),
+            getattr(acc, "balance", "?"), getattr(acc, "currency", "")))
+        print("")
+        print("  Session code:   %s" % SESSION_CODE)
+        print("")
+        print("  Type that code into ASTRA once, under Bots -> Live Trading.")
+        print("  It is new every time this window is opened.")
+        print("  CLOSING THIS WINDOW STOPS ALL LIVE TRADING IMMEDIATELY.")
+        print("=" * 64)
+        print("")
+        log_order("BRIDGE STARTED with trading enabled, account %s" % getattr(acc, "login", "?"))
+    else:
+        print("Read-only: this bridge cannot place an order.")
+
     print("Leave this window open while you use ASTRA. Close it to stop.")
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     try:

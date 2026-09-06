@@ -173,8 +173,12 @@ const Chart = {
     }
     const v = this.view();
     const markers = [];
-    const start = Math.max(4, v.length - 200);
-    for (let i = start; i < v.length; i++){
+    /* Mark the WHOLE loaded history, not just the recent tail. Scrolling left
+       used to run past the last 200 candles and the markers simply stopped,
+       which made the chart look like the patterns had ended. The detector is
+       cheap arithmetic per bar, so the only real cost is how many markers the
+       chart is asked to hold — capped below purely to protect the renderer. */
+    for (let i = 4; i < v.length; i++){
       for (const p of PAT.at(v, i)){
         markers.push({
           time: v[i].time,
@@ -185,7 +189,12 @@ const Chart = {
         });
       }
     }
-    try { this.priceSeries.setMarkers(markers.slice(-60)); } catch(e){}
+    /* if a very long history produces an enormous number, keep the most recent
+       ones rather than dropping the lot */
+    if (markers.length > 4000) markers.splice(0, markers.length - 4000);
+    /* the whole set, not a tail slice — this line was the real limit */
+    try { this.priceSeries.setMarkers(markers); } catch(e){}
+    this._markerCount = markers.length;
   },
 
   /* compose a PNG of the chart (panes + drawings) and download it */
@@ -281,13 +290,39 @@ const Chart = {
       chart.subscribeCrosshairMove(p => this.renderIndLegends(p && p.time != null ? p.time : null));
       this.panes[key] = { el, chart };
     }
-    /* name each window after what it holds */
+    /* name each window after what it holds, and give it the overlay / split
+       switch once it is holding more than one thing */
     for (const key of Object.keys(this.panes)){
       const names = INDS.filter(d => this.settings[d.id] && this.settings[d.id].on && this.settings[d.id].target === key)
         .map(d => d.label);
       const tag = this.panes[key].el.querySelector('.paneTag');
       if (tag) tag.textContent = names.join('  ·  ');
+      this.ensureModeBtn(key);
     }
+  },
+
+  ensureModeBtn(key){
+    const pane = this.panes[key];
+    if (!pane) return;
+    let btn = pane.el.querySelector('.paneMode');
+    if (!btn){
+      btn = document.createElement('button');
+      btn.className = 'paneMode';
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        this.setPaneMode(key, this.modeOf(key) === 'split' ? 'overlay' : 'split');
+      });
+      pane.el.appendChild(btn);
+    }
+    /* only worth showing when the window actually holds two different scales */
+    const groups = Object.keys((this.assignScales() || {})[key] || {}).length;
+    const overlay = this.modeOf(key) === 'overlay';
+    btn.style.display = groups > 1 ? 'block' : 'none';
+    btn.textContent = overlay ? 'OVERLAY' : 'SPLIT';
+    btn.title = overlay
+      ? 'Both studies drawn over each other across the whole window, as MetaTrader does. Click to put them in separate bands instead.'
+      : 'Each study in its own band. Click to draw them over each other instead.';
+    btn.classList.toggle('on', overlay);
   },
 
   /* Which price scale should this indicator use?
@@ -298,31 +333,87 @@ const Chart = {
   scaleKey(def){
     return def.range ? 'r' + def.range.join('_') : 'i' + def.id;
   },
+
+  /* How two indicators share one window.
+
+     OVERLAY (the default, and what MetaTrader does): both are drawn across the
+     full height of the window, on top of each other, each fitted to its own
+     range. RSI swinging 0–100 and a MACD swinging 0.18 both fill the window and
+     can be read together. The visible axis belongs to the first of them.
+
+     SPLIT: each gets its own horizontal band, one above the other. Tidier when
+     the two have nothing to do with each other, but the axis numbers then belong
+     to a band rather than to the window, so they read oddly.
+
+     Indicators that share a natural range (RSI, Stochastic, MFI — all 0–100)
+     always share one scale either way, so they stay directly comparable. */
+  paneMode: lsGet('astra_panemode', {}),
+
+  modeOf(target){ return this.paneMode[target] === 'split' ? 'split' : 'overlay'; },
+
+  setPaneMode(target, mode){
+    this.paneMode[target] = mode;
+    lsSet('astra_panemode', this.paneMode);
+    this.renderIndicators();
+  },
+
+  slotMargins(slot, total){
+    if (total <= 1) return { top: 0.04, bottom: 0.04 };
+    const h = 1 / total, gap = 0.03;
+    return { top: slot * h + gap, bottom: (total - 1 - slot) * h + gap };
+  },
+
   assignScales(){
-    const map = {};                       // target -> {scaleKey -> scaleId}
+    const map = {};                       // target -> {scaleKey -> {id, slot, total}}
     for (const def of INDS){
       const cfg = this.settings[def.id];
       if (!cfg || !cfg.on) continue;
+      if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
       const t = cfg.target || 'main';
       if (t === 'main') continue;
       const m = map[t] = map[t] || {};
       const key = this.scaleKey(def);
-      if (!m[key]) m[key] = Object.keys(m).length === 0 ? 'right' : 'ov_' + key;
+      if (!m[key]){
+        const slot = Object.keys(m).length;
+        m[key] = { id: slot === 0 ? 'right' : 'ov_' + key, slot, total: 0 };
+      }
+    }
+    for (const [target, groups] of Object.entries(map)){
+      const total = Object.keys(groups).length;
+      const split = this.modeOf(target) === 'split' && total > 1;
+      for (const g of Object.values(groups)){
+        g.total = total;
+        /* overlay: identical margins for everything, and tight ones, so each study
+           runs from the top of the window to the bottom exactly as MetaTrader
+           draws it — not inset with padding */
+        g.margins = split ? this.slotMargins(g.slot, total) : { top: 0.04, bottom: 0.04 };
+      }
     }
     return map;
   },
 
+  /* every render, so adding a second study instantly shrinks the first into its band */
+  applyScaleBands(scales){
+    for (const [target, groups] of Object.entries(scales)){
+      const chart = this.chartFor(target);
+      if (!chart) continue;
+      for (const g of Object.values(groups))
+        try { chart.priceScale(g.id).applyOptions({ scaleMargins: g.margins }); } catch(e){}
+    }
+  },
+
   makeSeries(chart, spec, target, def, scaleOverride){
-    const scaleId = spec.scale === 'vol' ? 'vol'
+    const over = typeof scaleOverride === 'string' ? { id: scaleOverride } : (scaleOverride || null);
+    const scaleId = (spec.scale === 'vol' && target === 'main') ? 'vol'
       : (target === 'main' && def.kind === 'osc') ? 'osc_' + def.id
-      : (scaleOverride || 'right');
+      : ((over && over.id) || 'right');
     const priceFormat = spec.precision != null
       ? { type: 'price', precision: spec.precision, minMove: Math.pow(10, -spec.precision) }
       : (spec.scale === 'vol' ? { type: 'volume' } : undefined);
     const base = {
       priceScaleId: scaleId,
       priceLineVisible: false,
-      lastValueVisible: target !== 'main',
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
     };
     if (priceFormat) base.priceFormat = priceFormat;
@@ -337,7 +428,9 @@ const Chart = {
           pointMarkersVisible: !!spec.dots,
           pointMarkersRadius: spec.radius || 1.6,
         }));
-    if (scaleId !== 'right'){
+    if (over && over.margins){
+      try { chart.priceScale(scaleId).applyOptions({ scaleMargins: over.margins }); } catch(e){}
+    } else if (scaleId !== 'right'){
       const margins = spec.margins || { top: 0.72, bottom: 0 };
       try { chart.priceScale(scaleId).applyOptions({ scaleMargins: margins }); } catch(e){}
     }
@@ -361,6 +454,7 @@ const Chart = {
     this.ensurePanes();
 
     const scales = this.assignScales();
+    this.applyScaleBands(scales);
     const alive = {};
     this.specCache = {};
     for (const def of INDS){
@@ -372,7 +466,8 @@ const Chart = {
       const target = this.chartFor(cfg.target) ? cfg.target : 'main';
       const chart = this.chartFor(target);
       if (!chart) continue;
-      const scaleId = (scales[target] || {})[this.scaleKey(def)] || 'right';
+      const band = (scales[target] || {})[this.scaleKey(def)] || null;
+      const scaleId = (band && band.id) || 'right';
       let specs;
       try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
       /* apply the look chosen in the dialog: colour per line, thickness, dash */
@@ -400,7 +495,7 @@ const Chart = {
         const look = [spec.color, spec.width || 1, spec.lineStyle || 0, spec.dots ? 1 : 0].join('|');
         if (!entry){
           try {
-            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def, scaleId), target, look, scaleId };
+            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def, band || scaleId), target, look, scaleId };
             entry.s.setData(spec.data);
           } catch(e){ delete this.series[id]; }
           continue;
@@ -475,13 +570,34 @@ const Chart = {
       if (target === 'main' && def.id === 'vol') continue;   // volume already in the main legend
       const vals = c.specs.map(sp =>
         `<b style="color:${sp.color}">${esc(this.fmtInd(this.valueAt(sp.data, time)))}</b>`).join(' ');
-      out.push(`<span class="ilg"><i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
-        `${esc(def.label)}${esc(this.paramText(def, c.cfg))}</i> ${vals}</span>`);
+      out.push(`<span class="ilg" data-ind="${def.id}" title="Click to edit ${esc(def.label)}">` +
+        `<i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
+        `${esc(def.label)}${esc(this.paramText(def, c.cfg))}</i> ${vals}` +
+        `<b class="ilgX" data-indoff="${def.id}" title="Remove from the chart">×</b></span>`);
     }
     return out.join('');
   },
 
+  /* clicking a legend opens that indicator's own properties, and the small x
+     takes it off the chart — the way every charting package behaves */
+  bindLegendClicks(){
+    if (this._legendBound) return;
+    this._legendBound = true;
+    document.addEventListener('click', e => {
+      const off = e.target.closest && e.target.closest('[data-indoff]');
+      if (off){
+        e.stopPropagation();
+        const cfg = this.settings[off.dataset.indoff];
+        if (cfg){ cfg.on = false; lsSet('astra_ind', this.settings); this.renderAll(); }
+        return;
+      }
+      const tag = e.target.closest && e.target.closest('.ilg[data-ind]');
+      if (tag && typeof App !== 'undefined' && App.openIndProps) App.openIndProps(tag.dataset.ind);
+    });
+  },
+
   renderIndLegends(time){
+    this.bindLegendClicks();
     if (!this.specCache) return;
     for (const key of Object.keys(this.panes)){
       const tag = this.panes[key].el.querySelector('.paneTag');

@@ -21,6 +21,13 @@ const Backtest = {
     catch(e){ return { error: 'Could not load history for ' + baseAsset(sym) + ' — ' + e.message }; }
     if (!candles || candles.length < 250) return { error: 'Not enough history (' + (candles ? candles.length : 0) + ' candles)' };
 
+    /* Split testing. Fitting a strategy to a stretch of history and admiring the
+       result is not research; the question is whether what worked in the first
+       half still worked in the second. 'first' and 'second' cut the window in
+       half so the two can be compared. */
+    if (opts.slice === 'first') candles = candles.slice(0, Math.floor(candles.length / 2));
+    else if (opts.slice === 'second') candles = candles.slice(Math.floor(candles.length / 2));
+
     /* the higher timeframe some strategies confirm against */
     let higher = null;
     if (botDef.needsHigher){
@@ -37,6 +44,10 @@ const Backtest = {
       : { spreadPct: 0.02, commissionPct: 0.001, source: 'default' };
     const spread = candles[candles.length - 1].close * (opts.spreadPct != null ? opts.spreadPct : costs.spreadPct) / 100;
     cfg.risk = Object.assign({}, cfg.risk, { commissionPct: costs.commissionPct });
+    /* a cost-aware strategy needs the round trip and the instrument, the same
+       way the live scan hands them over */
+    cfg.sym = sym;
+    cfg.costPct = (opts.spreadPct != null ? opts.spreadPct : costs.spreadPct) + 2 * costs.commissionPct;
     let evaluated = 0, signals = 0, rejected = 0;
     const rejectReasons = {};
 
@@ -44,6 +55,8 @@ const Backtest = {
       const window = candles.slice(0, i + 1);         // last element is the forming bar
       const bar = candles[i];
       const quote = { price: bar.open, spread, ageSec: 0 };
+      /* replay time, so daily limits roll over per simulated day */
+      cfg.nowTs = bar.rawTime * 1000;
 
       /* manage anything already open against this bar */
       for (const pos of ledger.open.slice()) BotEngine.step(ledger, cfg, pos, bar, { price: bar.close });
@@ -62,6 +75,12 @@ const Backtest = {
       }
       if (!sig.dir) continue;
       if (sig.score != null && cfg.minScore != null && sig.score < cfg.minScore) continue;
+      /* session filter: cfg.hours is a list of UTC hours a bot may enter in.
+         Measured across crypto, gold, forex and indices, hourly range peaks at
+         12:00-15:00 UTC (the London afternoon / New York morning overlap) and
+         collapses to roughly half that in the Asian hours. */
+      if (cfg.hours && cfg.hours.length &&
+          !cfg.hours.includes(new Date(bar.rawTime * 1000).getUTCHours())) continue;
       signals++;
 
       sig.sym = sym; sig.tf = tf;

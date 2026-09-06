@@ -128,12 +128,16 @@ const STRAT = {
         reasons.push('ATR is ' + atrPct.toFixed(2) + '% of price — tradable volatility'); }
       else failed.push('ATR is ' + atrPct.toFixed(2) + '% of price (needs 0–1.5%)');
 
-      const stopDist = Math.max(1.2 * A, px * 0.0015);
+      /* geometry knobs — these defaults are the original behaviour, and the
+         Strategy Lab varies them to build new bots */
+      const stopAtr = cfg.stopAtr != null ? cfg.stopAtr : 1.2;
+      const rr = cfg.rr != null ? cfg.rr : 1.5;
+      const stopDist = Math.max(stopAtr * A, px * 0.0015);
       return {
         dir, score, reasons, failed, factors,
         entry: px,
         sl: up ? px - stopDist : px + stopDist,
-        tp: up ? px + 1.5 * stopDist : px - 1.5 * stopDist,
+        tp: up ? px + rr * stopDist : px - rr * stopDist,
         model: 'Regime-Aligned Pullback',
         meta: { atrPct: +atrPct.toFixed(3), adx: +adx.adx[i].toFixed(1), rsi: +r.toFixed(1), volRatio: +volRatio.toFixed(2) },
       };
@@ -219,9 +223,13 @@ const STRAT = {
     let score = this.PATTERN_STRENGTH[pat.key];
     const trendUp = e20[i] > e50[i];
     const agrees = (pat.dir > 0 && trendUp) || (pat.dir < 0 && !trendUp);
-    if (agrees){ score += 10; factors.trendAgrees = true;
-      reasons.push('Direction agrees with the EMA20/EMA50 trend (+10)'); }
-    else { score -= 6; reasons.push('Direction fights the EMA20/EMA50 trend (−6)'); }
+    const bonus = cfg.trendBonus != null ? cfg.trendBonus : 10;
+    if (agrees){ score += bonus; factors.trendAgrees = true;
+      reasons.push('Direction agrees with the EMA20/EMA50 trend (+' + bonus + ')'); }
+    else if (cfg.trendOnly){
+      return this.wait([pat.name + ' fights the EMA20/EMA50 trend, and this bot only trades with it'], { score, model: pat.name });
+    }
+    else { score -= Math.round(bonus * 0.6); reasons.push('Direction fights the EMA20/EMA50 trend (−' + Math.round(bonus * 0.6) + ')'); }
 
     const bodyStrength = Math.min(1, this.body(a) / this.range(a));
     const bodyPts = +(bodyStrength * 7).toFixed(1);
@@ -235,7 +243,8 @@ const STRAT = {
     if (penalty > 0.5) reasons.push('Spread penalty −' + penalty.toFixed(1) + ' (' + spreadPct.toFixed(3) + '%)');
 
     const atrPct = A / a.close * 100;
-    if (!(atrPct > 0 && atrPct <= 2.5)) failed.push('ATR ' + atrPct.toFixed(2) + '% is outside the tradable band');
+    const atrMax = cfg.atrMax != null ? cfg.atrMax : 2.5;
+    if (!(atrPct > 0 && atrPct <= atrMax)) failed.push('ATR ' + atrPct.toFixed(2) + '% is outside the tradable band (max ' + atrMax + '%)');
 
     const min = cfg.minScore != null ? cfg.minScore : 60;
     if (failed.length) return this.wait(failed, { score, model: pat.name });
@@ -243,13 +252,15 @@ const STRAT = {
       return this.wait(['Scored ' + score.toFixed(0) + ', below the minimum of ' + min], { score, model: pat.name, reasons });
 
     const px = a.close;
+    const pad = cfg.stopPad != null ? cfg.stopPad : 0.15;
+    const rr = cfg.rr != null ? cfg.rr : 1.35;
     const sl = pat.dir > 0
-      ? Math.min(a.low, p.low) - 0.15 * A
-      : Math.max(a.high, p.high) + 0.15 * A;
+      ? Math.min(a.low, p.low) - pad * A
+      : Math.max(a.high, p.high) + pad * A;
     const stopDist = Math.abs(px - sl);
     return {
       dir: pat.dir, score: Math.round(score), entry: px, sl,
-      tp: pat.dir > 0 ? px + 1.35 * stopDist : px - 1.35 * stopDist,
+      tp: pat.dir > 0 ? px + rr * stopDist : px - rr * stopDist,
       model: pat.name, reasons, failed: [], factors,
       meta: { atrPct: +atrPct.toFixed(3), bodyPct: Math.round(bodyStrength * 100) },
     };
@@ -468,7 +479,10 @@ const STRAT = {
 
       /* --- risk: beyond the 5-candle swing --- */
       const swing = up ? this.recentLow(c, i + 1, 5) : this.recentHigh(c, i + 1, 5);
-      const sl = up ? swing - 0.2 * A : swing + 0.2 * A;
+      const pad = cfg.stopPad != null ? cfg.stopPad : 0.2;
+      const rr = cfg.rr != null ? cfg.rr : 1.5;
+      const tp1R = cfg.tp1R != null ? cfg.tp1R : 1;
+      const sl = up ? swing - pad * A : swing + pad * A;
       const stopDist = Math.abs(px - sl);
       const scoreParts = ['ribbon', 'slowSlope', 'pullback', 'reclaim', 'macd', 'macdHigher', 'rsi'];
       const score = Math.round(scoreParts.filter(k => factors[k]).length / scoreParts.length * 100);
@@ -476,8 +490,8 @@ const STRAT = {
       return {
         dir, score, reasons, failed, factors,
         entry: px, sl,
-        tp1: up ? px + stopDist : px - stopDist,            // 1R — take half, stop to breakeven
-        tp: up ? px + 1.5 * stopDist : px - 1.5 * stopDist, // final target
+        tp1: up ? px + tp1R * stopDist : px - tp1R * stopDist,  // take half, stop to breakeven
+        tp: up ? px + rr * stopDist : px - rr * stopDist,       // final target
         model: 'MA ribbon + MTF MACD',
         meta: { histState: state.name, macd: m == null ? null : +m.toFixed(6), signal: s == null ? null : +s.toFixed(6),
                 sma1: +px.toFixed(6), higherTf: cfg.higherTf || '15m' },
@@ -488,6 +502,576 @@ const STRAT = {
     const best = long.failed.length <= short.failed.length ? long : short;
     if (best.failed.length) return this.wait(best.failed, { score: best.score, model: best.model, reasons: best.reasons, meta: best.meta });
     return best;
+  },
+
+  /* ================= 6. Mean reversion — band fade =================
+     Every other strategy here follows a trend. This one does the opposite, and
+     that is the point: it earns in exactly the conditions that chop the others
+     up, so the two together are steadier than either alone.
+
+     It refuses to trade a trending market. ADX must be LOW. Price has to have
+     poked outside the Bollinger band and then closed back inside — a rejected
+     extreme, not a running one — with the oscillator stretched to match. The
+     target is the middle band: the average it is reverting to. If that average
+     is too close to pay for the stop, it does not take the trade. */
+  /* ================= SCALPER =================
+     Small, frequent trades in BOTH directions, taking a slice out of the little
+     swings rather than waiting for a move.
+
+     The thing that decides whether a scalper works is not the entry, it is the
+     COST. A target of 0.05% is pure fantasy on an instrument whose spread is
+     0.04%: the trade starts a long way behind and has to make the whole gap back
+     before the first cent of profit. So the first gate here is arithmetic, not
+     opinion — the target must clear the round trip (spread + both commissions)
+     by a stated multiple, and if it cannot, the instrument is refused outright
+     no matter how good the setup looks.
+
+     After that gate, eight indicators vote. None of them is a veto on its own,
+     because a single indicator is noise at this timeframe; the score is what
+     decides. They are chosen to disagree in useful ways — trend, momentum,
+     stretch, position and structure — so agreement means something.
+
+     Regime decides WHICH WAY the votes are read: when ADX says a micro-trend is
+     running, the bot buys dips within it, and when ADX says the market is flat,
+     it fades the edges of the range. Trading a range as if it were a trend is
+     how a scalper bleeds. */
+  SCALP_W: { trend: 16, htf: 10, stoch: 15, rsi: 12, macd: 12, band: 11, vwap: 10, candle: 14 },
+
+  scalper(candles, cfg){
+    cfg = cfg || {};
+    const c = this.closed(candles, cfg.allowLive);
+    const need = 90;
+    if (c.length < need) return this.wait(['Not enough candles (need ' + need + ', have ' + c.length + ')']);
+    const i = c.length - 1;
+
+    const tpAtr      = cfg.tpAtr      != null ? cfg.tpAtr      : 0.55;
+    const slAtr      = cfg.slAtr      != null ? cfg.slAtr      : 0.55;
+    const costMult   = cfg.costMult   != null ? cfg.costMult   : 4;
+    const trendAdx   = cfg.trendAdx   != null ? cfg.trendAdx   : 20;
+    const atrMinPct  = cfg.atrMinPct  != null ? cfg.atrMinPct  : 0.05;
+    const atrMaxPct  = cfg.atrMaxPct  != null ? cfg.atrMaxPct  : 1.2;
+    const minScore   = cfg.minScore   != null ? cfg.minScore   : 62;
+
+    const close = c.map(x => x.close);
+    const ema8 = IND.ema(close, 8), ema21 = IND.ema(close, 21), ema50 = IND.ema(close, 50);
+    const rsi = IND.rsi(close, 7);
+    const st = IND.stoch(c, 14, 3, 3);
+    const md = IND.macd(close, 12, 26, 9);
+    const bb = IND.bb(close, 20, 2);
+    const atr = IND.atr(c, 14);
+    const adx = IND.adx(c, 14);
+    const vwap = IND.vwapDaily(c);
+
+    if (ema50[i] == null || atr[i] == null || adx.adx[i] == null || rsi[i] == null ||
+        st.k[i] == null || md.hist[i] == null || bb.mid[i] == null)
+      return this.wait(['Indicators still warming up']);
+
+    const a = c[i], px = a.close, A = atr[i];
+    const atrPct = A / px * 100;
+    const adxNow = adx.adx[i];
+    const trending = adxNow >= trendAdx;
+
+    /* ---- gate 1: is there enough movement to scalp at all? ---- */
+    if (atrPct < atrMinPct)
+      return this.wait(['The market is too quiet — a candle moves ' + atrPct.toFixed(3) +
+        '% and this bot needs at least ' + atrMinPct + '%'],
+        { model: 'Scalper', meta: { atrPct: +atrPct.toFixed(3), adx: +adxNow.toFixed(1) } });
+    if (atrPct > atrMaxPct)
+      return this.wait(['Too wild for a scalp — a candle moves ' + atrPct.toFixed(2) +
+        '%, above the ' + atrMaxPct + '% ceiling, and a tight stop is just noise here'],
+        { model: 'Scalper', meta: { atrPct: +atrPct.toFixed(3), adx: +adxNow.toFixed(1) } });
+
+    /* ---- gate 2: THE COST GATE ----
+       cfg.costPct is the round trip as a percentage of price, handed in by the
+       bot from the live spread and this account's real commission. A scalp whose
+       target does not clear it several times over is not a trade, it is a
+       donation. */
+    const costPct = cfg.costPct != null ? cfg.costPct : 0.03;
+    const targetPct = tpAtr * A / px * 100;
+    const cover = costPct > 0 ? targetPct / costPct : 99;
+    if (cover < costMult)
+      return this.wait(['The target is only ' + cover.toFixed(1) + 'x the cost of the trade (' +
+        targetPct.toFixed(3) + '% target against ' + costPct.toFixed(3) +
+        '% spread and commission) — this bot needs ' + costMult + 'x'],
+        { model: 'Scalper', meta: { atrPct: +atrPct.toFixed(3), costPct: +costPct.toFixed(4),
+                                    targetPct: +targetPct.toFixed(4), cover: +cover.toFixed(2) } });
+
+    const W = this.SCALP_W;
+
+    const build = (dir) => {
+      const up = dir > 0;
+      const reasons = [], failed = [], soft = [], factors = {};
+      let score = 0;
+
+      /* --- 1. the micro-trend, and the only hard requirement --- */
+      const fastAbove = ema8[i] > ema21[i];
+      if (trending){
+        if (up !== fastAbove){
+          failed.push('ADX ' + adxNow.toFixed(1) + ' says a trend is running ' +
+            (fastAbove ? 'up' : 'down') + ' and this would trade against it');
+        } else {
+          score += W.trend; factors.trend = true;
+          reasons.push('EMA 8 is ' + (up ? 'above' : 'below') + ' EMA 21 and ADX is ' +
+            adxNow.toFixed(1) + ' — a real micro-trend to join');
+        }
+      } else {
+        /* flat market: fade the edge instead, so the direction is set by where
+           price sits in the range rather than by the moving averages */
+        const nearEdge = up ? (px <= bb.lo[i] + 0.25 * (bb.mid[i] - bb.lo[i]))
+                            : (px >= bb.up[i] - 0.25 * (bb.up[i] - bb.mid[i]));
+        if (!nearEdge){
+          failed.push('Flat market (ADX ' + adxNow.toFixed(1) + ') and price is not at the ' +
+            (up ? 'lower' : 'upper') + ' edge of the range, so there is nothing to fade');
+        } else {
+          score += W.trend; factors.fade = true;
+          reasons.push('ADX ' + adxNow.toFixed(1) + ' — a flat range, and price is at the ' +
+            (up ? 'bottom' : 'top') + ' of it');
+        }
+      }
+
+      /* --- 2. the slower average, as a background bias --- */
+      const htfOk = up ? px > ema50[i] : px < ema50[i];
+      if (htfOk){
+        score += W.htf; factors.htf = true;
+        reasons.push('Price is on the ' + (up ? 'upper' : 'lower') + ' side of the 50 average');
+      } else soft.push('Price is on the wrong side of the 50 average for this direction');
+
+      /* --- 3. stochastic turning out of the extreme --- */
+      const kNow = st.k[i], kPrev = st.k[i - 1];
+      const turned = up ? (kPrev < kNow && kPrev < 35) : (kPrev > kNow && kPrev > 65);
+      if (turned){
+        score += W.stoch; factors.stoch = true;
+        reasons.push('Stochastic turned ' + (up ? 'up from ' : 'down from ') + kPrev.toFixed(0));
+      } else soft.push('Stochastic has not turned out of an extreme (' + kNow.toFixed(0) + ')');
+
+      /* --- 4. a fast RSI that is stretched but not broken --- */
+      const rNow = rsi[i];
+      const rsiOk = up ? (rNow > 30 && rNow < 62) : (rNow < 70 && rNow > 38);
+      if (rsiOk){
+        score += W.rsi; factors.rsi = true;
+        reasons.push('RSI(7) at ' + rNow.toFixed(0) + ' — room left in this direction');
+      } else soft.push('RSI(7) is ' + rNow.toFixed(0) + ', too far gone for a ' + (up ? 'buy' : 'sell'));
+
+      /* --- 5. momentum bending our way --- */
+      const hNow = md.hist[i], hPrev = md.hist[i - 1];
+      const macdOk = up ? hNow > hPrev : hNow < hPrev;
+      if (macdOk){
+        score += W.macd; factors.macd = true;
+        reasons.push('MACD histogram is bending ' + (up ? 'up' : 'down'));
+      } else soft.push('MACD momentum is still going the other way');
+
+      /* --- 6. where in the band --- */
+      const width = bb.up[i] - bb.lo[i];
+      const pos = width > 0 ? (px - bb.lo[i]) / width : 0.5;
+      const bandOk = up ? pos < 0.5 : pos > 0.5;
+      if (bandOk){
+        score += W.band; factors.band = true;
+        reasons.push('Price is in the ' + (up ? 'lower' : 'upper') + ' half of the band — not chasing');
+      } else soft.push('Price is already in the ' + (up ? 'upper' : 'lower') + ' half of the band');
+
+      /* --- 7. the day's volume-weighted average --- */
+      const vw = vwap[i];
+      if (vw != null){
+        const vwapOk = up ? px >= vw * 0.999 : px <= vw * 1.001;
+        if (vwapOk){
+          score += W.vwap; factors.vwap = true;
+          reasons.push('On the ' + (up ? 'buy' : 'sell') + ' side of the day average');
+        } else soft.push('On the wrong side of the day average');
+      }
+
+      /* --- 8. the candle itself: a rejection wick where we want one --- */
+      const body = Math.abs(a.close - a.open);
+      const lowWick = Math.min(a.open, a.close) - a.low;
+      const highWick = a.high - Math.max(a.open, a.close);
+      const wick = up ? lowWick : highWick;
+      const rejected = body > 0 ? wick > body * 0.6 : wick > 0;
+      const closedOurWay = up ? a.close >= a.open : a.close <= a.open;
+      if (rejected || closedOurWay){
+        score += rejected && closedOurWay ? W.candle : Math.round(W.candle * 0.6);
+        factors.candle = true;
+        reasons.push(rejected
+          ? 'The last candle was rejected from ' + (up ? 'below' : 'above')
+          : 'The last candle closed ' + (up ? 'up' : 'down'));
+      } else soft.push('The last candle gives no support to this direction');
+
+      const sl = up ? px - slAtr * A : px + slAtr * A;
+      const tp = up ? px + tpAtr * A : px - tpAtr * A;
+      const stopDist = Math.abs(px - sl);
+      return { dir, score: Math.round(score), reasons, failed, soft, factors,
+        entry: px, sl, tp,
+        rMultiple: stopDist > 0 ? +(Math.abs(tp - px) / stopDist).toFixed(2) : 0,
+        model: trending ? 'Scalper · with the trend' : 'Scalper · fading the range',
+        meta: { adx: +adxNow.toFixed(1), atrPct: +atrPct.toFixed(3),
+                costPct: +costPct.toFixed(4), targetPct: +targetPct.toFixed(4),
+                cover: +cover.toFixed(2), rsi: +rNow.toFixed(0), stoch: +kNow.toFixed(0) } };
+    };
+
+    const long = build(1), short = build(-1);
+    const valid = [long, short].filter(x => !x.failed.length);
+    if (!valid.length){
+      const near = long.failed.length <= short.failed.length ? long : short;
+      return this.wait(near.failed, { score: near.score, near: near.dir, model: near.model,
+        reasons: near.reasons, meta: near.meta });
+    }
+    const best = valid.sort((a, b) => b.score - a.score)[0];
+    if (best.score < minScore)
+      return this.wait(['Only ' + best.score + ' of 100 confirmations agreed, below the ' +
+        minScore + ' this bot needs'].concat(best.soft || []),
+        { score: best.score, near: best.dir, model: best.model, reasons: best.reasons, meta: best.meta });
+
+    best.reasons.push('Target ' + best.meta.targetPct.toFixed(3) + '% covers the ' +
+      best.meta.costPct.toFixed(3) + '% round trip ' + best.meta.cover.toFixed(1) + ' times over');
+    return best;
+  },
+
+  meanFade(candles, cfg){
+    cfg = cfg || {};
+    const c = this.closed(candles, cfg.allowLive);
+    if (c.length < 60) return this.wait(['Not enough candles (need 60, have ' + c.length + ')']);
+    const i = c.length - 1;
+    if (i < 2) return this.wait(['Not enough closed candles']);
+
+    const bbLen = cfg.bbLen != null ? cfg.bbLen : 20;
+    const bbDev = cfg.bbDev != null ? cfg.bbDev : 2;
+    const adxMax = cfg.adxMax != null ? cfg.adxMax : 22;
+    const rsiLow = cfg.rsiLow != null ? cfg.rsiLow : 32;
+    const rsiHigh = 100 - rsiLow;
+    const stopPad = cfg.stopPad != null ? cfg.stopPad : 0.4;
+    const atrMax = cfg.atrMax != null ? cfg.atrMax : 2;
+    const minR = cfg.minR != null ? cfg.minR : 0.8;
+    const pierceBars = cfg.pierceBars != null ? Math.round(cfg.pierceBars) : 3;
+
+    const close = c.map(x => x.close);
+    const bb = IND.bb(close, bbLen, bbDev);
+    const rsi = IND.rsi(close, 14), atr = IND.atr(c, 14), adx = IND.adx(c, 14);
+    if (bb.mid[i] == null || atr[i] == null || adx.adx[i] == null || rsi[i] == null)
+      return this.wait(['Indicators still warming up']);
+
+    const a = c[i], p = c[i - 1], A = atr[i], px = a.close;
+    const atrPct = A / px * 100;
+    const adxNow = adx.adx[i];
+
+    /* the one condition it will not bend: this is a range tool */
+    if (adxNow > adxMax)
+      return this.wait(['ADX is ' + adxNow.toFixed(1) + ' — the market is trending, and fading a trend is how accounts die (needs under ' + adxMax + ')'],
+        { model: 'Mean Reversion', meta: { adx: +adxNow.toFixed(1) } });
+
+    const build = (dir) => {
+      const up = dir > 0;                       // up = buy the lower band
+      const reasons = [], failed = [], soft = [], factors = {};
+      let score = 0;
+
+      /* --- range regime (26) --- */
+      score += this.FADE_W.regime; factors.range = true;
+      reasons.push('ADX ' + adxNow.toFixed(1) + ' — a range, which is the only place this belongs');
+
+      /* --- pierce then reclaim (24) ---
+         The reclaim rarely happens on the very next candle: price tags the band,
+         hesitates for a bar or two, then turns. Requiring it immediately threw
+         away almost every real setup, so the pierce may be up to pierceBars back
+         as long as price is now back inside. */
+      const band = up ? bb.lo : bb.up;
+      let pierceAt = -1;
+      for (let k = i - 1; k >= Math.max(1, i - pierceBars); k--){
+        const hit = up ? (c[k].low < band[k]) : (c[k].high > band[k]);
+        if (hit){ pierceAt = k; break; }
+      }
+      const reclaimed = up ? (a.close > band[i]) : (a.close < band[i]);
+      if (pierceAt >= 0 && reclaimed){
+        score += this.FADE_W.reclaim; factors.reclaim = true;
+        reasons.push('Price pushed ' + (up ? 'below' : 'above') + ' the band ' +
+          (i - pierceAt === 1 ? 'on the previous candle' : (i - pierceAt) + ' candles ago') +
+          ' and has closed back inside — the extreme was rejected');
+      } else if (pierceAt < 0)
+        failed.push('Price has not reached ' + (up ? 'below' : 'above') + ' the band in the last ' + pierceBars + ' candles');
+      else failed.push('Price is still outside the band — nothing has been rejected yet');
+
+      /* --- the oscillator agrees the move was stretched (18) --- */
+      const rPrev = rsi[i - 1];
+      const stretched = up ? (rPrev <= rsiLow) : (rPrev >= rsiHigh);
+      if (stretched){
+        score += this.FADE_W.rsi; factors.rsi = true;
+        reasons.push('RSI reached ' + rPrev.toFixed(1) + ' at the extreme');
+      } else soft.push('RSI only reached ' + (rPrev == null ? '—' : rPrev.toFixed(1)) +
+        ' (' + (up ? 'under ' + rsiLow : 'over ' + rsiHigh) + ' would have scored)');
+
+      /* --- the candle itself turns (12) --- */
+      const turns = up ? this.bull(a) : this.bear(a);
+      if (turns){ score += this.FADE_W.candle; factors.candle = true;
+        reasons.push('The reclaiming candle closed ' + (up ? 'bullish' : 'bearish')); }
+      else soft.push('The reclaiming candle closed the wrong way');
+
+      /* --- is there enough room to the average to be worth it? (12) ---
+         Which SIDE of the average price sits on is mandatory: if it is already
+         past the mean there is nothing to revert to. How far away it is only
+         adds to the score. */
+      const mid = bb.mid[i];
+      const room = Math.abs(mid - px);
+      if ((up && mid > px) || (!up && mid < px)){
+        if (room >= 0.5 * A){ score += this.FADE_W.room; factors.room = true;
+          reasons.push('The average sits ' + (room / A).toFixed(2) + ' ATR away'); }
+        else soft.push('The average is only ' + (room / A).toFixed(2) + ' ATR away');
+      } else failed.push('Price is already past the average — there is nothing to revert to');
+
+      /* --- volatility sanity (8) --- */
+      if (atrPct > 0 && atrPct <= atrMax){ score += this.FADE_W.vol; factors.vol = true;
+        reasons.push('ATR is ' + atrPct.toFixed(2) + '% of price'); }
+      else soft.push('ATR is ' + atrPct.toFixed(2) + '% of price (0–' + atrMax + '% would have scored)');
+
+      let extreme = up ? Math.min(p.low, a.low) : Math.max(p.high, a.high);
+      for (let k = Math.max(0, i - pierceBars); k <= i; k++)
+        extreme = up ? Math.min(extreme, c[k].low) : Math.max(extreme, c[k].high);
+      const sl = up ? extreme - stopPad * A : extreme + stopPad * A;
+      const stopDist = Math.abs(px - sl);
+      const r = stopDist > 0 ? room / stopDist : 0;
+
+      return { dir, score: Math.round(score), reasons, failed, soft, factors,
+        entry: px, sl, tp: mid, rMultiple: +r.toFixed(2),
+        model: 'Mean Reversion',
+        meta: { adx: +adxNow.toFixed(1), rsi: +(rPrev || 0).toFixed(1), atrPct: +atrPct.toFixed(3),
+                bandDev: bbDev, toMean: +(room / A).toFixed(2), r: +r.toFixed(2) } };
+    };
+
+    /* Only two things are mandatory: the extreme really was rejected, and price
+       is on the reverting side of the average. Everything else is weighed, and
+       the score decides — the same way the pullback engine works. Making every
+       contributor a gate meant the score never mattered and the bot fired twice
+       in a thousand candles. */
+    const long = build(1), short = build(-1);
+    const valid = [long, short].filter(x => !x.failed.length);
+    if (!valid.length){
+      const near = long.failed.length <= short.failed.length ? long : short;
+      return this.wait(near.failed, { score: near.score, near: near.dir, model: near.model,
+        reasons: near.reasons, meta: near.meta });
+    }
+    const best = valid.sort((a, b) => b.score - a.score)[0];
+
+    const min = cfg.minScore != null ? cfg.minScore : 62;
+    if (best.score < min)
+      return this.wait(['Scored ' + best.score + ', below the minimum of ' + min]
+        .concat(best.soft || []),
+        { score: best.score, near: best.dir, model: best.model, reasons: best.reasons, meta: best.meta });
+
+    /* the reward has to cover the risk — a fade with a target inside the stop
+       distance is a losing trade wearing a good disguise */
+    if (best.rMultiple < minR)
+      return this.wait(['The average is only ' + best.rMultiple.toFixed(2) +
+        'R away, and this bot needs at least ' + minR + 'R'],
+        { score: best.score, near: best.dir, model: best.model, meta: best.meta });
+
+    best.reasons.push('Target is the ' + bbLen + '-period average, ' + best.rMultiple.toFixed(2) + 'R away');
+    return best;
+  },
+
+  FADE_W: { regime: 26, reclaim: 24, rsi: 18, candle: 12, room: 12, vol: 8 },
+
+  /* ================= 7. Consensus =================
+     No signal of its own. It asks the other engines what they see on this exact
+     candle and only acts when enough of them agree. A full vote is a strategy
+     that would actually have opened a trade; a half vote is one that is close but
+     short of its own threshold. The trade it takes is the best full vote's —
+     its entry, its stop, its target — because averaging incompatible stops
+     produces a position neither strategy would have wanted. */
+  CONSENSUS_MEMBERS: {
+    'Regime Pullback': (w, cfg, l, h) => STRAT.regimePullback(w, Object.assign({}, cfg, { threshold: 0 })),
+    'Candlestick': (w, cfg) => STRAT.candlestick(w, Object.assign({}, cfg, { minScore: 0, only: null })),
+    'MA ribbon + MACD': (w, cfg, l, h) => STRAT.maMacd(w, cfg, h),
+    'Mean Reversion': (w, cfg) => STRAT.meanFade(w, Object.assign({}, cfg, { minScore: 0 })),
+  },
+
+  consensus(candles, cfg, ledger, higher){
+    cfg = cfg || {};
+    const minAgree = cfg.minAgree != null ? cfg.minAgree : 2;
+    const leanScore = cfg.leanScore != null ? cfg.leanScore : 62;
+    const votes = [];
+
+    for (const [name, fn] of Object.entries(this.CONSENSUS_MEMBERS)){
+      let sig = null;
+      try { sig = fn(candles, cfg, ledger, higher); } catch(e){ continue; }
+      if (!sig) continue;
+      if (sig.dir) votes.push({ name, dir: sig.dir, score: sig.score || 0, weight: 1, sig });
+      else if (sig.near && (sig.score || 0) >= leanScore)
+        votes.push({ name, dir: sig.near, score: sig.score || 0, weight: 0.5, sig });
+    }
+    if (!votes.length)
+      return this.wait(['None of the four engines sees anything here'], { model: 'Consensus' });
+
+    const side = d => votes.filter(v => v.dir === d);
+    const longs = side(1), shorts = side(-1);
+    const weigh = list => list.reduce((a, v) => a + v.weight, 0);
+    const wl = weigh(longs), ws = weigh(shorts);
+    const dir = wl > ws ? 1 : ws > wl ? -1 : 0;
+
+    if (!dir)
+      return this.wait(['The engines are split ' + longs.length + ' long against ' + shorts.length + ' short'],
+        { model: 'Consensus', reasons: votes.map(v => v.name + ' says ' + (v.dir > 0 ? 'buy' : 'sell')) });
+
+    const agree = dir > 0 ? longs : shorts;
+    const against = dir > 0 ? shorts : longs;
+    const weight = weigh(agree);
+    const full = agree.filter(v => v.weight === 1);
+
+    const named = agree.map(v => v.name + (v.weight === 1 ? '' : ' (leaning)') +
+      ' ' + Math.round(v.score)).join(', ');
+
+    if (!full.length)
+      return this.wait(['Only leaning votes — no engine actually fired: ' + named],
+        { model: 'Consensus', near: dir, score: Math.round(weight * 30) });
+
+    if (weight < minAgree)
+      return this.wait(['Agreement is ' + weight.toFixed(1) + ' of the ' + minAgree + ' needed — ' + named],
+        { model: 'Consensus', near: dir, score: Math.round(weight / minAgree * 60),
+          reasons: agree.map(v => v.name + ' agrees') });
+
+    /* the geometry comes from the strongest engine that actually fired */
+    const lead = full.sort((a, b) => b.score - a.score)[0];
+    const base = full.reduce((a, v) => a + v.score, 0) / full.length;
+    const score = Math.min(100, Math.round(base + 6 * (weight - 1) - 8 * weigh(against)));
+
+    const min = cfg.minScore != null ? cfg.minScore : 70;
+    if (score < min)
+      return this.wait(['Consensus scored ' + score + ', below the minimum of ' + min],
+        { score, near: dir, model: 'Consensus', reasons: agree.map(v => v.name + ' agrees') });
+
+    return {
+      dir, score,
+      entry: lead.sig.entry, sl: lead.sig.sl, tp: lead.sig.tp, tp1: lead.sig.tp1 || null,
+      model: 'Consensus (' + full.length + '/' + Object.keys(this.CONSENSUS_MEMBERS).length + ')',
+      reasons: ['Agreement ' + weight.toFixed(1) + ': ' + named]
+        .concat(against.length ? ['Against it: ' + against.map(v => v.name).join(', ')] : [])
+        .concat(['Risk taken from ' + lead.name + ', the strongest of them'])
+        .concat(lead.sig.reasons || []),
+      failed: [],
+      factors: Object.assign({ consensus: true },
+        agree.reduce((a, v) => { a['agrees:' + v.name] = true; return a; }, {})),
+      meta: { agreement: +weight.toFixed(1), lead: lead.name,
+              voted: votes.map(v => v.name + ':' + (v.dir > 0 ? '+' : '-') + Math.round(v.score)).join(' '),
+              leadMeta: lead.sig.meta || {} },
+    };
+  },
+
+  /* ================= 8. Pattern Pro =================
+     Trades the SAME detector the chart draws with (PAT), so every marker you see
+     is something this bot can act on — hammer, shooting star, engulfing, morning
+     and evening star, tweezers, three soldiers and crows.
+
+     What separates it from the older candlestick bot is that the patterns are
+     WEIGHTED BY MEASURED EDGE, not by reputation. Measured over ~2,800
+     occurrences across 8 instruments and 2 timeframes, the average forward move
+     10 bars later, in the pattern’s own direction, in ATR units:
+
+         Hammer            +0.38     Bullish engulfing  +0.05
+         Morning star      +0.27     Bearish engulfing  +0.04
+         Three crows       +0.23     Shooting star      +0.03
+         Evening star      +0.12     Tweezer bottom     -0.05
+         Tweezer top       +0.09     Three soldiers     -0.41
+
+     Two of those are worth dwelling on. The engulfing patterns — the ones the
+     original bots trade — are statistically almost nothing. And Three Soldiers,
+     which every textbook calls strongly bullish, was the worst performer in the
+     set: following it lost money consistently. It is refused here.
+
+     Win rates are all close to 50%. That is expected and not a problem: the edge
+     is in how far the move goes, not in how often it goes the right way. */
+  PATTERN_EDGE: {
+    'Hammer':            { edge: 0.38, n: 72 },
+    'Morning star':      { edge: 0.27, n: 274 },
+    'Three crows':       { edge: 0.23, n: 119 },
+    'Evening star':      { edge: 0.12, n: 304 },
+    'Tweezer top':       { edge: 0.09, n: 288 },
+    'Bullish engulfing': { edge: 0.05, n: 619 },
+    'Bearish engulfing': { edge: 0.04, n: 678 },
+    'Shooting star':     { edge: 0.03, n: 63 },
+    'Tweezer bottom':    { edge: -0.05, n: 221 },
+    'Three soldiers':    { edge: -0.41, n: 154 },
+  },
+
+  patternPro(candles, cfg){
+    cfg = cfg || {};
+    const c = this.closed(candles, cfg.allowLive);
+    if (c.length < 60) return this.wait(['Not enough candles']);
+    const i = c.length - 1;
+
+    const minEdge = cfg.minEdge != null ? cfg.minEdge : 0.05;
+    const stopPad = cfg.stopPad != null ? cfg.stopPad : 0.25;
+    const rr = cfg.rr != null ? cfg.rr : 1.5;
+    const atrMax = cfg.atrMax != null ? cfg.atrMax : 2.5;
+
+    if (typeof PAT === 'undefined') return this.wait(['Pattern detector unavailable']);
+    const found = PAT.at(c, i).filter(p => p.dir !== 0);
+    if (!found.length) return this.wait(['No pattern on the last closed candle'], { model: 'Pattern Pro' });
+
+    /* keep only patterns this bot is allowed to trade AND that measured positive */
+    const allow = cfg.patterns && cfg.patterns.length ? cfg.patterns : null;
+    const usable = found
+      .map(p => ({ p, e: (this.PATTERN_EDGE[p.name] || { edge: 0 }).edge }))
+      .filter(x => (!allow || allow.includes(x.p.name)) && x.e >= minEdge)
+      .sort((a, b) => b.e - a.e);
+
+    if (!usable.length){
+      const names = found.map(p => p.name).join(', ');
+      const worst = found.map(p => (this.PATTERN_EDGE[p.name] || {}).edge).filter(e => e != null);
+      return this.wait([names + ' — ' + (worst.some(e => e < 0)
+        ? 'measured NEGATIVE historically, so it is refused'
+        : 'below the minimum measured edge of ' + minEdge + ' ATR')], { model: 'Pattern Pro' });
+    }
+
+    const best = usable[0];
+    const pat = best.p;
+    const close = c.map(x => x.close);
+    const e20 = IND.ema(close, 20), e50 = IND.ema(close, 50), atr = IND.atr(c, 14);
+    if (atr[i] == null || e50[i] == null) return this.wait(['Indicators still warming up']);
+
+    const A = atr[i], a = c[i], p1 = c[i - 1], px = a.close;
+    const atrPct = A / px * 100;
+    const reasons = [], failed = [], factors = {};
+    factors['pattern:' + pat.name] = true;
+
+    /* the measured edge IS the base score, scaled onto 0-100 */
+    let score = 40 + best.e * 100;
+    reasons.push(pat.name + ' — measured +' + best.e.toFixed(2) +
+      ' ATR average move over the following 10 candles (' +
+      (this.PATTERN_EDGE[pat.name] || {}).n + ' occurrences)');
+
+    const trendUp = e20[i] > e50[i];
+    const agrees = (pat.dir > 0 && trendUp) || (pat.dir < 0 && !trendUp);
+    if (agrees){ score += 14; factors.trendAgrees = true;
+      reasons.push('Direction agrees with the EMA20/EMA50 trend'); }
+    else if (cfg.trendOnly)
+      return this.wait([pat.name + ' fights the trend and this bot only trades with it'], { score, model: 'Pattern Pro' });
+    else { score -= 8; reasons.push('Direction fights the EMA20/EMA50 trend'); }
+
+    const bodyStrength = Math.min(1, this.body(a) / this.range(a));
+    score += bodyStrength * 8;
+    reasons.push('Body fills ' + Math.round(bodyStrength * 100) + '% of the candle');
+
+    const spread = cfg.spread != null ? cfg.spread : px * 0.0002;
+    const spreadPct = spread / px * 100;
+    score -= Math.min(12, spreadPct * 60);
+
+    if (!(atrPct > 0 && atrPct <= atrMax))
+      failed.push('ATR ' + atrPct.toFixed(2) + '% is outside the tradable band');
+
+    const min = cfg.minScore != null ? cfg.minScore : 55;
+    if (failed.length) return this.wait(failed, { score: Math.round(score), model: 'Pattern Pro' });
+    if (score < min)
+      return this.wait(['Scored ' + Math.round(score) + ', below the minimum of ' + min],
+        { score: Math.round(score), near: pat.dir, model: 'Pattern Pro', reasons });
+
+    /* the stop clears the whole formation, not just the signal candle */
+    const lo = Math.min(a.low, p1.low), hiP = Math.max(a.high, p1.high);
+    const sl = pat.dir > 0 ? lo - stopPad * A : hiP + stopPad * A;
+    const stopDist = Math.abs(px - sl);
+    if (!(stopDist > 0)) return this.wait(['Stop distance is zero'], { model: 'Pattern Pro' });
+
+    return {
+      dir: pat.dir, score: Math.round(score), entry: px, sl,
+      tp: pat.dir > 0 ? px + rr * stopDist : px - rr * stopDist,
+      model: 'Pattern Pro · ' + pat.name,
+      reasons, failed: [], factors,
+      meta: { pattern: pat.name, measuredEdge: best.e, atrPct: +atrPct.toFixed(3),
+              alsoFound: found.map(x => x.name).join(', ') },
+    };
   },
 };
 

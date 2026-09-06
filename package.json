@@ -1,0 +1,14 @@
+{
+  "name": "astra-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ASTRA — markets terminal, charts, indicators and paper-trading bots",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node server/astra-api.cjs",
+    "desktop": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.3.3"
+  }
+}

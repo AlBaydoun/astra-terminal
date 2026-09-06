@@ -72,6 +72,12 @@ const Feed = {
                       balance: j.balance, currency: j.currency };
       this.buildAliases();
       this.bridgeMisses = 0;
+      /* the account — balance, currency and LEVERAGE — used to arrive only as a
+         side effect of loading contract specs, which early-returns once they are
+         cached. So anything asking "what margin does this need" got nothing for
+         the first minute after a reload, and silently fell back to a different
+         answer. Ask for it the moment the bridge answers. */
+      if (!was) this.loadAccount();
       if (!was){ toast('MT5 bridge connected — live broker prices' + (j.server ? ' (' + j.server + ')' : ''), 'ok'); BUS.emit('feed'); }
     } catch(e){
       this.bridgeMisses++;
@@ -79,6 +85,18 @@ const Feed = {
     }
   },
   bridgeOn(){ return !!this.bridge; },
+
+  /* balance, currency and leverage, straight from MetaTrader */
+  async loadAccount(){
+    if (!this.bridge) return null;
+    try {
+      const r = await fetch(this.BRIDGE_URL + '/specs?symbols=', { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (j.account){ this.account = j.account; BUS.emit('feed'); }
+      return this.account;
+    } catch(e){ return null; }
+  },
 
   /* ---------- broker symbol naming ----------
      The same instrument is named differently on different account types. On this
@@ -234,6 +252,61 @@ const Feed = {
       const j = await r.json();
       return j.results || [];
     } catch(e){ return []; }
+  },
+
+  /* ================= live-only mode =================
+     Trading on a delayed price is genuinely dangerous: the number on screen is
+     not the number you would be filled at. With this on, anything that is not on
+     a real-time feed is hidden from the lists and refused by the bots outright —
+     not merely warned about.
+
+     A price counts as live only when it comes from your own MT5 terminal or from
+     an exchange's real-time stream, AND the last tick is recent. Nothing else. */
+  liveOnly: lsGet('astra_liveonly', true) !== false,
+
+  setLiveOnly(on){
+    this.liveOnly = !!on;
+    lsSet('astra_liveonly', this.liveOnly);
+    BUS.emit('feed');
+    if (typeof toast === 'function')
+      toast(this.liveOnly
+        ? 'Live-only mode ON — delayed instruments are hidden and cannot be traded'
+        : 'Live-only mode OFF — delayed instruments are shown again', this.liveOnly ? 'ok' : 'warn');
+  },
+
+  /* the single source of truth the rest of the app asks */
+  isLive(sym){
+    const src = this.srcOf[sym] || this.route(sym).kind;
+    if (src !== 'bridge' && src !== 'binance') return false;
+    const t = this.quoteTime[sym];
+    /* a stream that has gone quiet is not live either */
+    return t ? (Date.now() / 1000 - t) < 180 : true;
+  },
+
+  /* may this symbol be traded at all right now? */
+  tradable(sym){
+    if (!this.liveOnly) return { ok: true };
+    if (this.isLive(sym)) return { ok: true };
+    const st = this.status(sym);
+    const name = baseAsset(sym);
+    /* the advice has to match the actual situation: a broker symbol needs the
+       bridge, but a public-feed symbol is simply not something to trade live */
+    if (st.label === '—')
+      return { ok: false, why: name + ' has no live price at all — live-only mode refuses it.' +
+        (this.bridge ? ' Use your broker’s own symbol for this market.' : ' Start the MT5 bridge.') };
+    if (!this.bridge && (typeof BROKER !== 'undefined' && BROKER.is(sym)))
+      return { ok: false, why: name + ' is ' + st.label.toLowerCase() +
+        ' — live-only mode refuses it. Start START-MT5-Bridge.bat for live JustMarkets prices.' };
+    return { ok: false, why: name + ' is ' + st.label.toLowerCase() +
+      ' and is not on a real-time feed — live-only mode refuses it.' };
+  },
+
+  /* how much of the board is actually live right now */
+  liveSummary(list){
+    const syms = list || [...STORE.tickers.keys()];
+    const live = syms.filter(s => this.isLive(s));
+    return { total: syms.length, live: live.length, hidden: syms.length - live.length,
+             bridge: !!this.bridge };
   },
 
   /* ---------- how fresh is this price, honestly ---------- */

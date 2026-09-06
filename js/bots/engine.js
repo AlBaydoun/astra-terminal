@@ -1,10 +1,13 @@
 /* ASTRA Terminal — bot core: risk engine, paper ledger and virtual execution.
    ------------------------------------------------------------------------
-   EVERY bot in this file is PAPER ONLY. Nothing here can reach a broker: there is
-   no order function, no credential, no write path to MetaTrader. The MT5 link is
-   read-only market data. Live trading would need a separate, deliberately built
-   server component with its own approval — it does not exist and cannot be
-   switched on from the interface.
+   EVERYTHING IN THIS FILE IS PAPER. There is no order function here, no
+   credential and no write path to MetaTrader; this engine only ever moves
+   numbers in a local ledger.
+
+   Real orders live in exactly one other place — js/bots/live.js — which is off
+   by default and needs four separate gates opened by hand, and which talks to a
+   bridge that must itself have been started in trading mode. Nothing in this
+   file can reach it, and nothing here behaves differently when a bot is armed.
 
    Past results — backtested or paper — never guarantee future profit. */
 const BotEngine = {
@@ -21,13 +24,14 @@ const BotEngine = {
     minEquity: 100,           // stop trading below this equity
     maxSpreadAtrPct: 25,      // reject if spread eats >25% of the stop distance
     maxSpreadPct: 0.10,       // reject if spread > 0.10% of price
+    maxSpreadManualPct: 1.5,  // a trade you place by hand may cross a wider spread
     staleQuoteSec: 180,       // reject on quotes older than this
     /* Costs are modelled per side of the trade. 0.1% is a realistic exchange
        taker fee; JustMarkets CFDs are mostly spread-only, so set this lower for
        those bots. Getting this number wrong changes everything: with tight stops
        the position is large, so a fee that is 2x too high can turn a break-even
        strategy into a clear loser on paper. */
-    commissionPct: 0.001,     // per side, % of notional
+    commissionPct: 0.003,     // PERCENT per side (0.003 = 0.003%), see commissionFrac
     slippagePct: 0.005,       // per side, % of price
     timeLimitBars: 240,       // give up on a trade after this many bars
     startEquity: 10000,
@@ -67,9 +71,42 @@ const BotEngine = {
   /* ---------- risk gates ----------
      Returns {ok:true, ...sizing} or {ok:false, reason}. Every rejection is
      explainable — the bot shows exactly which gate stopped it. */
+  /* ---------- what a trade really costs ----------
+     Everything in this app states a cost as a PERCENT: spreadPct 0.006 means
+     0.006%, and slippagePct is divided by 100 at every use. commissionPct was
+     the one exception — it was multiplied straight into the notional, so the
+     default 0.001 charged 0.1% a side and the broker table's 0.003 charged
+     0.3%. The real figure on this account is 0.003% a side on FX, metals and
+     energy, and ZERO on indices and crypto: between 33 and 100 times less than
+     what was being taken out of every paper trade.
+
+     It also has to be per instrument. Charging an index the FX commission is
+     wrong in the direction that matters most to a scalper, where the cost IS
+     the strategy. */
+  commissionFrac(sym, R){
+    let pct = R && R.commissionPct != null ? R.commissionPct : 0.003;
+    if (sym && typeof BROKER !== 'undefined' && BROKER.costsFor){
+      const c = BROKER.costsFor(sym);
+      if (c && c.commissionPct != null) pct = c.commissionPct;
+    }
+    return Math.max(0, pct) / 100;
+  },
+
+  /* spread + both commissions, as a fraction of price — the hurdle any target
+     has to clear before a trade can make money at all */
+  roundTripCost(sym, quote){
+    const px = quote && quote.price > 0 ? quote.price : 0;
+    const spreadFrac = (px > 0 && quote.spread > 0) ? quote.spread / px : 0;
+    return spreadFrac + 2 * this.commissionFrac(sym, this.RISK);
+  },
+
   check(ledger, cfg, sig, quote){
     const R = Object.assign({}, this.RISK, cfg.risk || {});
-    const now = Date.now();
+    /* In a backtest "now" is the time of the bar being replayed, not the real
+       clock. Without this the daily-loss lock was set to tonight's real midnight
+       and never expired, so the first bad day silently locked out the entire
+       remainder of every backtest. */
+    const now = cfg.nowTs || Date.now();
 
     if (ledger.equity < R.minEquity)
       return { ok: false, reason: 'Equity ' + fmtNum(ledger.equity) + ' is below the minimum of ' + R.minEquity };
@@ -77,9 +114,9 @@ const BotEngine = {
     if (ledger.lockedUntil > now)
       return { ok: false, reason: 'Daily loss limit reached — locked until ' + new Date(ledger.lockedUntil).toLocaleTimeString() };
 
-    const day = ledger.daily[this.dayKey()] || { pnl: 0 };
+    const day = ledger.daily[this.dayKey(now)] || { pnl: 0 };
     if (day.pnl < -(ledger.startEquity * R.maxDailyLossPct / 100)){
-      const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
+      const midnight = new Date(now); midnight.setHours(24, 0, 0, 0);
       ledger.lockedUntil = midnight.getTime();
       return { ok: false, reason: 'Daily loss limit of ' + R.maxDailyLossPct + '% hit — no more entries today' };
     }
@@ -96,17 +133,33 @@ const BotEngine = {
     if (quote.ageSec != null && quote.ageSec > R.staleQuoteSec)
       return { ok: false, reason: 'Quote is stale (' + Math.round(quote.ageSec) + 's old, limit ' + R.staleQuoteSec + 's)' };
 
+    /* Live-only. A delayed price is not a price you can be filled at, so in this
+       mode an instrument that is not on a real-time feed is refused outright
+       rather than merely flagged. This is the last gate before sizing. */
+    if (typeof Feed !== 'undefined' && Feed.liveOnly && !cfg.allowDelayed){
+      const t = Feed.tradable(sig.sym);
+      if (!t.ok) return { ok: false, reason: t.why };
+    }
+
     if (!sig.sl || !(Math.abs(sig.entry - sig.sl) > 0))
       return { ok: false, reason: 'No stop-loss — an entry without a stop is never allowed' };
 
     const spread = quote.spread != null ? quote.spread : quote.price * 0.0002;
     const spreadPct = spread / quote.price * 100;
-    if (spreadPct > R.maxSpreadPct)
-      return { ok: false, reason: 'Spread ' + spreadPct.toFixed(3) + '% is above the limit of ' + R.maxSpreadPct + '%' };
+    /* A hand-placed trade is a decision already taken, so it gets a wider
+       absolute ceiling. The 0.10% limit is meant for tight majors and was
+       refusing EVERY manual entry on platinum, whose normal spread is 0.11%.
+       The PROPORTIONAL test below still applies to everyone, and it is the one
+       that matters: the spread against the distance to the stop, not the price. */
+    const spreadCap = sig.manual ? (R.maxSpreadManualPct || 1.5) : R.maxSpreadPct;
+    if (spreadPct > spreadCap)
+      return { ok: false, reason: 'Spread ' + spreadPct.toFixed(3) + '% is above the limit of ' + spreadCap + '%' };
 
     const stopDist = Math.abs(sig.entry - sig.sl);
     if (spread / stopDist * 100 > R.maxSpreadAtrPct)
-      return { ok: false, reason: 'Spread is ' + (spread / stopDist * 100).toFixed(0) + '% of the stop distance (limit ' + R.maxSpreadAtrPct + '%)' };
+      return { ok: false, reason: 'Spread is ' + (spread / stopDist * 100).toFixed(0) +
+        '% of the stop distance (limit ' + R.maxSpreadAtrPct + '%) — the stop needs to be at least ' +
+        fmtPrice(spread * 100 / R.maxSpreadAtrPct) + ' away, or leave it empty and one will be placed for you' };
 
     const riskCash = ledger.equity * R.riskPct / 100;
 
@@ -151,7 +204,7 @@ const BotEngine = {
     const slipped = quote.price * (1 + dir * R.slippagePct / 100);
     const fill = slipped + dir * (gate.spread / 2);        // buy at ask, sell at bid
     const notional = gate.qty * fill;
-    const feeIn = notional * R.commissionPct;
+    const feeIn = notional * this.commissionFrac(sig.sym, R);
 
     const pos = {
       id: ledger.seq++,
@@ -160,7 +213,7 @@ const BotEngine = {
       sl: sig.sl, tp: sig.tp, tp1: sig.tp1 || null, tp1Done: false, beMoved: false,
       score: sig.score, reasons: sig.reasons || [], model: sig.model || '',
       feeIn, fees: feeIn, slippage: Math.abs(fill - quote.price) * gate.qty,
-      riskCash: gate.riskCash, stopDist: gate.stopDist,
+      riskCash: gate.riskCash, stopDist: gate.stopDist, slInit: sig.sl, peak: null, trailed: false,
       mfe: 0, mae: 0, note: sig.note || '',
       barsHeld: 0, timeLimitBars: cfg.timeLimitBars || R.timeLimitBars,
       factors: sig.factors || {}, meta: sig.meta || {}, state: sig.state || null,
@@ -169,7 +222,7 @@ const BotEngine = {
     ledger.equity -= feeIn;
     this.note(ledger, 'entry',
       (dir > 0 ? 'BUY ' : 'SELL ') + baseAsset(sig.sym) + ' ' + sig.tf + ' @ ' + fmtPrice(fill) +
-      ' · stop ' + fmtPrice(sig.sl) + ' · target ' + fmtPrice(sig.tp) +
+      ' · stop ' + fmtPrice(sig.sl) + ' · target ' + (sig.tp ? fmtPrice(sig.tp) : 'none') +
       ' · size ' + (gate.lots ? gate.lots + ' lot' : (+gate.qty.toPrecision(4))) +
       ' · risk ' + fmtNum(gate.riskCash),
       { sym: sig.sym, tf: sig.tf, score: sig.score, reasons: sig.reasons });
@@ -196,14 +249,50 @@ const BotEngine = {
     pos.unreal = (px - pos.entry) * dir * pos.qty - pos.fees;
 
     const hitStop = dir > 0 ? lo <= pos.sl : hi >= pos.sl;
-    const hitTp   = dir > 0 ? hi >= pos.tp : lo <= pos.tp;
+    /* a position may deliberately run with no target. Without this guard
+       `hi >= null` reads as `hi >= 0` and closes it on the very next tick. */
+    const hitTp   = pos.tp ? (dir > 0 ? hi >= pos.tp : lo <= pos.tp) : false;
     const hitTp1  = pos.tp1 && !pos.tp1Done && (dir > 0 ? hi >= pos.tp1 : lo <= pos.tp1);
 
-    if (hitStop) return this.close(ledger, cfg, pos, pos.sl, pos.beMoved ? 'stop at breakeven' : 'stop-loss');
+    if (hitStop) return this.close(ledger, cfg, pos, pos.sl,
+      pos.trailed ? 'trailing stop' : pos.beMoved ? 'stop at breakeven' : 'stop-loss');
+
+    /* ---- ratchet trailing stop (opt-in via cfg.trail) ----
+       Expressed in R, not in percent, so it means the same thing on gold as on
+       oil. Once the trade is `start` R in front, the stop follows the best price
+       reached, staying `gap` R behind it, and only ever moves in your favour.
+
+       The trade-off is real and worth stating: a trail converts a high win rate
+       into a lower one with bigger winners. Most trades give a little back at
+       the end; the occasional runner pays for them. */
+    /* A trail can now be set on ONE position from the Open Trades page, which
+       overrides whatever the bot itself does: pos.trail = {start, gap} switches
+       it on for this trade alone, pos.trail = null switches a bot-level trail
+       off for this trade alone, and leaving it undefined inherits the bot. */
+    const trail = (pos.trail !== undefined) ? pos.trail : cfg.trail;
+    if (trail && pos.riskCash > 0){
+      const R1 = pos.stopDist || Math.abs(pos.entry - pos.slInit || pos.sl);
+      if (R1 > 0){
+        const best = dir > 0 ? hi : lo;
+        pos.peak = pos.peak == null ? best : (dir > 0 ? Math.max(pos.peak, best) : Math.min(pos.peak, best));
+        const gainR = (pos.peak - pos.entry) * dir / R1;
+        const startR = trail.start != null ? trail.start : 1;
+        const gapR = trail.gap != null ? trail.gap : 0.5;
+        if (gainR >= startR){
+          const want = pos.peak - dir * gapR * R1;
+          /* never widen a stop, only tighten it */
+          if (dir > 0 ? want > pos.sl : want < pos.sl){
+            pos.sl = want;
+            pos.trailed = true;
+            pos.beMoved = true;
+          }
+        }
+      }
+    }
     if (hitTp1){
       /* bank half at 1R and protect the rest */
       const half = pos.qty / 2;
-      const feeOut = half * pos.tp1 * R.commissionPct;
+      const feeOut = half * pos.tp1 * this.commissionFrac(pos.sym, R);
       const pnl = (pos.tp1 - pos.entry) * dir * half - feeOut;
       pos.qty -= half;
       pos.fees += feeOut;
@@ -227,7 +316,7 @@ const BotEngine = {
     const R = Object.assign({}, this.RISK, cfg.risk || {});
     const dir = pos.dir;
     const slipped = price * (1 - dir * R.slippagePct / 100);
-    const feeOut = pos.qty * slipped * R.commissionPct;
+    const feeOut = pos.qty * slipped * this.commissionFrac(pos.sym, R);
     const pnl = (slipped - pos.entry) * dir * pos.qty - feeOut + (pos.partialPnl || 0);
     const fees = pos.fees + feeOut;
 
@@ -240,6 +329,9 @@ const BotEngine = {
       entryTime: pos.entryTime, exitTime: Date.now(),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       sl: pos.sl, tp: pos.tp, fees: +fees.toFixed(4), slippage: +(pos.slippage || 0).toFixed(4),
+      /* a trade whose levels were moved by hand is marked, so a bot's measured
+         record never silently includes trades the strategy did not run itself */
+      touched: !!pos.touched, edits: pos.edits ? pos.edits.length : 0,
       pnl: +pnl.toFixed(4), r: pos.riskCash ? +(pnl / pos.riskCash).toFixed(2) : 0,
       mfe: +pos.mfe.toFixed(4), mae: +pos.mae.toFixed(4),
       reason, reasons: pos.reasons, score: pos.score, note: pos.note,
@@ -247,7 +339,7 @@ const BotEngine = {
     };
     ledger.closed.unshift(rec);
 
-    const dk = this.dayKey();
+    const dk = this.dayKey(cfg.nowTs || Date.now());
     const d = ledger.daily[dk] = ledger.daily[dk] || { pnl: 0, wins: 0, losses: 0, fees: 0 };
     d.pnl += rec.pnl; d.fees += rec.fees;
     pnl >= 0 ? d.wins++ : d.losses++;

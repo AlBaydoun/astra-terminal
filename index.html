@@ -12,7 +12,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script>document.documentElement.dataset.theme = localStorage.getItem('astra_theme') || 'dark';</script>
+<script>document.documentElement.dataset.theme = localStorage.getItem('astra_theme') || 'dark';
+/* a torn-off window shows one panel only — set before the first paint so nothing flashes */
+(function(){ var p = new URLSearchParams(location.search).get('panel');
+  if (p) document.documentElement.dataset.panel = p; })();</script>
 <link rel="stylesheet" href="css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>if(!window.LightweightCharts) document.write('<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"><\/script>');</script>
@@ -88,6 +91,13 @@
       <button data-l="4"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/></svg></button>
     </div>
     <div class="spacer"></div>
+    <button class="tbtn" id="winBtn" title="Open a panel in its own window (for a second or third monitor)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="12" height="10" rx="1"/><path d="M9 18h11a1 1 0 0 0 1-1V9"/></svg>
+      Windows
+    </button>
+    <button class="tbtn" id="maxBtn" title="Maximise the chart (M) — hide everything else">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+    </button>
     <button class="tbtn" id="shotBtn" title="Screenshot the chart (saved to Downloads)">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
     </button>
@@ -116,9 +126,25 @@
       <button data-tool="hline" title="Horizontal line (1 click)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/></svg>
       </button>
+      <button data-tool="vline" title="Vertical line (1 click) — mark a moment">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      </button>
       <button data-tool="fib" title="Fibonacci retracement (2 clicks)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="3" y1="5" x2="21" y2="5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="19" x2="21" y2="19"/></svg>
       </button>
+      <button data-tool="long" title="Long position — entry, stop, target with reward:risk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1" opacity="0.55"/><path d="M12 4v16"/></svg>
+      </button>
+      <button data-tool="short" title="Short position — entry, stop, target with reward:risk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="13" width="18" height="7" rx="1"/><rect x="3" y="4" width="18" height="7" rx="1" opacity="0.55"/><path d="M12 4v16"/></svg>
+      </button>
+      <button data-tool="forecast" title="Forecast — project a move and read the % and bars">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18l6-6 4 3 8-9"/><path d="M17 6h4v4"/></svg>
+      </button>
+      <button data-tool="barspattern" title="Bars pattern — copy a stretch of candles and place it elsewhere">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6v12M6 8h0M10 4v16M14 7v10M18 5v14"/><rect x="4" y="9" width="4" height="6"/><rect x="12" y="10" width="4" height="5"/></svg>
+      </button>
+      <div class="tsep"></div>
       <button data-tool="measure" title="Measure — click two points for the move, %, bars and time">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12l10-10 10 10-10 10z"/><path d="M7 12h2M11 12h2M15 12h2"/></svg>
       </button>
@@ -148,6 +174,12 @@
         <div id="mainWrap">
           <div id="mainChart"></div>
           <canvas id="drawLayer"></canvas>
+          <div id="drawBar">
+            <span class="dbName"></span>
+            <button data-db="edit" title="Settings">⚙</button>
+            <button data-db="copy" title="Duplicate">⧉</button>
+            <button data-db="del" class="danger" title="Remove (Delete key)">✕</button>
+          </div>
           <div id="legend"></div>
           <div id="indLegend"></div>
           <div id="cmpChips"></div>
@@ -406,6 +438,49 @@
   </div>
 </div>
 
+<div class="modal" id="miniIndModal">
+  <div class="mBox">
+    <div class="mHead"><span id="miniIndTitle">CHART</span> <span>INDICATORS</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div class="indHint">Indicators for this split chart only — the main chart keeps its own. Right-click the chart for the same list, plus the quick switches.</div>
+      <div id="miniIndList"></div>
+      <div class="ipBtns">
+        <button class="mPrimary" id="miniIndApply">APPLY</button>
+        <button class="bMini" id="miniIndSame">Copy from main chart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ctxMenu"></div>
+<div id="winMenu"></div>
+
+<div class="modal" id="drawPropModal">
+  <div class="mBox mNarrow">
+    <div class="mHead"><span id="drawPropTitle">DRAWING</span> <span>SETTINGS</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div id="drawPropBody"></div>
+      <div class="ipBtns">
+        <button class="mPrimary" id="drawPropApply">APPLY</button>
+        <button class="bMini" id="drawPropDelete">Remove from chart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="indPropModal">
+  <div class="mBox">
+    <div class="mHead"><span id="indPropTitle">INDICATOR</span> <span>PROPERTIES</span><button class="mClose">×</button></div>
+    <div class="mBody">
+      <div id="indPropBody"></div>
+      <div class="ipBtns">
+        <button class="mPrimary" id="indPropApply">APPLY</button>
+        <button class="bMini" id="indPropRemove">Remove from chart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="mktModal">
   <div class="mBox mWide">
     <div class="mHead">MARKETS <span>WHAT I WATCH</span><button class="mClose">×</button></div>
@@ -497,8 +572,20 @@
 <script src="js/bots/engine.js"></script>
 <script src="js/bots/strategies.js"></script>
 <script src="js/bots/backtest.js"></script>
+<script src="js/bots/pairrules.js"></script>
 <script src="js/bots/bots.js"></script>
+<script src="js/bots/lab.js"></script>
+<script src="js/bots/xlsx.js"></script>
+<script src="js/bots/reports.js"></script>
+<script src="js/bots/dashboard.js"></script>
+<script src="js/bots/opentrades.js"></script>
+<script src="js/bots/live.js"></script>
 <script src="js/bots/botsui.js"></script>
+<script src="js/bots/liveui.js"></script>
+<script src="js/bots/marketfit.js"></script>
+<script src="js/bots/auto.js"></script>
+<script src="js/strategyIndicators.js"></script>
+<script src="js/popout.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

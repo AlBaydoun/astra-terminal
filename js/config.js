@@ -24,8 +24,14 @@ const BUS = {
 const STORE = {
   tickers: new Map(),   // symbol -> {last, open, high, low, vol, quoteVol, pct, count}
   universe: [],         // USDT symbols sorted by quote volume
-  symbol: localStorage.getItem('astra_symbol') || CFG.DEFAULT_SYMBOL,
-  tf: localStorage.getItem('astra_tf') || CFG.DEFAULT_TF,
+  /* a torn-off window is opened with its own symbol in the address, so three
+     monitors can watch three different instruments */
+  symbol: (new URLSearchParams(location.search).get('panel')
+    ? new URLSearchParams(location.search).get('symbol') : null)
+    || localStorage.getItem('astra_symbol') || CFG.DEFAULT_SYMBOL,
+  tf: (new URLSearchParams(location.search).get('panel')
+    ? new URLSearchParams(location.search).get('tf') : null)
+    || localStorage.getItem('astra_tf') || CFG.DEFAULT_TF,
   chartType: localStorage.getItem('astra_ctype') || 'candles',
   theme: localStorage.getItem('astra_theme') || 'dark',   // dark is the default
 };

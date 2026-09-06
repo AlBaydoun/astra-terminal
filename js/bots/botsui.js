@@ -18,30 +18,90 @@ Object.assign(Bots, {
   render(){
     const host = document.getElementById('botBody');
     if (!host) return;
-    const b = BOT_BY_ID[this.active];
-    const cfg = this.cfg(b.id);
-    const L = this.ledger(b.id);
+    const b = BOT_BY_ID[this.active] || BOTS[0];
+    if (!b) return;
+    /* a bot can exist before its ledger does — during boot, or when the Strategy
+       Lab mounts one mid-session. Render an empty ledger rather than throwing. */
+    const cfg = this.cfg(b.id) || Object.assign({}, b.defaults);
+    const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
 
+    const keep = this.snapshotForm(host);
     host.innerHTML =
       `<div class="botHead">
          <div class="botTitle"><b>${esc(b.name)}</b><span>${esc(b.blurb)}</span></div>
-         <span class="paperTag" title="No part of this application can send an order to a broker">PAPER ONLY</span>
+         ${b.live
+           ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
+           : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
        </div>` +
       this.controls(b, cfg) +
-      (b.brain ? this.brainView() : b.scan ? this.scannerView() : b.manual ? this.manualView(L, st) : this.botView(b, L, st));
+      (b.dash ? BotDash.view()
+        : b.trades ? OpenTrades.view()
+        : b.fit ? this.fitView()
+        : b.live ? this.liveView()
+        : b.report ? BotReports.view()
+        : b.brain ? this.brainView()
+        : b.scan ? this.scannerView()
+        : b.manual ? this.manualView(L, st)
+        : this.botView(b, L, st));
 
     this.bind(b);
+    this.restoreForm(keep);
+  },
+
+  /* ---------- keep what is half-typed ----------
+     Bots.tick() rebuilds this whole page every 30 seconds. Without this, an
+     amount, a stop or a note being typed into the manual form was wiped
+     mid-sentence — and the fund slider snapped back to zero — for no reason the
+     user could see. The values and the caret are put back after the redraw. */
+  FORM_IDS: ['mbAmt', 'mbQty', 'mbSl', 'mbTp', 'mbNote', 'mbPct'],
+
+  snapshotForm(host){
+    const out = { vals: {}, focus: null, a: null, b: null };
+    for (const id of this.FORM_IDS){
+      const el = host.querySelector('#' + id);
+      if (el) out.vals[id] = el.value;
+    }
+    const el = document.activeElement;
+    if (el && el.id && this.FORM_IDS.indexOf(el.id) !== -1){
+      out.focus = el.id;
+      try { out.a = el.selectionStart; out.b = el.selectionEnd; } catch(e){}
+    }
+    return out;
+  },
+
+  restoreForm(keep){
+    if (!keep || !Object.keys(keep.vals).length) return;
+    for (const id of Object.keys(keep.vals)){
+      const v = keep.vals[id];
+      const el = document.getElementById(id);
+      if (el && v !== '' && v != null) el.value = v;
+    }
+    if (keep.focus){
+      const el = document.getElementById(keep.focus);
+      if (el){
+        el.focus();
+        try { if (keep.a != null) el.setSelectionRange(keep.a, keep.b); } catch(e){}
+      }
+    }
+    this.manualCalc();
   },
 
   controls(b, cfg){
+    if (b.trades) return '<div class="botCtl"><span class="bcNote">Every position that is live right now, across every bot. Move the stop, set or clear the target, start a trailing stop on one trade, bank part of it, or close it. Paper positions only — nothing here reaches a broker.</span></div>';
+    if (b.dash) return '<div class="botCtl"><span class="bcNote">Filter with the boxes below, click a bot row or a day to narrow everything, click a column heading to sort. Paper trades only.</span></div>';
+    if (b.live) return '';
+    if (b.fit) return '';
+    if (b.report) return '<div class="botCtl"><span class="bcNote" id="rpProgress">Ranked on the evidence each bot has produced. Nothing here can trade live.</span></div>';
     if (b.brain){
       const S = MasterBrain.state || MasterBrain.load();
       return `<div class="botCtl">
         <button class="bBtn" data-act="train">Train now</button>
         <button class="bBtn" data-act="harvest">Learn from history</button>
+        <button class="bBtn go" data-act="research">Research new strategies</button>
+        <button class="bBtn" data-act="labreview">Re-check lab bots</button>
         <button class="bBtn danger" data-act="brainreset">Forget everything</button>
-        <span class="bcNote">${S.samples.length} examples · last trained ${S.trainedAt ? this.when(S.trainedAt) : 'never'}</span>
+        <span class="bcNote" id="labProgress">${S.samples.length} examples · last trained ${S.trainedAt ? this.when(S.trainedAt) : 'never'}</span>
       </div>`;
     }
     if (b.scan)
@@ -54,6 +114,8 @@ Object.assign(Bots, {
       </div>`;
     if (b.manual)
       return `<div class="botCtl">
+        <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen || 20}" min="1" max="100"></label>
+        <label class="bc">Per instrument <input type="number" data-cfg="maxPerSymbol" value="${cfg.maxPerSymbol || 10}" min="1" max="50"></label>
         <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause monitoring</label>
         <button class="bBtn danger" data-act="reset">Reset</button>
         <span class="bcNote">Monitoring updates price, unrealized P/L, stop, target, MFE and MAE. Pausing keeps every trade and its history.</span>
@@ -70,20 +132,74 @@ Object.assign(Bots, {
   },
 
   /* one chip per instrument: click to allow or forbid, with its real record */
+  /* ---------- where this bot is allowed to trade ----------
+     A mode picker, then — only in manual mode — the market groups and the
+     instruments inside them. The line underneath always states what the current
+     settings actually resolve to, so the answer is never hidden behind a mode. */
   instrumentBar(b, cfg){
-    const uni = this.universe();
+    const mode = cfg.marketMode || 'manual';
     const stats = this.perInstrument(b.id);
-    const on = cfg.instruments && cfg.instruments.length ? cfg.instruments : null;
-    const chips = uni.slice(0, 14).map(sym => {
-      const enabled = !on || on.includes(sym);
-      const st = stats[sym];
-      const rec = st ? (st.net >= 0 ? '+' : '') + fmtNum(st.net) + ' · ' + st.n : 'no trades';
-      const cls = st ? (st.net > 0 ? ' good' : st.net < 0 ? ' bad' : '') : '';
-      return `<button class="insChip${enabled ? ' on' : ''}${cls}" data-ins="${esc(sym)}" title="${esc(rec)}">` +
-        `${esc(baseAsset(sym))}<i>${esc(rec)}</i></button>`;
-    }).join('');
-    return `<div class="insBar"><span class="insLbl">Trades:</span>${chips}` +
-      `<button class="bMini" data-insall="1">${on ? 'Allow all' : 'Only winners'}</button></div>`;
+    const resolved = this.allowed(b);
+    const G = this.marketGroups();
+
+    const modeBtn = (k, label, hint) =>
+      `<button class="mkMode${mode === k ? ' on' : ''}" data-mmode="${k}" title="${esc(hint)}">${esc(label)}</button>`;
+
+    /* what the two automatic modes would pick, so the choice is informed */
+    const fitSyms = this.fitSymbolsFor(b.id);
+    const fitHint = fitSyms === null ? 'The study has not run yet'
+      : fitSyms.length ? 'Study says: ' + fitSyms.map(baseAsset).join(', ')
+      : 'The study paused this bot — it would trade nothing';
+    const proven = this.provenSymbols(b.id);
+    const brainHint = proven.length
+      ? 'Has earned on: ' + proven.map(baseAsset).join(', ')
+      : 'No winning instrument yet — it would trade everything until there is one';
+
+    let body = '';
+    if (mode === 'manual'){
+      const chosen = cfg.groups && cfg.groups.length ? cfg.groups : null;   // null = every group
+      const groupChips = Object.entries(G).map(([id, g]) => {
+        const on = !chosen || chosen.includes(id);
+        const n = g.syms.filter(s => resolved.includes(s)).length;
+        return `<button class="mkGroup${on ? ' on' : ''}" data-mgroup="${esc(id)}">` +
+          `${esc(g.label)}<i>${n}/${g.syms.length}</i></button>`;
+      }).join('');
+
+      const rows = Object.entries(G).filter(([id]) => !chosen || chosen.includes(id)).map(([id, g]) => {
+        const picked = cfg.instruments && cfg.instruments.length ? cfg.instruments : null;
+        const chips = g.syms.map(sym => {
+          const on = !picked || picked.includes(sym);
+          const st = stats[sym];
+          const rec = st ? (st.net >= 0 ? '+' : '') + fmtNum(st.net) + ' · ' + st.n : 'no trades';
+          const cls = st ? (st.net > 0 ? ' good' : st.net < 0 ? ' bad' : '') : '';
+          const live = typeof Feed !== 'undefined' ? Feed.isLive(sym) : true;
+          return `<button class="insChip${on ? ' on' : ''}${cls}${live ? '' : ' off'}" data-ins="${esc(sym)}"
+            title="${esc(rec + (live ? '' : ' · not on a live feed'))}">${esc(baseAsset(sym))}<i>${esc(rec)}</i></button>`;
+        }).join('');
+        return `<div class="mkRow"><label>${esc(g.label)}</label><div class="mkChips">${chips}</div></div>`;
+      }).join('');
+
+      body = `<div class="mkGroups">${groupChips}
+          <button class="bMini" data-mgroupall="1">${chosen ? 'All groups' : 'Clear'}</button></div>
+        ${rows}
+        <div class="mkTools">
+          <button class="bMini" data-insall="1">${cfg.instruments && cfg.instruments.length ? 'Allow all instruments' : 'Only the winners'}</button>
+        </div>`;
+    }
+
+    return `<div class="mkBar">
+      <div class="mkTop">
+        <span class="insLbl">Markets</span>
+        ${modeBtn('fit', 'Follow Market Fit', fitHint)}
+        ${modeBtn('brain', 'Follow its own record', brainHint)}
+        ${modeBtn('manual', 'Choose myself', 'Pick the groups and the instruments inside them')}
+        <span class="mkCount">${resolved.length} instrument${resolved.length === 1 ? '' : 's'}
+          ${resolved.length ? '· ' + resolved.slice(0, 6).map(baseAsset).join(', ') + (resolved.length > 6 ? ' …' : '') : ''}</span>
+      </div>
+      ${mode === 'fit' ? `<div class="mkNote">${esc(fitHint)}</div>` : ''}
+      ${mode === 'brain' ? `<div class="mkNote">${esc(brainHint)}</div>` : ''}
+      ${body}
+    </div>`;
   },
 
   tfSel(cfg){
@@ -134,7 +250,16 @@ Object.assign(Bots, {
     const paper = S.samples.filter(x => x.src === 'paper').length;
     const back = S.samples.length - paper;
 
-    const head = `<div class="brainState ${st.cls}"><div class="bsTop"><b>${esc(st.label)}</b><span>${esc(st.text)}</span></div></div>`;
+    /* the Brain governs what may reach real money, so its state is shown here too */
+    const lv = (typeof Live !== 'undefined') ? Live.status() : null;
+    const lvArmed = (typeof Live !== 'undefined') ? Live.armedList().length : 0;
+    const head = `<div class="brainState ${st.cls}"><div class="bsTop"><b>${esc(st.label)}</b><span>${esc(st.text)}</span></div></div>` +
+      (lv ? `<div class="brainLive ${lv.cls}">
+        <b>LIVE TRADING · ${esc(lv.label)}</b>
+        <span>${esc(lv.text)}</span>
+        <i>${lvArmed ? lvArmed + ' bot' + (lvArmed > 1 ? 's' : '') + ' armed. ' : ''}Every live signal still passes this Brain’s veto before it is sent.</i>
+        <button class="bMini" data-act="goLivePage">Open Live Trading</button>
+      </div>` : '');
     const counts = `<div class="botStats">
         ${this.stat('EXAMPLES', S.samples.length)}
         ${this.stat('FROM PAPER', paper)}
@@ -193,7 +318,59 @@ Object.assign(Bots, {
         <div class="botCol"><div class="botH">LEARNING LOG</div>
           ${(S.log || []).slice(0, 12).map(l => `<div class="botLog"><span class="dim2">${new Date(l.t).toLocaleString()}</span> ${esc(l.text)}</div>`).join('') || '<div class="empty">Nothing yet</div>'}</div>
       </div>
-      <div class="botNote warn">A statistical model fitted to past trades — not a forecaster. It may only refuse or shrink a trade, never invent one, and everything it touches is play money.</div>`;
+      <div class="botNote warn">A statistical model fitted to past trades — not a forecaster. It may only refuse or shrink a trade, never invent one, and everything it touches is play money.</div>`
+      + (typeof Auto !== 'undefined' ? Auto.view() : '')
+      + this.labView();
+  },
+
+  /* ---------------- the Strategy Lab ----------------
+     What the Brain does with what it has learned: build new bots, test them, and
+     keep only the ones the evidence supports. */
+  labView(){
+    const L = StratLab.load();
+    const live = L.recipes.filter(r => !r.retired);
+    const gone = L.recipes.filter(r => r.retired);
+    const G = StratLab.GUARD;
+
+    const card = r => {
+      const ev = r.evidence || {};
+      const pf = ev.pf === Infinity ? '∞' : (ev.pf || 0).toFixed(2);
+      const per = (ev.per || []).map(x =>
+        `<span class="labIns ${x.net > 0 ? 'good' : 'bad'}">${esc(baseAsset(x.sym))} ${x.net > 0 ? '+' : ''}${fmtNum(x.net)}</span>`).join('');
+      return `<div class="labCard">
+        <div class="labTop"><b>${esc(r.name)}</b>
+          <button class="bMini danger" data-labretire="${esc(r.id)}">Retire</button></div>
+        <div class="labNums">
+          <span><label>TRADES</label><b>${ev.trades || 0}</b></span>
+          <span><label>PROFIT FACTOR</label><b>${pf}</b></span>
+          <span><label>AVERAGE</label><b class="${pctClass(ev.avgR)}">${(ev.avgR || 0).toFixed(2)}R</b></span>
+          <span><label>WORST DD</label><b>-${(ev.maxDD || 0).toFixed(1)}%</b></span>
+          <span><label>NET</label><b class="${pctClass(ev.net)}">${(ev.net >= 0 ? '+' : '') + fmtNum(ev.net || 0)}</b></span>
+        </div>
+        <div class="labIns2">${per}</div>
+        <div class="labWhy">${esc(r.blurb || '')}</div>
+        <div class="labWhen">Opened ${this.when(r.born)}${r.reviewedAt ? ' · re-checked ' + this.when(r.reviewedAt) : ''}</div>
+      </div>`;
+    };
+
+    return `<div class="botH">STRATEGY LAB — BOTS THE BRAIN BUILT ITSELF</div>
+      <div class="botNote">It mutates the numbers behind a strategy — how far the stop sits, how much reward it asks for
+        each unit of risk, how strict the entry is, which timeframe it runs on — then backtests every candidate across
+        several instruments. A candidate only becomes a bot if it clears all of: <b>${G.trades}+ trades</b>,
+        <b>profit factor ${G.pf}</b>, <b>positive average R</b>, <b>profitable on at least half the instruments</b> and
+        <b>drawdown under ${G.maxDD}%</b>. Everything it opens is paper, and every backtest it runs becomes training data.</div>
+      <div class="labStats">
+        ${this.stat('RECIPES TESTED', L.tried || 0)}
+        ${this.stat('BOTS PUBLISHED', live.length)}
+        ${this.stat('RETIRED', gone.length)}
+        ${this.stat('LAST RUN', L.lastRun ? this.when(L.lastRun) : 'never')}
+      </div>
+      <div class="labGrid">${live.map(card).join('') ||
+        '<div class="empty">Nothing published yet — press “Research new strategies”. A run tests eight recipes across three instruments and takes a couple of minutes.</div>'}</div>
+      ${gone.length ? '<div class="botH">RETIRED</div>' + gone.slice(-6).reverse().map(r =>
+        `<div class="botLog loss"><span class="dim2">${new Date(r.retired).toLocaleDateString()}</span> ${esc(r.name)} — ${esc(r.retiredWhy || '')}</div>`).join('') : ''}
+      ${(L.log || []).slice(0, 8).map(l =>
+        `<div class="botLog"><span class="dim2">${new Date(l.t).toLocaleString()}</span> ${esc(l.text)}</div>`).join('')}`;
   },
 
   /* backtest a spread of strategies and instruments, then retrain on the result */
@@ -220,20 +397,153 @@ Object.assign(Bots, {
     this.render();
   },
 
+  /* the Brain goes looking for new strategies */
+  async research(){
+    if (StratLab.busy) return toast('A research run is already going', 'warn');
+    const note = document.getElementById('labProgress');
+    const say = t => { if (note) note.textContent = t; };
+    say('Building candidates…');
+    toast('Researching new strategies — this takes a couple of minutes', 'info');
+    const r = await StratLab.research(8, (i, n, name) => say('Testing ' + (i + 1) + ' of ' + n + ' — ' + name));
+    if (r.error) return toast(r.error, 'warn');
+    const made = r.published.length;
+    toast(made
+      ? 'Opened ' + made + ' new bot' + (made > 1 ? 's' : '') + ': ' + r.published.map(x => x.name).join(', ')
+      : 'Tested ' + r.tested + ' recipes — none cleared the guards, so nothing was published',
+      made ? 'ok' : 'info');
+    this.wire();
+    this.render();
+  },
+
+  async labReview(){
+    const note = document.getElementById('labProgress');
+    const say = t => { if (note) note.textContent = t; };
+    const r = await StratLab.review((i, n, name) => say('Re-checking ' + (i + 1) + ' of ' + n + ' — ' + name));
+    toast(r.checked ? 'Re-checked ' + r.checked + ' lab bots, retired ' + r.dropped : 'No lab bots to check',
+      r.dropped ? 'warn' : 'ok');
+    this.wire();
+    this.render();
+  },
+
   /* ---------------- Manual bot ---------------- */
   manualView(L, st){
-    const t = STORE.tickers.get(STORE.symbol);
+    const q = Bots.quoteFor(STORE.symbol);
+    const px = q ? q.price : null;
+    const dir = Bots.manualSide;
+
+    /* one row of quick percentages. Clicking one fills the box with the actual
+       price that far away, on the correct side for the side you are taking. */
+    const ladder = which => Bots.PCT_STEPS.map(pc =>
+      `<button class="pctBtn" data-mbpct="${which}:${pc}" title="${pc}% away from the price">${pc}%</button>`).join('');
+
     return `<div class="mbForm">
-      <label class="bc">Instrument <input id="mbSym" type="text" value="${esc(STORE.symbol)}" spellcheck="false"></label>
-      <label class="bc">Side <select id="mbDir"><option value="buy">BUY</option><option value="sell">SELL</option></select></label>
-      <label class="bc">Volume <input id="mbQty" type="number" step="any" min="0" placeholder="0.10"></label>
-      <label class="bc">Stop-loss <input id="mbSl" type="number" step="any" min="0" placeholder="required"></label>
-      <label class="bc">Take-profit <input id="mbTp" type="number" step="any" min="0" placeholder="required"></label>
+      <label class="bc">Instrument
+        <button id="mbSym" class="mbPick" data-val="${esc(STORE.symbol)}" title="Search every instrument">${esc(baseAsset(STORE.symbol))} <i>▾</i></button></label>
+      <div class="mbPrice"><label>Price now</label><b id="mbPx">${px == null ? '—' : fmtPrice(px)}</b></div>
+      <div class="sideSeg">
+        <button class="sideBtn buy${dir > 0 ? ' on' : ''}" data-mbside="1">BUY</button>
+        <button class="sideBtn sell${dir < 0 ? ' on' : ''}" data-mbside="-1">SELL</button>
+      </div>
+      <label class="bc">Amount <input id="mbAmt" type="number" step="any" min="0" placeholder="e.g. 100"></label>
+      <span class="pctRow" title="what the amount means">
+        <button class="pctBtn${Bots.amtMode === 'value' ? ' on' : ''}" data-mbamt="value">as position</button>
+        <button class="pctBtn${Bots.amtMode === 'margin' ? ' on' : ''}" data-mbamt="margin">as margin</button>
+      </span>
+      <label class="bc">or Lots <input id="mbQty" type="number" step="any" min="0" placeholder="auto"></label>
       <label class="bc">Timeframe <select id="mbTf">${BotEngine.TFS.map(x =>
         `<option value="${x}"${x === STORE.tf ? ' selected' : ''}>${x}</option>`).join('')}</select></label>
+
+      <div class="mbLine mbFundLine">
+        <span class="mbFunds" id="mbFunds"></span>
+        <input type="range" id="mbPct" min="0" max="100" step="1" value="0" class="fundBar">
+        <span class="pctRow">${[10, 25, 50, 75, 100].map(v =>
+          `<button class="pctBtn" data-mbfund="${v}">${v}%</button>`).join('')}</span>
+      </div>
+
+      <div class="mbLine">
+        <label class="bc">Stop-loss <input id="mbSl" type="number" step="any" min="0" placeholder="auto"></label>
+        <span class="pctRow">${ladder('sl')}</span>
+      </div>
+      <div class="mbLine">
+        <label class="bc">Take-profit <input id="mbTp" type="number" step="any" min="0" placeholder="none"></label>
+        <span class="pctRow">${ladder('tp')}</span>
+      </div>
+
+      <div class="mbCalc" id="mbCalc"></div>
+
       <label class="bc grow">Note <input id="mbNote" type="text" placeholder="why are you taking this trade?"></label>
-      <button class="bBtn go" data-act="mopen">Open paper trade${t ? ' @ ' + fmtPrice(t.last) : ''}</button>
-    </div>` + this.ledgerView('manual', L, st);
+      <button class="bBtn go" data-act="mopen" id="mbGo">${dir > 0 ? 'BUY' : 'SELL'} at market${px != null ? ' · ' + fmtPrice(px) : ''}</button>
+    </div>
+    <div class="botNote">A market order — only the instrument is required. Leave <b>volume</b> empty and it is
+      sized from the risk limit; leave the <b>stop</b> empty and one is placed at 1.5 × ATR; leave the
+      <b>target</b> empty and the position simply runs until you close it or the stop is hit.
+      Both levels can be changed at any time on the open position below, or on the Open Trades page.</div>` +
+      this.ledgerView('manual', L, st);
+  },
+
+  /* ---------- what this trade would win or lose ----------
+     Recomputed on every keystroke and after every percentage button, because a
+     stop is a decision about money, not about a price. When the volume is left
+     to the risk limit, the size is worked out the way the ENGINE will work it
+     out, so the figures shown are the figures you actually get. */
+  manualCalc(){
+    const host = document.getElementById('mbCalc');
+    if (!host) return;
+    const symBtn = document.getElementById('mbSym');
+    const sym = Bots.resolveSymbol(symBtn ? symBtn.dataset.val : '') || STORE.symbol;
+    const q = Bots.quoteFor(sym);
+    const pxEl = document.getElementById('mbPx');
+    if (pxEl) pxEl.textContent = q ? fmtPrice(q.price) : '—';
+    if (!q){ host.innerHTML = '<i>No live price for that instrument yet.</i>'; return; }
+    /* leverage decides what "leaves your equity" means, so if it has not arrived
+       yet, ask once and redraw rather than quietly showing the wrong basis */
+    if (Feed.bridge && !(Feed.account && Feed.account.leverage) && !this._acctAsked){
+      this._acctAsked = true;
+      Feed.loadAccount().then(a => { if (a && a.leverage) this.manualCalc(); });
+    }
+
+    const dir = Bots.manualSide;
+    const sl = parseFloat((document.getElementById('mbSl') || {}).value);
+    const tp = parseFloat((document.getElementById('mbTp') || {}).value);
+    const stopDist = sl > 0 ? Math.abs(q.price - sl) : 0;
+
+    /* the SAME function the order uses, so this is not a different trade */
+    const size = Bots.manualSize(sym, q.price, stopDist);
+    const m = Bots.marginFor(size.qty, q.price, size.lev);
+
+    const risk = (size.qty > 0 && sl > 0) ? Math.abs(Bots.moneyAt(q.price, dir, size.qty, sl)) : null;
+    const reward = (size.qty > 0 && tp > 0) ? Bots.moneyAt(q.price, dir, size.qty, tp) : null;
+    const rr = (risk > 0 && reward > 0) ? reward / risk : null;
+    const eq = Bots.ledgers.manual ? Bots.ledgers.manual.equity : 0;
+
+    const cell = (label, value, cls) =>
+      `<span class="mbCell"><label>${esc(label)}</label><b class="${cls || ''}">${value}</b></span>`;
+
+    /* the funds line and the slider position follow whatever the amount is now */
+    const F = Bots.manualFunds();
+    const fundsEl = document.getElementById('mbFunds');
+    const bar = document.getElementById('mbPct');
+    const share = F.free > 0 ? Math.min(100, m.notional / F.free * 100) : 0;
+    if (bar && document.activeElement !== bar) bar.value = Math.round(share);
+    if (fundsEl) fundsEl.innerHTML =
+      `<b>${Math.round(share)}%</b> of your free funds` +
+      `<i>${fmtNum(m.notional)} into this trade · ${fmtNum(Math.max(0, F.free - m.notional))} left` +
+      (F.used > 0 ? ' · ' + fmtNum(F.used) + ' already committed' : '') + `</i>`;
+
+    host.innerHTML =
+      cell('Leaves your equity', m.margin == null
+             ? fmtNum(m.notional) + ' (no leverage known)'
+             : fmtNum(m.margin) + (eq > 0 ? ' · ' + (m.margin / eq * 100).toFixed(1) + '% of it' : ''), 'warn') +
+      cell('Position value', fmtNum(m.notional) + (size.lev ? ' at 1:' + size.lev : '')) +
+      (risk != null && eq > 0 && risk / eq > 0.05
+        ? cell('⚠ Stop would cost', (risk / eq * 100).toFixed(1) + '% of the account', 'down') : '') +
+      cell('Size', size.qty > 0 ? (+size.lots.toFixed(4)) + ' lot' : '—') +
+      cell('If the stop is hit', risk == null ? 'set a stop' : '-' + fmtNum(risk), 'down') +
+      cell('If the target is hit', reward == null ? 'no target' : '+' + fmtNum(reward), 'up') +
+      cell('Reward to risk', rr == null ? '—' : rr.toFixed(2) + ' : 1', rr == null ? '' : (rr >= 1 ? 'up' : 'down')) +
+      cell('Stop is', sl > 0 ? (stopDist / q.price * 100).toFixed(2) + '% away' : '—') +
+      cell('Target is', tp > 0 ? (Math.abs(tp - q.price) / q.price * 100).toFixed(2) + '% away' : '—') +
+      (size.why ? cell('Sized by', esc(size.why)) : '');
   },
 
   /* ---------------- automated bot ---------------- */
@@ -269,13 +579,24 @@ Object.assign(Bots, {
 
   openView(id, L){
     if (!L.open.length) return '<div class="empty">No open positions</div>';
+    /* the stop and the target are editable on a hand-placed trade. They stay
+       read-only for an automated bot: moving its levels mid-trade would falsify
+       the record that decides whether it earns real money. */
+    const editable = id === 'manual';
     return L.open.map(p => {
       const u = p.unreal != null ? p.unreal : 0;
+      const levels = editable
+        ? `<span class="posEdit">
+             <label>SL<input type="number" step="any" data-psl="${p.id}" value="${p.sl}"></label>
+             <label>TP<input type="number" step="any" data-ptp="${p.id}" value="${p.tp == null ? '' : p.tp}" placeholder="none"></label>
+             <button class="bMini" data-pset="${p.id}">Set</button>
+           </span>`
+        : `<span class="dim2">SL ${fmtPrice(p.sl)} · TP ${p.tp == null ? 'none' : fmtPrice(p.tp)}${p.tp1Done ? ' · half banked, stop at breakeven' : ''}</span>`;
       return `<div class="botRow">
         <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))}</b>
         <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}</span>
         <span>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
-        <span class="dim2">SL ${fmtPrice(p.sl)} · TP ${fmtPrice(p.tp)}${p.tp1Done ? ' · half banked, stop at breakeven' : ''}</span>
+        ${levels}
         <span class="${pctClass(u)}">${(u >= 0 ? '+' : '') + fmtNum(u)}</span>
         <span class="dim2">opened ${this.when(p.entryTime)}</span>
         <button class="bMini" data-close="${id}:${p.id}">Close</button></div>`;
@@ -343,6 +664,18 @@ Object.assign(Bots, {
 
   bind(b){
     const host = document.getElementById('botBody');
+    /* one handler for every sortable table in the workspace */
+    host.querySelectorAll('[data-tsort]').forEach(el => el.addEventListener('click', () => {
+      this.setTableSort(el.dataset.tsort, el.dataset.tkey);
+      this.render();
+    }));
+    /* the Open Trades page runs a one-second refresh; leaving it must stop
+       that timer, or every page after it keeps ticking in the background */
+    if (b.trades) OpenTrades.bind(host); else OpenTrades.stop();
+    if (b.dash) BotDash.bind(host);
+    if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
+      el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
+    if (b.live) this.bindLive(host);
     host.querySelectorAll('[data-cfg]').forEach(el => {
       el.addEventListener('change', () => {
         const cfg = this.cfg(b.id);
@@ -361,15 +694,172 @@ Object.assign(Bots, {
       if (a === 'mopen') this.manualOpen();
       if (a === 'train'){ const r = MasterBrain.train(); toast(r.ok ? 'Retrained on every example it holds' : r.reason, r.ok ? 'ok' : 'warn'); this.render(); }
       if (a === 'harvest') this.harvest();
+      if (a === 'research') this.research();
+      if (a === 'labreview') this.labReview();
+      if (a === 'assessAll') BotReports.assessAll();
+      if (a === 'pdf') BotReports.exportPdf();
+      if (a === 'csv') BotDash.csv();
+      if (a === 'xls') BotDash.excel();
+      if (a === 'dashpdf') BotDash.pdf();
+      if (a === 'autotoggle'){ Auto.setOn(!Auto.load().on); }
+      if (a === 'fitsweep') this.fitSweep();
+      if (a === 'fitsplit') this.fitSplit();
+      if (a === 'fitapply') this.fitApply();
+      if (a === 'fithistclear'){
+        if (confirm('Delete every archived Market Fit study?')) { MarketFit.clearHistory(); this.render(); }
+      }
+      if (a === 'goLivePage'){ this.active = 'live'; this.wire(); this.render(); }
+      if (a.indexOf('lv') === 0) this.liveAction(a);
+      if (a === 'clearf'){ BotDash.f = Object.assign(BotDash.f, { bot: 'all', sym: 'all', tf: 'all', side: 'all', result: 'all', day: 'all' }); this.render(); }
+      if (a === 'prtoggle'){ PairRules.setAuto(!PairRules.autoOn()); this.render(); }
+      if (a === 'dashfoldall'){
+        const ids = BotDash._shownIds || BotDash._secIds || BotDash.DEFAULT_ORDER;
+        const anyShut = ids.some(id => BotDash.folded[id]);
+        BotDash.folded = {};
+        if (!anyShut) for (const id of ids) BotDash.folded[id] = true;
+        lsSet('astra_dashfold', BotDash.folded);
+        this.render();
+      }
+      if (a === 'dashorderreset'){ BotDash.saveOrder(BotDash.DEFAULT_ORDER.slice()); this.render(); }
+      if (a === 'prclear'){ BotDash.pairQ = ''; this.render(); }
+      if (a === 'prreset'){
+        if (confirm('Forget every pair you prohibited or allowed by hand, and go back to the record alone?')){
+          PairRules.clearAll(); this.render();
+        }
+      }
       if (a === 'brainreset'){ if (confirm('Make the Master Brain forget every example it has learned?')){ MasterBrain.reset(); this.render(); } }
     }));
+    /* ---- the manual form: side, quick percentages, live arithmetic ---- */
+    if (b.manual){
+      const recalc = () => this.manualCalc();
+      ['mbSl', 'mbTp', 'mbQty', 'mbAmt'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', recalc);
+      });
+      /* the two size boxes are alternatives — filling one clears the other, so
+         it is always obvious which one decided the trade */
+      const amt = document.getElementById('mbAmt'), lot = document.getElementById('mbQty');
+      if (amt && lot){
+        amt.addEventListener('input', () => { if (amt.value) lot.value = ''; });
+        lot.addEventListener('input', () => { if (lot.value) amt.value = ''; });
+      }
+      /* pressing the instrument opens the search picker */
+      const pick = document.getElementById('mbSym');
+      if (pick) pick.addEventListener('click', () => SymbolSearch.open(sym => {
+        pick.dataset.val = sym;
+        pick.innerHTML = esc(baseAsset(sym)) + ' <i>▾</i>';
+        const slb = document.getElementById('mbSl'), tpb = document.getElementById('mbTp');
+        if (slb) slb.value = ''; if (tpb) tpb.value = '';      // levels belonged to the old instrument
+        recalc();
+      }));
+      host.querySelectorAll('[data-mbside]').forEach(el => el.addEventListener('click', () => {
+        Bots.manualSide = parseInt(el.dataset.mbside, 10);
+        host.querySelectorAll('[data-mbside]').forEach(x =>
+          x.classList.toggle('on', x === el));
+        const go = document.getElementById('mbGo');
+        const q = Bots.quoteFor(Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol);
+        if (go) go.textContent = (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' at market' +
+          (q ? ' · ' + fmtPrice(q.price) : '');
+        /* the levels were on the other side of the market a moment ago */
+        const sl = document.getElementById('mbSl'), tp = document.getElementById('mbTp');
+        if (sl) sl.value = ''; if (tp) tp.value = '';
+        recalc();
+      }));
+      /* the fund bar is a way of SAYING an amount: it fills the amount box with
+         that share of the free funds and lets every other figure follow. It is
+         read as position value, never as margin — "trade half my account" means
+         a position worth half the account, not half the account of margin, which
+         at 1:2000 would be a position twenty times the account. */
+      const useShare = pct => {
+        const F = Bots.manualFunds();
+        const amtBox = document.getElementById('mbAmt'), lotBox = document.getElementById('mbQty');
+        if (amtBox) amtBox.value = pct > 0 ? +(F.free * pct / 100).toFixed(2) : '';
+        if (lotBox) lotBox.value = '';
+        Bots.amtMode = 'value';
+        host.querySelectorAll('[data-mbamt]').forEach(x =>
+          x.classList.toggle('on', x.dataset.mbamt === 'value'));
+        host.querySelectorAll('[data-mbfund]').forEach(x =>
+          x.classList.toggle('on', +x.dataset.mbfund === pct));
+        recalc();
+      };
+      const barEl = document.getElementById('mbPct');
+      if (barEl) barEl.addEventListener('input', () => useShare(+barEl.value));
+      host.querySelectorAll('[data-mbfund]').forEach(el =>
+        el.addEventListener('click', () => { 
+          const v = +el.dataset.mbfund;
+          if (barEl) barEl.value = v;
+          useShare(v);
+        }));
+
+      host.querySelectorAll('[data-mbamt]').forEach(el => el.addEventListener('click', () => {
+        Bots.amtMode = el.dataset.mbamt;
+        host.querySelectorAll('[data-mbamt]').forEach(x => x.classList.toggle('on', x === el));
+        recalc();
+      }));
+      host.querySelectorAll('[data-mbpct]').forEach(el => el.addEventListener('click', () => {
+        const [which, pc] = el.dataset.mbpct.split(':');
+        const sym = Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol;
+        const q = Bots.quoteFor(sym);
+        if (!q) return toast('No live price yet for ' + baseAsset(sym), 'warn');
+        const box = document.getElementById(which === 'tp' ? 'mbTp' : 'mbSl');
+        if (box) box.value = +Bots.levelAt(q.price, Bots.manualSide, parseFloat(pc), which).toFixed(8);
+        host.querySelectorAll('[data-mbpct^="' + which + ':"]').forEach(x => x.classList.toggle('on', x === el));
+        recalc();
+      }));
+      recalc();
+    }
+
+    /* move the stop or the target on a running hand-placed trade */
+    host.querySelectorAll('[data-pset]').forEach(el => el.addEventListener('click', () => {
+      const posId = +el.dataset.pset;
+      const slEl = host.querySelector('[data-psl="' + posId + '"]');
+      const tpEl = host.querySelector('[data-ptp="' + posId + '"]');
+      const sl = slEl ? parseFloat(slEl.value) : NaN;
+      const tpRaw = tpEl ? tpEl.value.trim() : '';
+      this.editPos('manual', posId, {
+        sl: isNaN(sl) ? null : sl,
+        tp: tpRaw === '' ? 0 : parseFloat(tpRaw),      /* 0 clears the target */
+      });
+    }));
+
+    /* the three ways a bot can decide where to trade */
+    host.querySelectorAll('[data-mmode]').forEach(el => el.addEventListener('click', () => {
+      const cfg = this.cfg(b.id);
+      cfg.marketMode = el.dataset.mmode;
+      this.saveCfg(b.id);
+      this.render();
+    }));
+
+    /* whole market groups on and off */
+    host.querySelectorAll('[data-mgroup]').forEach(el => el.addEventListener('click', () => {
+      const cfg = this.cfg(b.id);
+      const all = Object.keys(this.marketGroups());
+      let list = (cfg.groups && cfg.groups.length) ? cfg.groups.slice() : all.slice();
+      const id = el.dataset.mgroup;
+      list = list.includes(id) ? list.filter(x => x !== id) : list.concat([id]);
+      cfg.groups = list.length === all.length ? null : list;
+      this.saveCfg(b.id);
+      this.render();
+    }));
+    const gAll = host.querySelector('[data-mgroupall]');
+    if (gAll) gAll.addEventListener('click', () => {
+      const cfg = this.cfg(b.id);
+      cfg.groups = (cfg.groups && cfg.groups.length) ? null : Object.keys(this.marketGroups()).slice(0, 1);
+      this.saveCfg(b.id);
+      this.render();
+    });
+
+    /* single instruments, scoped to the groups actually on screen */
     host.querySelectorAll('[data-ins]').forEach(el => el.addEventListener('click', () => {
       const cfg = this.cfg(b.id);
-      const uni = this.universe();
-      let list = (cfg.instruments && cfg.instruments.length) ? cfg.instruments.slice() : uni.slice();
+      const pool = (cfg.groups && cfg.groups.length)
+        ? this.groupSymbols(cfg.groups)
+        : this.groupSymbols(Object.keys(this.marketGroups()));
+      let list = (cfg.instruments && cfg.instruments.length) ? cfg.instruments.slice() : pool.slice();
       const sym = el.dataset.ins;
       list = list.includes(sym) ? list.filter(x => x !== sym) : list.concat([sym]);
-      cfg.instruments = list.length === uni.length ? null : list;
+      /* everything ticked means "no filter", which keeps future instruments in */
+      cfg.instruments = pool.every(s => list.includes(s)) ? null : list;
       this.saveCfg(b.id);
       this.render();
     }));
@@ -387,6 +877,17 @@ Object.assign(Bots, {
       this.saveCfg(b.id);
       this.render();
     });
+    host.querySelectorAll('[data-labretire]').forEach(el => el.addEventListener('click', () => {
+      const rec = StratLab.state.recipes.find(r => r.id === el.dataset.labretire);
+      if (!rec) return;
+      if (!confirm('Retire ' + rec.name + '?')) return;
+      StratLab.retire(rec.id, 'retired by hand');
+      this.render();
+    }));
+    host.querySelectorAll('[data-gobot]').forEach(el => el.addEventListener('click', () => {
+      this.active = el.dataset.gobot;
+      this.wire(); this.render();
+    }));
     host.querySelectorAll('[data-open]').forEach(el =>
       el.addEventListener('click', () => App.setSymbol(el.dataset.open)));
     host.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => {
