@@ -38,7 +38,7 @@ const SymbolSearch = {
            <button class="bMini" id="symLiveOff">Show delayed too</button>
          </div>`
       : `<div class="symLive off"><b>ALL FEEDS</b>
-           <span>Delayed instruments are shown and can be traded. A delayed price is not the price you would be filled at.</span>
+           <span>Delayed instruments are shown for reference. Trading still requires a fresh MT5 or exchange-stream price.</span>
            <button class="bMini" id="symLiveOn">Live only</button></div>`;
     host.innerHTML = banner + list.map(s => {
       const t = STORE.tickers.get(s);

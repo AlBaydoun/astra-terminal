@@ -163,12 +163,22 @@ function startGlobalStream(){
       const t = STORE.tickers.get(s);
       const vals = { last: +m.c, open: +m.o, high: +m.h, low: +m.l, vol: +m.v, quoteVol: +m.q };
       vals.pct = vals.open ? (vals.last - vals.open) / vals.open * 100 : 0;
-      if (t){ Object.assign(t, vals); changed.push(s); }
+      if (!(Number.isFinite(vals.last) && vals.last > 0)) continue;
+      if (t){
+        Object.assign(t, vals); changed.push(s);
+        Feed.srcOf[s] = 'binance';
+        Feed.quoteTime[s] = Number.isFinite(m.E) ? m.E / 1000 : 0;
+      }
       for (const b of alias[s] || []){
+        // An exchange proxy must never overwrite the broker's own CFD quote.
+        if (typeof Feed !== 'undefined' && Feed.bridgeHas(b)) continue;
         const bt = STORE.tickers.get(b) || {};
         Object.assign(bt, vals, { count: 0 });
         STORE.tickers.set(b, bt);
-        if (typeof Feed !== 'undefined') Feed.srcOf[b] = 'binance';
+        if (typeof Feed !== 'undefined'){
+          Feed.srcOf[b] = 'binance';
+          Feed.quoteTime[b] = Number.isFinite(m.E) ? m.E / 1000 : 0;
+        }
         changed.push(b);
       }
     }

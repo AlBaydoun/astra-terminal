@@ -15,6 +15,7 @@ const Backtest = {
     const sym = opts.sym || STORE.symbol;
     const tf = opts.tf || botDef.defaults.tf;
     const cfg = Object.assign({}, botDef.defaults, opts.cfg || {}, { sym, noLearn: true });
+    if (typeof Feed !== 'undefined') await Feed.loadSpecs([sym]);
 
     let candles;
     try { candles = await API.klines(sym, tf, opts.limit || 1000); }
@@ -27,15 +28,20 @@ const Backtest = {
        half so the two can be compared. */
     if (opts.slice === 'first') candles = candles.slice(0, Math.floor(candles.length / 2));
     else if (opts.slice === 'second') candles = candles.slice(Math.floor(candles.length / 2));
+    const warm = botDef.warmup || 220;
+    if (candles.length <= warm) return { error: 'Not enough history after split for ' + warm + ' warm-up bars' };
 
     /* the higher timeframe some strategies confirm against */
     let higher = null;
     if (botDef.needsHigher){
-      try { higher = await API.klines(sym, cfg.higherTf || '15m', 500); } catch(e){}
+      try { higher = await API.klines(sym, cfg.higherTf || '15m', 500); }
+      catch(e){ return { error: 'Required higher-timeframe history failed: ' + e.message }; }
+      if (!higher || !higher.length) return { error: 'Required higher-timeframe history is empty' };
     }
 
     const ledger = BotEngine.blank('bt');
-    const warm = botDef.warmup || 220;
+    BotEngine.replays.add(ledger);
+    ledger.equityCurve.push({ t: candles[warm].rawTime * 1000, eq: ledger.startEquity });
     /* cost model for this instrument: live spread from MT5 when the bridge is
        running, otherwise the profile for your JustMarkets account type */
     const liveT = STORE.tickers.get(sym);
@@ -52,45 +58,56 @@ const Backtest = {
     const rejectReasons = {};
 
     for (let i = warm; i < candles.length; i++){
-      const window = candles.slice(0, i + 1);         // last element is the forming bar
       const bar = candles[i];
+      // At the open, this candle's high, low, close and volume are still unknown.
+      const forming = { ...bar, high: bar.open, low: bar.open, close: bar.open, volume: 0 };
+      const window = candles.slice(0, i).concat([forming]);
       const quote = { price: bar.open, spread, ageSec: 0 };
       /* replay time, so daily limits roll over per simulated day */
       cfg.nowTs = bar.rawTime * 1000;
 
-      /* manage anything already open against this bar */
-      for (const pos of ledger.open.slice()) BotEngine.step(ledger, cfg, pos, bar, { price: bar.close });
-
       evaluated++;
       let sig;
       try {
-        sig = botDef.signal(window, cfg, ledger, higher ? higher.filter(h => h.rawTime <= bar.rawTime) : null);
-      } catch(e){ continue; }
-      if (!sig) continue;
-      if (sig.dir) sig.state = MarketState.of(window, window.length - 2);
-
-      if (sig.closeLongs){
-        for (const pos of ledger.open.filter(p => p.dir > 0)) BotEngine.close(ledger, cfg, pos, bar.close, 'opposite signal');
-        continue;
+        const hi = higher ? higher.filter(h => h.rawTime <= bar.rawTime).map((h, j, all) =>
+          j === all.length - 1 ? { ...h, high: h.open, low: h.open, close: h.open, volume: 0 } : h) : null;
+        sig = botDef.signal(window, cfg, ledger, hi);
+      } catch(e){
+        console.error('ASTRA backtest strategy failed:', botDef.id, sym, tf, e);
+        return { error: 'Strategy failed at ' + new Date(cfg.nowTs).toISOString() + ': ' + e.message };
       }
-      if (!sig.dir) continue;
-      if (sig.score != null && cfg.minScore != null && sig.score < cfg.minScore) continue;
-      /* session filter: cfg.hours is a list of UTC hours a bot may enter in.
-         Measured across crypto, gold, forex and indices, hourly range peaks at
-         12:00-15:00 UTC (the London afternoon / New York morning overlap) and
-         collapses to roughly half that in the Asian hours. */
-      if (cfg.hours && cfg.hours.length &&
-          !cfg.hours.includes(new Date(bar.rawTime * 1000).getUTCHours())) continue;
-      signals++;
+      // All returns below only end the entry decision. Every position, including
+      // a new fill, still sees this candle's stop/target range immediately after.
+      const enter = () => {
+        if (!sig) return;
+        if (sig.dir) sig.state = MarketState.of(window, window.length - 2);
 
-      sig.sym = sym; sig.tf = tf;
-      const gate = BotEngine.check(ledger, cfg, sig, quote);
-      if (!gate.ok){
-        rejected++;
-        rejectReasons[gate.reason] = (rejectReasons[gate.reason] || 0) + 1;
-        continue;
-      }
-      BotEngine.open(ledger, cfg, sig, quote, gate);
+        if (sig.closeLongs){
+          for (const pos of ledger.open.filter(p => p.dir > 0)) BotEngine.close(ledger, cfg, pos, bar.open, 'opposite signal');
+          return;
+        }
+        if (!sig.dir) return;
+        if (sig.score != null && cfg.minScore != null && sig.score < cfg.minScore) return;
+        /* session filter: cfg.hours is a list of UTC hours a bot may enter in.
+           Measured across crypto, gold, forex and indices, hourly range peaks at
+           12:00-15:00 UTC (the London afternoon / New York morning overlap) and
+           collapses to roughly half that in the Asian hours. */
+        if (cfg.hours && cfg.hours.length &&
+            !cfg.hours.includes(new Date(bar.rawTime * 1000).getUTCHours())) return;
+        signals++;
+
+        sig.sym = sym; sig.tf = tf;
+        const gate = BotEngine.check(ledger, cfg, sig, quote);
+        if (!gate.ok){
+          rejected++;
+          rejectReasons[gate.reason] = (rejectReasons[gate.reason] || 0) + 1;
+          return;
+        }
+        BotEngine.open(ledger, cfg, sig, quote, gate);
+      };
+      enter();
+      for (const pos of ledger.open.slice()) BotEngine.step(ledger, cfg, pos, bar, { price: bar.close });
+      BotEngine.mark(ledger, cfg.nowTs);
     }
 
     /* close whatever is still open at the final price, so the numbers are honest */

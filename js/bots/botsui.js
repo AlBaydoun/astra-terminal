@@ -2,8 +2,11 @@
 Object.assign(Bots, {
 
   wire(){
+    if (!this.manualTimer) this.manualTimer = setInterval(() => {
+      if (this.active === 'manual') this.manualCalc();
+    }, 5000);
     const nav = document.getElementById('botNav');
-    nav.innerHTML = BOTS.map(b =>
+    nav.innerHTML = `<button data-bot="permissions"${this.active === 'permissions' ? ' class="active"' : ''}>Instrument permissions</button>` + BOTS.map(b =>
       `<button data-bot="${b.id}"${b.id === this.active ? ' class="active"' : ''}>${esc(b.name)}</button>`).join('');
     nav.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
       this.active = btn.dataset.bot;
@@ -18,6 +21,24 @@ Object.assign(Bots, {
   render(){
     const host = document.getElementById('botBody');
     if (!host) return;
+    if (this.active === 'permissions'){
+      if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
+      OpenTrades.stop();
+      if (host.dataset.bot !== 'permissions'){
+        host.dataset.bot = 'permissions';
+        host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Instrument permissions</b>
+          <span>Control which pairs may open new trades across the bots.</span></div></div>
+          <div class="botCtl" id="prTools"></div>${BotDash.pairRulesView()}`;
+        host.querySelector('#prSearch').addEventListener('input', e => {
+          BotDash.pairQ = e.target.value; this.refreshPermissions(host);
+        });
+        host.querySelector('[data-act="prclear"]').addEventListener('click', () => {
+          BotDash.pairQ = ''; host.querySelector('#prSearch').value = ''; this.refreshPermissions(host);
+        });
+      }
+      this.refreshPermissions(host);
+      return;
+    }
     const b = BOT_BY_ID[this.active] || BOTS[0];
     if (!b) return;
     /* a bot can exist before its ledger does — during boot, or when the Strategy
@@ -26,7 +47,20 @@ Object.assign(Bots, {
     const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
 
-    const keep = this.snapshotForm(host);
+    // Keep the actual controls alive. Restoring text after replacing the DOM
+    // still closes pickers, loses a partially typed number and resets selections.
+    const manualLedger = host.querySelector('#manualLedger');
+    if (b.manual && host.dataset.bot === b.id && manualLedger){
+      if (!manualLedger.contains(document.activeElement) || !document.activeElement.matches('input,select,textarea')){
+        manualLedger.innerHTML = this.ledgerView('manual', L, st);
+        this.bindPositionControls(manualLedger);
+      }
+      this.manualCalc();
+      return;
+    }
+    if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
+    const keep = b.manual ? this.manualDraft : null;
+    host.dataset.bot = b.id;
     host.innerHTML =
       `<div class="botHead">
          <div class="botTitle"><b>${esc(b.name)}</b><span>${esc(b.blurb)}</span></div>
@@ -49,15 +83,42 @@ Object.assign(Bots, {
     this.restoreForm(keep);
   },
 
+  showPermissions(sym = ''){
+    BotDash.pairQ = sym;
+    this.active = 'permissions'; this.wire();
+    const search = document.getElementById('prSearch');
+    if (search) search.value = sym;
+    this.render();
+  },
+  refreshPermissions(host){
+    // Refresh results only: leave the search input and its cursor alive.
+    const cols = host.querySelector('#prCols');
+    cols.innerHTML = BotDash.pairColumns(); BotDash.bindPairCards(cols);
+    const tools = host.querySelector('#prTools');
+    tools.innerHTML = BotDash.pairRulesTools();
+    tools.querySelector('[data-act="prtoggle"]').addEventListener('click', () => {
+      PairRules.setAuto(!PairRules.autoOn()); this.render();
+    });
+    tools.querySelector('[data-act="prreset"]')?.addEventListener('click', () => {
+      if (confirm('Clear your manual choices and use the automatic rule for every pair?')){
+        PairRules.clearAll(); this.render();
+      }
+    });
+    host.querySelector('#prAutoStatus').textContent = PairRules.autoOn()
+      ? 'Automatic blocking is ON. Your individual Allow or Block choices override it.'
+      : 'Automatic blocking is OFF. Only pairs you block yourself are prohibited.';
+  },
+
   /* ---------- keep what is half-typed ----------
      Bots.tick() rebuilds this whole page every 30 seconds. Without this, an
      amount, a stop or a note being typed into the manual form was wiped
      mid-sentence — and the fund slider snapped back to zero — for no reason the
      user could see. The values and the caret are put back after the redraw. */
-  FORM_IDS: ['mbAmt', 'mbQty', 'mbSl', 'mbTp', 'mbNote', 'mbPct'],
+  FORM_IDS: ['mbAmt', 'mbQty', 'mbSl', 'mbTp', 'mbNote', 'mbPct', 'mbTf'],
 
   snapshotForm(host){
-    const out = { vals: {}, focus: null, a: null, b: null };
+    const out = { vals: {}, focus: null, a: null, b: null,
+      sym: host.querySelector('#mbSym')?.dataset.val };
     for (const id of this.FORM_IDS){
       const el = host.querySelector('#' + id);
       if (el) out.vals[id] = el.value;
@@ -75,7 +136,12 @@ Object.assign(Bots, {
     for (const id of Object.keys(keep.vals)){
       const v = keep.vals[id];
       const el = document.getElementById(id);
-      if (el && v !== '' && v != null) el.value = v;
+      if (el && v != null) el.value = v;
+    }
+    const pick = document.getElementById('mbSym');
+    if (pick && keep.sym){
+      pick.dataset.val = keep.sym;
+      pick.innerHTML = esc(baseAsset(keep.sym)) + ' <i>▾</i>';
     }
     if (keep.focus){
       const el = document.getElementById(keep.focus);
@@ -114,16 +180,17 @@ Object.assign(Bots, {
       </div>`;
     if (b.manual)
       return `<div class="botCtl">
-        <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen || 20}" min="1" max="100"></label>
-        <label class="bc">Per instrument <input type="number" data-cfg="maxPerSymbol" value="${cfg.maxPerSymbol || 10}" min="1" max="50"></label>
-        <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause monitoring</label>
+        <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen ?? 20}" min="0" max="100"></label>
+        <label class="bc">Per instrument <input type="number" data-cfg="maxPerSymbol" value="${cfg.maxPerSymbol ?? 10}" min="0" max="50"></label>
+        <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause new entries</label>
         <button class="bBtn danger" data-act="reset">Reset</button>
-        <span class="bcNote">Monitoring updates price, unrealized P/L, stop, target, MFE and MAE. Pausing keeps every trade and its history.</span>
+        <button class="bBtn" data-act="permissions">Instrument permissions</button>
+        <span class="bcNote">Stops and targets keep working while entries are paused. All open positions together are capped at ${BotEngine.rules(cfg).maxNotionalPct}% of equity; at most ${BotEngine.rules(cfg).maxCorrelated} related positions per virtual account.</span>
       </div>`;
     return `<div class="botCtl">
       ${this.tfSel(cfg)}
       <label class="bc">Min score <input type="number" data-cfg="minScore" value="${cfg.minScore}" min="0" max="100"></label>
-      <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen}" min="1" max="10"></label>
+      <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen}" min="0" max="10"></label>
       <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause</label>
       <button class="bBtn" data-act="run">Run now</button>
       <button class="bBtn" data-act="bt">Backtest</button>
@@ -477,8 +544,10 @@ Object.assign(Bots, {
     <div class="botNote">A market order — only the instrument is required. Leave <b>volume</b> empty and it is
       sized from the risk limit; leave the <b>stop</b> empty and one is placed at 1.5 × ATR; leave the
       <b>target</b> empty and the position simply runs until you close it or the stop is hit.
-      Both levels can be changed at any time on the open position below, or on the Open Trades page.</div>` +
-      this.ledgerView('manual', L, st);
+      Both levels can be changed at any time on the open position below, or on the Open Trades page.
+      Saved stops and targets return after a restart. Paper execution pauses while the PC or browser is off
+      and resumes on fresh prices when ASTRA reopens.</div>` +
+      '<div id="manualLedger">' + this.ledgerView('manual', L, st) + '</div>';
   },
 
   /* ---------- what this trade would win or lose ----------
@@ -491,10 +560,20 @@ Object.assign(Bots, {
     if (!host) return;
     const symBtn = document.getElementById('mbSym');
     const sym = Bots.resolveSymbol(symBtn ? symBtn.dataset.val : '') || STORE.symbol;
+    this.refreshManualQuote(sym);
     const q = Bots.quoteFor(sym);
     const pxEl = document.getElementById('mbPx');
     if (pxEl) pxEl.textContent = q ? fmtPrice(q.price) : '—';
-    if (!q){ host.innerHTML = '<i>No live price for that instrument yet.</i>'; return; }
+    const go = document.getElementById('mbGo');
+    if (go) go.textContent = (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' at market' + (q ? ' · ' + fmtPrice(q.price) : ' · waiting for live price');
+    if (!q){
+      const pending = Feed.bridgeHas(sym) && Feed.bridgeClock?.offset == null;
+      host.innerHTML = '<i>' + (pending ? 'Checking the broker clock and waiting for a new tick. ' : '') +
+        'No verified live price for ' + esc(baseAsset(sym)) + ' yet. Entries stay blocked until a fresh quote arrives.</i>';
+      const fundsEl = document.getElementById('mbFunds'), F = Bots.manualFunds();
+      if (fundsEl) fundsEl.textContent = fmtNum(F.free) + ' available · ' + fmtNum(F.used) + ' already committed';
+      return;
+    }
     /* leverage decides what "leaves your equity" means, so if it has not arrived
        yet, ask once and redraw rather than quietly showing the wrong basis */
     if (Feed.bridge && !(Feed.account && Feed.account.leverage) && !this._acctAsked){
@@ -508,11 +587,14 @@ Object.assign(Bots, {
     const stopDist = sl > 0 ? Math.abs(q.price - sl) : 0;
 
     /* the SAME function the order uses, so this is not a different trade */
-    const size = Bots.manualSize(sym, q.price, stopDist);
-    const m = Bots.marginFor(size.qty, q.price, size.lev);
+    const size = Bots.manualSize(sym, q.price, stopDist, sl);
+    const fill = size.gate ? size.gate.fill : q.price;
+    const m = Bots.marginFor(size.qty, fill, size.lev);
 
-    const risk = (size.qty > 0 && sl > 0) ? Math.abs(Bots.moneyAt(q.price, dir, size.qty, sl)) : null;
-    const reward = (size.qty > 0 && tp > 0) ? Bots.moneyAt(q.price, dir, size.qty, tp) : null;
+    const risk = size.riskCash != null ? size.riskCash : null;
+    const exit = size.gate ? tp * (1 - dir * size.gate.R.slippagePct / 100) : tp;
+    const reward = (size.gate && tp > 0) ? ((exit - fill) * dir -
+      (exit + fill) * BotEngine.commissionFrac(sym, size.gate.R)) * size.qty : null;
     const rr = (risk > 0 && reward > 0) ? reward / risk : null;
     const eq = Bots.ledgers.manual ? Bots.ledgers.manual.equity : 0;
 
@@ -523,27 +605,28 @@ Object.assign(Bots, {
     const F = Bots.manualFunds();
     const fundsEl = document.getElementById('mbFunds');
     const bar = document.getElementById('mbPct');
-    const share = F.free > 0 ? Math.min(100, m.notional / F.free * 100) : 0;
+    const allocation = size.gate ? m.notional : (size.requestedNotional || 0);
+    const share = F.free > 0 ? Math.min(100, allocation / F.free * 100) : 0;
     if (bar && document.activeElement !== bar) bar.value = Math.round(share);
     if (fundsEl) fundsEl.innerHTML =
       `<b>${Math.round(share)}%</b> of your free funds` +
-      `<i>${fmtNum(m.notional)} into this trade · ${fmtNum(Math.max(0, F.free - m.notional))} left` +
+      `<i>${fmtNum(allocation)} ${size.reason ? 'requested (entry blocked)' : 'into this trade'} · ${fmtNum(F.free)} available now` +
       (F.used > 0 ? ' · ' + fmtNum(F.used) + ' already committed' : '') + `</i>`;
 
     host.innerHTML =
-      cell('Leaves your equity', m.margin == null
+      cell('Estimated broker margin', m.margin == null
              ? fmtNum(m.notional) + ' (no leverage known)'
              : fmtNum(m.margin) + (eq > 0 ? ' · ' + (m.margin / eq * 100).toFixed(1) + '% of it' : ''), 'warn') +
-      cell('Position value', fmtNum(m.notional) + (size.lev ? ' at 1:' + size.lev : '')) +
+      cell('Account allocation', fmtNum(m.notional)) +
       (risk != null && eq > 0 && risk / eq > 0.05
         ? cell('⚠ Stop would cost', (risk / eq * 100).toFixed(1) + '% of the account', 'down') : '') +
-      cell('Size', size.qty > 0 ? (+size.lots.toFixed(4)) + ' lot' : '—') +
+      cell('Size', size.qty > 0 ? (size.lots != null ? size.lots + ' lot' : +size.qty.toPrecision(6) + ' units') : '—') +
       cell('If the stop is hit', risk == null ? 'set a stop' : '-' + fmtNum(risk), 'down') +
       cell('If the target is hit', reward == null ? 'no target' : '+' + fmtNum(reward), 'up') +
       cell('Reward to risk', rr == null ? '—' : rr.toFixed(2) + ' : 1', rr == null ? '' : (rr >= 1 ? 'up' : 'down')) +
       cell('Stop is', sl > 0 ? (stopDist / q.price * 100).toFixed(2) + '% away' : '—') +
       cell('Target is', tp > 0 ? (Math.abs(tp - q.price) / q.price * 100).toFixed(2) + '% away' : '—') +
-      (size.why ? cell('Sized by', esc(size.why)) : '');
+      (size.reason ? cell('Entry blocked', esc(size.reason), 'down') : cell('Sized by', esc(size.why)));
   },
 
   /* ---------------- automated bot ---------------- */
@@ -692,6 +775,7 @@ Object.assign(Bots, {
       if (a === 'bt') this.backtest(b.id);
       if (a === 'reset') this.resetBot(b.id);
       if (a === 'mopen') this.manualOpen();
+      if (a === 'permissions') this.showPermissions();
       if (a === 'train'){ const r = MasterBrain.train(); toast(r.ok ? 'Retrained on every example it holds' : r.reason, r.ok ? 'ok' : 'warn'); this.render(); }
       if (a === 'harvest') this.harvest();
       if (a === 'research') this.research();
@@ -734,15 +818,15 @@ Object.assign(Bots, {
       const recalc = () => this.manualCalc();
       ['mbSl', 'mbTp', 'mbQty', 'mbAmt'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener('input', recalc);
+        if (el) el.addEventListener('input', () => {
+          // Clear the alternative BEFORE calculating, so the preview reads the
+          // same size box that the eventual order will use.
+          const otherId = id === 'mbAmt' ? 'mbQty' : id === 'mbQty' ? 'mbAmt' : null;
+          const other = otherId && document.getElementById(otherId);
+          if (other && el.value) other.value = '';
+          recalc();
+        });
       });
-      /* the two size boxes are alternatives — filling one clears the other, so
-         it is always obvious which one decided the trade */
-      const amt = document.getElementById('mbAmt'), lot = document.getElementById('mbQty');
-      if (amt && lot){
-        amt.addEventListener('input', () => { if (amt.value) lot.value = ''; });
-        lot.addEventListener('input', () => { if (lot.value) amt.value = ''; });
-      }
       /* pressing the instrument opens the search picker */
       const pick = document.getElementById('mbSym');
       if (pick) pick.addEventListener('click', () => SymbolSearch.open(sym => {
@@ -809,18 +893,7 @@ Object.assign(Bots, {
       recalc();
     }
 
-    /* move the stop or the target on a running hand-placed trade */
-    host.querySelectorAll('[data-pset]').forEach(el => el.addEventListener('click', () => {
-      const posId = +el.dataset.pset;
-      const slEl = host.querySelector('[data-psl="' + posId + '"]');
-      const tpEl = host.querySelector('[data-ptp="' + posId + '"]');
-      const sl = slEl ? parseFloat(slEl.value) : NaN;
-      const tpRaw = tpEl ? tpEl.value.trim() : '';
-      this.editPos('manual', posId, {
-        sl: isNaN(sl) ? null : sl,
-        tp: tpRaw === '' ? 0 : parseFloat(tpRaw),      /* 0 clears the target */
-      });
-    }));
+    this.bindPositionControls(host);
 
     /* the three ways a bot can decide where to trade */
     host.querySelectorAll('[data-mmode]').forEach(el => el.addEventListener('click', () => {
@@ -890,11 +963,23 @@ Object.assign(Bots, {
     }));
     host.querySelectorAll('[data-open]').forEach(el =>
       el.addEventListener('click', () => App.setSymbol(el.dataset.open)));
+    host.querySelectorAll('.scTable tbody tr[data-sym]').forEach(tr =>
+      tr.addEventListener('dblclick', () => App.setSymbol(tr.dataset.sym)));
+  },
+
+  bindPositionControls(host){
+    host.querySelectorAll('[data-pset]').forEach(el => el.addEventListener('click', () => {
+      const posId = +el.dataset.pset;
+      const slEl = host.querySelector('[data-psl="' + posId + '"]');
+      const tpEl = host.querySelector('[data-ptp="' + posId + '"]');
+      const sl = slEl ? parseFloat(slEl.value) : NaN;
+      const tpRaw = tpEl ? tpEl.value.trim() : '';
+      this.editPos('manual', posId, { sl: isNaN(sl) ? null : sl,
+        tp: tpRaw === '' ? 0 : parseFloat(tpRaw) });
+    }));
     host.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => {
       const [bot, id] = el.dataset.close.split(':');
       this.closePos(bot, +id);
     }));
-    host.querySelectorAll('.scTable tbody tr[data-sym]').forEach(tr =>
-      tr.addEventListener('dblclick', () => App.setSymbol(tr.dataset.sym)));
   },
 });

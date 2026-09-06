@@ -153,7 +153,7 @@ const Feed = {
   /* ---------- candles ---------- */
   async klines(sym, tf, limit){
     const r = this.route(sym);
-    this.srcOf[sym] = r.kind;
+    // Candle routing is not evidence of a fresh executable quote.
     if (r.kind === 'bridge'){
       const url = this.BRIDGE_URL + '/candles?symbol=' + encodeURIComponent(r.addr) + '&tf=' + tf + '&limit=' + (limit || 1000);
       const res = await fetch(url);
@@ -186,13 +186,38 @@ const Feed = {
   },
 
   /* ---------- quotes for everything that is not a Binance stream ---------- */
+  bridgeClock: null,
+  bridgeTime(symbol, raw, now = Date.now() / 1000){
+    const server = this.bridge?.server || '';
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    if (!this.bridgeClock || this.bridgeClock.server !== server)
+      this.bridgeClock = { server, offset: null, samples: {} };
+    const clock = this.bridgeClock, prev = clock.samples[symbol];
+    // JustMarkets documents GMT+2/+3 server time. Observed /quotes ticks on
+    // this account carry that wall clock in an epoch field. Do not infer an
+    // offset from one old quote: require a new tick advancing with our clock.
+    // https://get.justmarkets.help/hc/en-us/articles/14206580923420
+    const offsets = /^JustMarkets/i.test(server) ? [0, 7200, 10800] : [0];
+    if (clock.offset == null && prev && now - prev.at >= 1 && now - prev.at <= 90 &&
+        raw > prev.raw && raw - prev.raw <= now - prev.at + 5){
+      const offset = offsets.find(v => now - (raw - v) >= 0 && now - (raw - v) < 30);
+      if (offset != null) clock.offset = offset;
+    }
+    // Keep the first observation of a repeated tick, so simultaneous alias
+    // requests cannot erase the evidence needed to observe its next advance.
+    if (!prev || prev.raw !== raw) clock.samples[symbol] = { raw, at: now };
+    return raw - (clock.offset ?? 0);
+  },
+
   async quotes(symbols){
     const bridgeSyms = [], proxySyms = [], map = {};
     for (const s of symbols){
       const r = this.route(s);
-      this.srcOf[s] = r.kind;
-      if (r.kind === 'bridge'){ bridgeSyms.push(r.addr); map[r.addr] = s; }
-      else if (r.kind === 'proxy'){ proxySyms.push(r.addr); map[r.addr] = s; }
+      if (r.kind === 'bridge' || r.kind === 'proxy'){
+        const list = r.kind === 'bridge' ? bridgeSyms : proxySyms;
+        if (!list.includes(r.addr)) list.push(r.addr);
+        (map[r.addr] || (map[r.addr] = [])).push(s);
+      }
     }
     const out = [];
     if (bridgeSyms.length){
@@ -200,7 +225,10 @@ const Feed = {
         const r = await fetch(this.BRIDGE_URL + '/quotes?symbols=' + encodeURIComponent(bridgeSyms.join(',')));
         if (r.ok){
           const j = await r.json();
-          for (const q of j.quotes || []) out.push({ ...q, symbol: map[q.symbol] || q.symbol, src: 'bridge' });
+          for (const q of j.quotes || []){
+            const time = this.bridgeTime(q.symbol, q.time);
+            for (const sym of map[q.symbol] || [q.symbol]) out.push({ ...q, time, symbol: sym, src: 'bridge' });
+          }
         }
       } catch(e){}
     }
@@ -211,12 +239,23 @@ const Feed = {
           const r = await fetch(this.apiBase + '/api/market/quotes?symbols=' + encodeURIComponent(chunk.join(',')));
           if (!r.ok) continue;
           const j = await r.json();
-          for (const q of j.quotes || []) out.push({ ...q, symbol: map[q.symbol] || q.symbol, src: 'proxy' });
+          for (const q of j.quotes || [])
+            for (const sym of map[q.symbol] || [q.symbol]) out.push({ ...q, symbol: sym, src: 'proxy' });
         } catch(e){}
       }
     }
-    for (const q of out) if (q.time) this.quoteTime[q.symbol] = q.time;
-    return out;
+    const valid = out.filter(q => Number.isFinite(q.last) && q.last > 0);
+    for (const q of valid){
+      // Publish price and its provenance together. A fresh timestamp must never
+      // validate the previous cached price while its caller is still awaiting us.
+      const cached = STORE.tickers.get(q.symbol) || {};
+      Object.assign(cached, { last: q.last, bid: q.bid, ask: q.ask,
+        spread: q.ask > 0 && q.bid > 0 ? q.ask - q.bid : null });
+      STORE.tickers.set(q.symbol, cached);
+      this.srcOf[q.symbol] = q.src;
+      this.quoteTime[q.symbol] = Number.isFinite(q.time) && q.time > 0 ? q.time : 0;
+    }
+    return valid;
   },
 
   /* ---------- contract specifications from the broker ----------
@@ -231,18 +270,20 @@ const Feed = {
     if (!want.length) return this.specs;
     try {
       const back = {};
-      for (const s2 of want) back[this.brokerName(s2)] = s2;
+      for (const s2 of want) (back[this.brokerName(s2)] || (back[this.brokerName(s2)] = [])).push(s2);
       const r = await fetch(this.BRIDGE_URL + '/specs?symbols=' + encodeURIComponent(Object.keys(back).join(',')));
-      if (!r.ok) return this.specs;
+      if (!r.ok) throw new Error('Broker specifications HTTP ' + r.status);
       const j = await r.json();
-      for (const [brokerSym, spec] of Object.entries(j.specs || {}))
-        this.specs[back[brokerSym] || brokerSym] = spec;
+      for (const [brokerSym, spec] of Object.entries(j.specs || {})){
+        this.specs[brokerSym] = spec;
+        for (const sym of back[brokerSym] || []) this.specs[sym] = spec;
+      }
       if (j.account) this.account = j.account;
       BUS.emit('feed');
-    } catch(e){}
+    } catch(e){ console.warn('ASTRA could not load broker specifications:', e.message); }
     return this.specs;
   },
-  specFor(sym){ return this.specs[sym] || null; },
+  specFor(sym){ return this.specs[sym] || this.specs[this.brokerName(sym)] || null; },
 
   async search(q){
     if (!this.apiReady) return [];
@@ -276,16 +317,17 @@ const Feed = {
 
   /* the single source of truth the rest of the app asks */
   isLive(sym){
-    const src = this.srcOf[sym] || this.route(sym).kind;
+    const src = this.srcOf[sym];
     if (src !== 'bridge' && src !== 'binance') return false;
     const t = this.quoteTime[sym];
     /* a stream that has gone quiet is not live either */
-    return t ? (Date.now() / 1000 - t) < 180 : true;
+    const age = Date.now() / 1000 - t;
+    return Number.isFinite(t) && t > 0 && age >= 0 && age < 180;
   },
 
   /* may this symbol be traded at all right now? */
   tradable(sym){
-    if (!this.liveOnly) return { ok: true };
+    // The display toggle may show delayed markets; it cannot authorize entries.
     if (this.isLive(sym)) return { ok: true };
     const st = this.status(sym);
     const name = baseAsset(sym);
@@ -312,12 +354,15 @@ const Feed = {
   /* ---------- how fresh is this price, honestly ---------- */
   status(sym){
     const src = this.srcOf[sym] || this.route(sym).kind;
-    if (src === 'bridge') return { cls: 'live', label: 'LIVE', tip: 'Direct from your MT5 terminal' };
-    if (src === 'binance') return { cls: 'live', label: 'LIVE', tip: 'Binance real-time stream' };
+    if (this.isLive(sym)) return { cls: 'live', label: 'LIVE',
+      tip: src === 'bridge' ? 'Direct from your MT5 terminal' : 'Binance real-time stream' };
     const t = this.quoteTime[sym];
-    if (!t) return { cls: 'flat', label: '—', tip: 'No quote yet' };
-    const age = Math.max(0, Date.now() / 1000 - t);
-    if (age < 180) return { cls: 'live', label: 'LIVE', tip: 'Updated ' + Math.round(age) + 's ago' };
+    if (!Number.isFinite(t) || t <= 0 || t > Date.now() / 1000)
+      return { cls: 'flat', label: '—', tip: 'No valid quote timestamp yet' };
+    const age = Date.now() / 1000 - t;
+    if (src === 'bridge' || src === 'binance')
+      return { cls: 'delay', label: 'STALE', tip: 'Last tick is ' + Math.round(age) + 's old — trading is blocked' };
+    if (age < 180) return { cls: 'delay', label: 'DELAYED', tip: 'Public data is not a verified live execution feed' };
     if (age < 3600) return { cls: 'delay', label: 'DELAYED ' + Math.round(age / 60) + 'm', tip: 'Free feeds lag the exchange' };
     const hrs = age / 3600;
     return {

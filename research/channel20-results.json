@@ -1,0 +1,465 @@
+{
+  "candidate": "Channel 20 intraday — research candidate",
+  "capturedAt": "2026-09-06T19:20:40.5796517Z",
+  "evaluatedAt": "2026-09-06T19:24:38.984Z",
+  "passingBothHalves": [
+    "WTI.s"
+  ],
+  "passingWith100Trades": [
+    "WTI.s"
+  ],
+  "verdict": "FAILED the predeclared promotion requirement; do not promote as profitable",
+  "results": [
+    {
+      "symbol": "BTCUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2026-02-13T03:00:00.000Z",
+      "to": "2026-05-25T17:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 60,
+      "winRate": 45,
+      "profitFactor": 0.845402158232707,
+      "averageR": -0.0513613982749379,
+      "maxDrawdownPct": 3.4350547577724218,
+      "netPnl": -129.33931840096375,
+      "signals": 80,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 20
+      },
+      "spreadPct": 0.05,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.0002815990363274068,
+      "exits": {
+        "time limit": 46,
+        "stop-loss": 12,
+        "target reached": 2
+      }
+    },
+    {
+      "symbol": "BTCUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-05-28T06:00:00.000Z",
+      "to": "2026-09-06T21:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 57,
+      "winRate": 43.859649122807014,
+      "profitFactor": 1.369769771847596,
+      "averageR": 0.10067902731973398,
+      "maxDrawdownPct": 2.958295928477388,
+      "netPnl": 267.2069467545098,
+      "signals": 82,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 25
+      },
+      "spreadPct": 0.05,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.000153245490196241,
+      "exits": {
+        "time limit": 41,
+        "target reached": 6,
+        "stop-loss": 10
+      }
+    },
+    {
+      "symbol": "ETHUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2026-02-13T03:00:00.000Z",
+      "to": "2026-05-25T17:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 43,
+      "winRate": 37.2093023255814,
+      "profitFactor": 0.8231878759083753,
+      "averageR": -0.050808532863697485,
+      "maxDrawdownPct": 3.0774064328633752,
+      "netPnl": -110.45212149765212,
+      "signals": 61,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 18
+      },
+      "spreadPct": 0.05,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00007850234786133115,
+      "exits": {
+        "time limit": 33,
+        "stop-loss": 7,
+        "target reached": 3
+      }
+    },
+    {
+      "symbol": "ETHUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-05-28T06:00:00.000Z",
+      "to": "2026-09-06T21:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 47,
+      "winRate": 44.680851063829785,
+      "profitFactor": 1.484848019150755,
+      "averageR": 0.1503612271694257,
+      "maxDrawdownPct": 1.5555373643888517,
+      "netPnl": 353.3504610746404,
+      "signals": 65,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 18
+      },
+      "spreadPct": 0.05,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00006107464042770516,
+      "exits": {
+        "time limit": 29,
+        "target reached": 9,
+        "stop-loss": 9
+      }
+    },
+    {
+      "symbol": "XAUUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-04T08:00:00.000Z",
+      "to": "2026-04-06T19:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 38,
+      "winRate": 44.73684210526316,
+      "profitFactor": 0.9718671902636979,
+      "averageR": -0.01717093887369779,
+      "maxDrawdownPct": 2.0334025569601604,
+      "netPnl": -14.605526677269154,
+      "signals": 79,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 17,
+        "Smallest broker size (0.01 lot) exceeds the risk or position-value budget": 24
+      },
+      "spreadPct": 0.006,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.0003954137788753087,
+      "exits": {
+        "time limit": 22,
+        "target reached": 4,
+        "stop-loss": 12
+      }
+    },
+    {
+      "symbol": "XAUUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-09T11:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 72,
+      "winRate": 44.44444444444444,
+      "profitFactor": 1.1891709359567486,
+      "averageR": 0.051892692790993365,
+      "maxDrawdownPct": 1.9410053219196939,
+      "netPnl": 124.71758158283228,
+      "signals": 107,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 35
+      },
+      "spreadPct": 0.006,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.0002874667117254148,
+      "exits": {
+        "stop-loss": 10,
+        "time limit": 59,
+        "target reached": 3
+      }
+    },
+    {
+      "symbol": "US100.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-04T05:00:00.000Z",
+      "to": "2026-04-06T17:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 80,
+      "winRate": 42.5,
+      "profitFactor": 0.880933107398211,
+      "averageR": -0.04732713509386324,
+      "maxDrawdownPct": 4.75079606811574,
+      "netPnl": -163.62210763247094,
+      "signals": 103,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 23
+      },
+      "spreadPct": 0.009,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.0004076324709956225,
+      "exits": {
+        "study ended": 1,
+        "time limit": 52,
+        "stop-loss": 22,
+        "target reached": 5
+      }
+    },
+    {
+      "symbol": "US100.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-09T09:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 71,
+      "winRate": 49.29577464788733,
+      "profitFactor": 1.0416866270112426,
+      "averageR": 0.017922283060417953,
+      "maxDrawdownPct": 4.767140021377314,
+      "netPnl": 45.10239041007662,
+      "signals": 99,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 28
+      },
+      "spreadPct": 0.009,
+      "commissionPct": 0,
+      "slippagePct": 0.005,
+      "overnightTrades": 1,
+      "cashReconciliationError": 0.00009041007648136201,
+      "exits": {
+        "time limit": 48,
+        "stop-loss": 18,
+        "target reached": 5
+      }
+    },
+    {
+      "symbol": "EURUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-19T04:00:00.000Z",
+      "to": "2026-04-13T18:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 68,
+      "winRate": 45.588235294117645,
+      "profitFactor": 0.6824241840999996,
+      "averageR": -0.11055166337881155,
+      "maxDrawdownPct": 2.6530883575656636,
+      "netPnl": -187.00903702901633,
+      "signals": 107,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 39
+      },
+      "spreadPct": 0.005166356685280277,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00035575442112190103,
+      "exits": {
+        "time limit": 45,
+        "stop-loss": 20,
+        "target reached": 3
+      }
+    },
+    {
+      "symbol": "EURUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-16T07:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 86,
+      "winRate": 31.3953488372093,
+      "profitFactor": 0.4620906534624332,
+      "averageR": -0.2109855022632896,
+      "maxDrawdownPct": 3.5357888142748366,
+      "netPnl": -329.5380702816092,
+      "signals": 124,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 38
+      },
+      "spreadPct": 0.005166356685280277,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.0001269848487481795,
+      "exits": {
+        "stop-loss": 28,
+        "time limit": 54,
+        "target reached": 4
+      }
+    },
+    {
+      "symbol": "GBPUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-19T04:00:00.000Z",
+      "to": "2026-04-13T18:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 81,
+      "winRate": 41.9753086419753,
+      "profitFactor": 0.5796210958099489,
+      "averageR": -0.1632439425318208,
+      "maxDrawdownPct": 3.4726765177354264,
+      "netPnl": -335.248110569104,
+      "signals": 121,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 40
+      },
+      "spreadPct": 0.00813820145748193,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.0002518594735647639,
+      "exits": {
+        "time limit": 59,
+        "stop-loss": 21,
+        "target reached": 1
+      }
+    },
+    {
+      "symbol": "GBPUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-16T07:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 78,
+      "winRate": 43.58974358974359,
+      "profitFactor": 0.8009619593835479,
+      "averageR": -0.09588100340483081,
+      "maxDrawdownPct": 1.6844480020389847,
+      "netPnl": -119.55172637247051,
+      "signals": 118,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 40
+      },
+      "spreadPct": 0.00813820145748193,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00037206296575220676,
+      "exits": {
+        "time limit": 51,
+        "stop-loss": 22,
+        "target reached": 5
+      }
+    },
+    {
+      "symbol": "WTI.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-03T19:00:00.000Z",
+      "to": "2026-04-06T19:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 84,
+      "winRate": 54.761904761904766,
+      "profitFactor": 1.3403849536672885,
+      "averageR": 0.08762123585606521,
+      "maxDrawdownPct": 1.9745137151266499,
+      "netPnl": 365.63768122419606,
+      "signals": 134,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 50
+      },
+      "spreadPct": 0.028,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00009544551579665495,
+      "exits": {
+        "stop-loss": 18,
+        "time limit": 61,
+        "target reached": 5
+      }
+    },
+    {
+      "symbol": "WTI.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-09T11:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 77,
+      "winRate": 50.649350649350644,
+      "profitFactor": 1.0204619850130818,
+      "averageR": 0.0069181081868798094,
+      "maxDrawdownPct": 3.3094435484966462,
+      "netPnl": 21.832133334030004,
+      "signals": 117,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 40
+      },
+      "spreadPct": 0.028,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": 0.00008664830998128537,
+      "exits": {
+        "stop-loss": 18,
+        "time limit": 56,
+        "target reached": 3
+      }
+    },
+    {
+      "symbol": "XAGUSD.s",
+      "half": "first",
+      "bars": 2499,
+      "from": "2025-11-04T08:00:00.000Z",
+      "to": "2026-04-06T19:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 21,
+      "winRate": 42.857142857142854,
+      "profitFactor": 1.6249568727295676,
+      "averageR": 0.20256972227801479,
+      "maxDrawdownPct": 0.5191570135597628,
+      "netPnl": 140.50065506460487,
+      "signals": 83,
+      "rejected": {
+        "Already holding the maximum of 1 open positions": 7,
+        "Smallest broker size (0.01 lot) exceeds the risk or position-value budget": 55
+      },
+      "spreadPct": 0.03775978733688631,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.00022754543073233435,
+      "exits": {
+        "stop-loss": 3,
+        "time limit": 15,
+        "target reached": 3
+      }
+    },
+    {
+      "symbol": "XAGUSD.s",
+      "half": "second",
+      "bars": 2500,
+      "from": "2026-04-09T11:00:00.000Z",
+      "to": "2026-09-04T22:00:00.000Z",
+      "timestampBasis": "broker server clock, not UTC",
+      "trades": 17,
+      "winRate": 41.17647058823529,
+      "profitFactor": 0.48572699031031996,
+      "averageR": -0.1564352012191068,
+      "maxDrawdownPct": 1.7448514299752467,
+      "netPnl": -115.47526143853975,
+      "signals": 102,
+      "rejected": {
+        "Smallest broker size (0.01 lot) exceeds the risk or position-value budget": 75,
+        "Already holding the maximum of 1 open positions": 10
+      },
+      "spreadPct": 0.03775978733688631,
+      "commissionPct": 0.003,
+      "slippagePct": 0.005,
+      "overnightTrades": 0,
+      "cashReconciliationError": -0.00007865023231090618,
+      "exits": {
+        "time limit": 16,
+        "stop-loss": 1
+      }
+    }
+  ]
+}

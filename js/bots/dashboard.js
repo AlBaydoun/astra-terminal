@@ -224,7 +224,8 @@ const BotDash = {
         '<button class="bMini" data-act="dashpdf">PDF</button>'),
       pairs: () => this.section('pairs', 'PERMITTED &amp; PROHIBITED',
         PairRules.columns('').blocked.length + ' prohibited',
-        this.pairRulesView(), this.pairRulesTools()),
+        '<div class="botNote">Manage the shared list on the Instrument permissions page.</div>' +
+        '<button class="bBtn" data-act="permissions">Instrument permissions</button>'),
     };
     this._secIds = Object.keys(secs);
     /* a section that renders to nothing is not on the page, so it must not take
@@ -598,7 +599,7 @@ const BotDash = {
     const cls = v.state === 'blocked' ? 'bad' : v.state === 'watch' ? 'warn' : (m && m.net > 0 ? 'good' : '');
     return `<div class="prCard ${cls}">
       <div class="prTop">
-        <b>${esc(baseAsset(v.sym))}</b>
+        <b>${esc(v.sym)}</b>
         <span class="prBadge ${badge}">${badge === 'yours' ? 'your choice' : badge === 'watch' ? 'watching' : badge === 'new' ? 'no record' : 'automatic'}</span>
         ${net ? `<i class="${pctClass(m.net)}">${net}</i>` : ''}
       </div>
@@ -606,8 +607,8 @@ const BotDash = {
       ${m && m.bots.length ? `<div class="prBots">${esc(m.bots.slice(0, 3).join(', '))}${m.bots.length > 3 ? ' +' + (m.bots.length - 3) : ''}</div>` : ''}
       <div class="prBtns">
         ${v.state === 'blocked'
-          ? `<button class="bMini" data-prallow="${esc(v.sym)}">Allow again</button>`
-          : `<button class="bMini danger" data-prblock="${esc(v.sym)}">Prohibit</button>`}
+          ? `<button class="bMini" data-prallow="${esc(v.sym)}">Allow pair</button>`
+          : `<button class="bMini danger" data-prblock="${esc(v.sym)}">Block pair</button>`}
         ${v.manual ? `<button class="bMini" data-prauto="${esc(v.sym)}">Back to automatic</button>` : ''}
       </div>
     </div>`;
@@ -619,16 +620,16 @@ const BotDash = {
       <div class="prHead">${esc(title)} <span>${rows.length}</span><i>${esc(sub)}</i></div>
       ${rows.length ? rows.map(r => this.pairCard(r)).join('') : `<div class="empty">${esc(empty)}</div>`}
     </div>`;
-    return col('PROHIBITED', 'no bot may open these', c.blocked,
+    return col('BLOCKED PAIRS', 'new entries refused', c.blocked,
                this.pairQ ? 'nothing prohibited matches that' : 'nothing is prohibited yet') +
-           col('ALLOWED', 'free to trade', c.allowed,
+           col('ALLOWED PAIRS', 'other risk limits still apply', c.allowed,
                this.pairQ ? 'nothing allowed matches that' : 'no instrument has traded yet');
   },
 
   /* the section header owns these buttons now, so they sit beside the title */
   pairRulesTools(){
     const auto = PairRules.autoOn();
-    return `<button class="bMini${auto ? ' on' : ''}" data-act="prtoggle">${auto ? '✓ ' : ''}Prohibit losers automatically</button>` +
+    return `<button class="bMini${auto ? ' on' : ''}" data-act="prtoggle">Automatic blocking: ${auto ? 'ON' : 'OFF'}</button>` +
       (Object.keys(PairRules.load().rules).length
         ? '<button class="bMini" data-act="prreset">Clear my own choices</button>' : '');
   },
@@ -637,21 +638,22 @@ const BotDash = {
     const c = PairRules.columns('');
     const auto = PairRules.autoOn();
     return `<div class="prBar">
-      <input type="text" id="prSearch" placeholder="Search any instrument to add it — XPT, DAX, EUR…"
+      <input type="text" id="prSearch" aria-label="Find a pair" placeholder="Find a pair to block or allow — ETH, EURUSD, DAX…"
         value="${esc(this.pairQ)}" spellcheck="false" autocomplete="off">
-      ${this.pairQ ? '<button class="bMini" data-act="prclear">Clear search</button>' : ''}
+      <button class="bMini" data-act="prclear">Clear search</button>
       <span class="prHint">${c.untested} instrument${c.untested === 1 ? '' : 's'} with no record are allowed by
         default — search to find and prohibit one.</span>
     </div>
 
     <div class="prCols" id="prCols">${this.pairColumns()}</div>
 
-    <div class="botNote${auto ? '' : ' warn'}">A pair is prohibited automatically once it has
+    <div class="botNote"><b id="prAutoStatus"></b><br>A pair is prohibited automatically once it has
       <b>${PairRules.MIN_TRADES} or more finished trades and is down by more than ${fmtNum(PairRules.minLoss())}</b> (half a percent of one virtual account) — the rule that catches
       EUR/USD. Anything you prohibit or allow by hand always wins and is never overturned by a later good day.
       The block applies to every bot in every mode, including Follow Market Fit; it refuses <b>new</b> entries only,
       so a position already open still runs to its own stop or target.
-      ${auto ? '' : '<b>Automatic prohibition is currently switched off</b> — only your own choices are enforced.'}</div>`;
+      Use <b>Allow pair</b> to remove a block and keep the pair allowed. Use <b>Back to automatic</b>
+      to remove your override. Choices are saved and apply to aliases of the same pair.</div>`;
   },
 
   /* ---------- small breakdowns ---------- */

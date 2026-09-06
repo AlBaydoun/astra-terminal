@@ -97,7 +97,10 @@ const BROKER = {
 
   /* group used for costing — broker instruments know their own, others are guessed */
   costGroup(sym){
-    const i = this.map[sym];
+    // The bridge may expose the Pro suffix (.s) while the catalogue uses .m
+    // or .std. The same contract must keep the same measured cost group.
+    const base = s => String(s).replace(/\.[A-Za-z]{1,4}$/, '').toUpperCase();
+    const i = this.map[sym] || Object.values(this.map).find(item => base(item.sym) === base(sym));
     if (i) return this.COSTS[this.account][i.group] ? i.group : 'other';
     if (typeof MK === 'undefined') return 'other';
     const g = MK.group(sym);

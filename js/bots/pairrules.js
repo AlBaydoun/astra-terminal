@@ -48,19 +48,39 @@ const PairRules = {
     this.state = { auto: s.auto !== false, rules: s.rules || {} };
     return this.state;
   },
-  save(){ lsSet('astra_pairrules', this.state); this._cache = null; },
+  save(){ this._cache = null; return lsSet('astra_pairrules', this.state); },
+
+  // Read old choices as they stand; do not migrate saved keys or trade records.
+  // A suffix, letter case or exchange alias must not evade the same permission.
+  key(sym){ return BotEngine.symbolKey(String(sym).trim().replace(/\//g, '')); },
+  update(change){
+    const before = this.load();
+    this.state = { auto: before.auto, rules: { ...before.rules } };
+    change(this.state);
+    if (this.save()) return true;
+    this.state = before;
+    toast('Instrument permissions were not saved. Your previous choices still apply.', 'warn');
+    return false;
+  },
 
   autoOn(){ return this.load().auto; },
-  setAuto(on){ this.load().auto = !!on; this.save(); },
+  setAuto(on){ return this.update(s => { s.auto = !!on; }); },
 
   /* 'block' | 'allow' | null (null = leave it to the record) */
-  manualOf(sym){ return this.load().rules[sym] || null; },
-  setManual(sym, v){
-    const S = this.load();
-    if (v) S.rules[sym] = v; else delete S.rules[sym];
-    this.save();
+  manualOf(sym){
+    const key = this.key(sym);
+    const choices = Object.entries(this.load().rules).filter(([s]) => this.key(s) === key).map(([, v]) => v);
+    // Conflicting old aliases remain blocked until the user makes one choice.
+    return choices.includes('block') ? 'block' : choices.includes('allow') ? 'allow' : null;
   },
-  clearAll(){ this.load().rules = {}; this.save(); },
+  setManual(sym, v){
+    if (!String(sym).trim() || ![null, 'block', 'allow'].includes(v)) return false;
+    return this.update(S => {
+      for (const s of Object.keys(S.rules)) if (this.key(s) === this.key(sym)) delete S.rules[s];
+      if (v) S.rules[String(sym).trim()] = v;
+    });
+  },
+  clearAll(){ return this.update(s => { s.rules = {}; }); },
 
   /* ---------- the record, pooled over every bot ----------
      Cached briefly: allowed() runs on every scan cycle and would otherwise walk
@@ -77,7 +97,8 @@ const PairRules = {
         const L = Bots.ledger(b.id);
         if (!L) continue;
         for (const t of (L.closed || [])){
-          const m = map[t.sym] = map[t.sym] ||
+          const key = this.key(t.sym);
+          const m = map[key] = map[key] ||
             { sym: t.sym, n: 0, won: 0, lost: 0, gw: 0, gl: 0, net: 0, last: 0, bots: [] };
           m.n++; m.net += t.pnl;
           if (t.pnl > 0){ m.won++; m.gw += t.pnl; } else { m.lost++; m.gl += Math.abs(t.pnl); }
@@ -93,7 +114,7 @@ const PairRules = {
     return map;
   },
 
-  statsOf(sym){ return this.book()[sym] || null; },
+  statsOf(sym){ return this.book()[this.key(sym)] || null; },
 
   /* what the numbers alone say, before any decision of yours */
   autoVerdict(m){
@@ -138,8 +159,8 @@ const PairRules = {
   searchPool(){
     const out = [];
     const seen = new Set();
-    const add = s => { if (s && !seen.has(s)){ seen.add(s); out.push(s); } };
-    for (const s of Object.keys(this.book())) add(s);
+    const add = s => { if (s && !seen.has(this.key(s))){ seen.add(this.key(s)); out.push(s); } };
+    for (const m of Object.values(this.book())) add(m.sym);
     for (const s of Object.keys(this.load().rules)) add(s);
     if (typeof Bots !== 'undefined' && Bots.universe) { try { for (const s of Bots.universe()) add(s); } catch(e){} }
     if (typeof BROKER !== 'undefined') for (const s of BROKER.all()) add(s);
@@ -148,10 +169,8 @@ const PairRules = {
 
   /* the two columns, ready to render */
   columns(query){
-    const q = (query || '').trim().toUpperCase();
-    const pool = q ? this.searchPool().filter(s => s.toUpperCase().includes(q)) : null;
-    const list = pool || [...new Set(
-      Object.keys(this.book()).concat(Object.keys(this.load().rules)))];
+    const q = (query || '').trim().toUpperCase().replace(/\//g, '');
+    const list = this.searchPool().filter(s => q ? s.toUpperCase().includes(q) : this.statsOf(s) || this.manualOf(s));
     const rows = list.map(s => this.verdict(s));
     const rank = (a, b) => {
       const an = a.m ? a.m.n : 0, bn = b.m ? b.m.n : 0;
@@ -163,7 +182,7 @@ const PairRules = {
       allowed: rows.filter(r => r.state !== 'blocked').sort((a, b) => -rank(a, b)),
       searching: !!q,
       /* how many instruments are permitted purely because nothing is known yet */
-      untested: this.searchPool().filter(s => !this.book()[s] && !this.manualOf(s)).length,
+      untested: this.searchPool().filter(s => !this.statsOf(s) && !this.manualOf(s)).length,
     };
   },
 };

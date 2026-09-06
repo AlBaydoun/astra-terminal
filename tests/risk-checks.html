@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>ASTRA — paper risk regression checks</title>
+<style>body{font:16px system-ui;background:#101722;color:#e3edf7;margin:32px;max-width:1000px}button{padding:12px;font:inherit}pre{white-space:pre-wrap;line-height:1.6}.pass{color:#80e1ad}.fail{color:#ff8996}</style>
+<h1>ASTRA paper risk checks</h1>
+<p>Runs the terminal's actual scripts with disposable in-memory ledgers. No account login, storage writes, bot timers or live-order scripts are loaded.</p>
+<button id="run">Run checks</button><pre id="results">Ready.</pre>
+<div id="fixture" hidden></div>
+<script src="risk-fixture.js"></script>
+<script src="../js/broker.js"></script>
+<script src="../js/feed.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/bots/engine.js"></script>
+<script src="../js/bots/backtest.js"></script>
+<script src="../js/bots/bots.js"></script>
+<script src="../js/bots/botsui.js"></script>
+<script src="risk-checks.js"></script>
+</html>

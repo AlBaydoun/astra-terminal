@@ -38,7 +38,17 @@ const STORE = {
 document.documentElement.dataset.theme = STORE.theme;
 
 function lsGet(k, def){ try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch(e){ return def; } }
-function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function lsSet(k, v){
+  try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+  catch(e){
+    console.error('ASTRA could not save ' + k + ':', e.message);
+    if (!lsSet.warnedAt || Date.now() - lsSet.warnedAt > 30000){
+      lsSet.warnedAt = Date.now();
+      toast('Browser storage could not save your latest changes. Keep ASTRA open; a restart may lose them.', 'warn');
+    }
+    return false;
+  }
+}
 
 /* formatting */
 function fmtPrice(p){
