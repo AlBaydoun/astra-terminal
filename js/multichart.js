@@ -435,12 +435,17 @@ const Multi = {
 
   async loadCell(cell){
     this.stopFeed(cell);
+    const request = cell.loadRequest = (cell.loadRequest || 0) + 1;
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(cell.sym)){
+      cell.data = []; cell.price.setData([]);
+      cell.el.querySelector('.miniSym b').textContent = 'Choose instrument'; return;
+    }
     cell.el.querySelector('.miniSym b').textContent = this.symLabel(cell.sym);
     this.tick([cell.sym]);
     let data;
     try { data = await API.klines(cell.sym, cell.tf, 400); }
-    catch(e){ toast('Could not load ' + baseAsset(cell.sym), 'error'); return; }
-    if (!this.cells.includes(cell)) return;
+    catch(e){ if (typeof MarketSources === 'undefined' || MarketSources.allowed(cell.sym)) toast('Could not load ' + baseAsset(cell.sym), 'error'); return; }
+    if (!this.cells.includes(cell) || request !== cell.loadRequest || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(cell.sym))) return;
     cell.data = data;
     cell.price.setData(data.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
     this.renderInds(cell);
@@ -450,6 +455,7 @@ const Multi = {
 
   startFeed(cell){
     const route = (typeof Feed !== 'undefined') ? Feed.route(cell.sym) : { kind: 'binance', addr: cell.sym };
+    if (route.kind === 'disabled') return;
     /* anything without a public stream is polled: quick price ticks and a
        slower full-candle refresh, exactly as the main chart does it */
     if (route.kind !== 'binance'){

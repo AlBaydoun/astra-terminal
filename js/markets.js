@@ -249,7 +249,9 @@ const MarketBrowser = {
 
   renderTabs(){
     const host = document.getElementById('mktTabs');
-    host.innerHTML = MK.GROUPS.map(g =>
+    const groups = typeof MarketSources === 'undefined' ? MK.GROUPS : MK.GROUPS.filter(g => g.id === 'broker' || (g.id === 'crypto' && MarketSources.binanceOn()));
+    if (!groups.some(g => g.id === this.group)) this.group = 'broker';
+    host.innerHTML = groups.map(g =>
       `<button data-g="${g.id}"${g.id === this.group ? ' class="active"' : ''}>${esc(g.label)}</button>`).join('');
     host.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       this.group = b.dataset.g;
@@ -280,9 +282,9 @@ const MarketBrowser = {
   rows(){
     const q = this.query.toUpperCase();
     if (this.group === 'broker'){
-      return BROKER.LIST
-        .filter(([s, n]) => !q || s.toUpperCase().includes(q) || n.toUpperCase().includes(q))
-        .map(([s, n, g]) => ({ sym: s, name: n + ' · ' + g }));
+      const list = typeof MarketSources !== 'undefined' ? MarketSources.brokerList() : BROKER.all();
+      return list.map(s => ({sym:s, name:BROKER.info(s)?.name || s}))
+        .filter(r => !q || r.sym.toUpperCase().includes(q) || r.name.toUpperCase().includes(q));
     }
     if (this.group === 'crypto'){
       return STORE.universe.filter(s => !q || s.includes(q)).slice(0, 300)
@@ -300,7 +302,7 @@ const MarketBrowser = {
 
   render(){
     const host = document.getElementById('mktList');
-    const rows = this.rows();
+    const rows = this.rows().filter(r => typeof MarketSources === 'undefined' || MarketSources.allowed(r.sym));
     host.innerHTML = rows.length ? rows.map(r => {
       const t = STORE.tickers.get(r.sym);
       const on = MK.isMonitored(r.sym);
@@ -310,7 +312,7 @@ const MarketBrowser = {
         `<span class="mkPx">${t ? fmtPrice(t.last) : '<span class="dim2">…</span>'}</span>` +
         `<span class="mkPct ${t ? pctClass(t.pct) : ''}">${t ? fmtPct(t.pct) : ''}</span>` +
         `<button class="mkOpen" title="Open chart">Chart</button></div>`;
-    }).join('') : '<div class="empty">Nothing found. Type at least 2 letters to search worldwide.</div>';
+    }).join('') : '<div class="empty">No matching enabled instruments. Check your JustMarkets connection in Market settings.</div>';
 
     host.querySelectorAll('.mktRow').forEach(row => {
       const sym = row.dataset.sym;

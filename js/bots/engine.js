@@ -212,6 +212,9 @@ const BotEngine = {
     if (!this.replays.has(ledger) && (typeof Feed === 'undefined' || !Feed.isLive(sig.sym) ||
         (quote.source != null && !['bridge', 'binance'].includes(quote.source))))
       return { ok: false, reason: 'No fresh MT5 or exchange-stream price — entry refused' };
+    if (!this.replays.has(ledger) && typeof MarketSources !== 'undefined' &&
+        !MarketSources.executable(sig.sym, quote.source || Feed.srcOf[sig.sym]))
+      return { ok: false, reason: MarketSources.reason(sig.sym) };
     if (!this.replays.has(ledger) && typeof PairRules !== 'undefined' && PairRules.blocked(sig.sym))
       return { ok: false, reason: sig.sym + ' is blocked. Open Instrument permissions to allow this pair.' };
 
@@ -330,6 +333,8 @@ const BotEngine = {
   },
 
   partialFill(ledger, cfg, pos, fraction, price){
+    if (!this.replays.has(ledger) && typeof MarketSources !== 'undefined' && !MarketSources.executable(pos.sym, Feed.srcOf[pos.sym]))
+      return { ok: false, reason: MarketSources.reason(pos.sym) };
     if (!ledger.open.includes(pos) || !(fraction > 0 && fraction < 1) || !Number.isFinite(price) || price <= 0)
       return { ok: false, reason: 'Invalid partial exit' };
     if (!this.replays.has(ledger) && !Feed.isLive(pos.sym))
@@ -406,6 +411,7 @@ const BotEngine = {
      the stop is assumed to have been hit first. Never flatter than reality. */
   step(ledger, cfg, pos, candle, quote){
     const R = Object.assign({}, this.RISK, cfg.risk || {});
+    if (!this.replays.has(ledger) && typeof MarketSources !== 'undefined' && !MarketSources.executable(pos.sym, Feed.srcOf[pos.sym])) return null;
     if (!this.replays.has(ledger) && (typeof Feed === 'undefined' || !Feed.isLive(pos.sym))) return null;
     const dir = pos.dir;
     const hi = candle ? candle.high : quote.price;
@@ -500,6 +506,7 @@ const BotEngine = {
   },
 
   close(ledger, cfg, pos, price, reason){
+    if (!this.replays.has(ledger) && typeof MarketSources !== 'undefined' && !MarketSources.executable(pos.sym, Feed.srcOf[pos.sym])) return null;
     if (!ledger.open.includes(pos) || !(Number.isFinite(price) && price > 0)) return null;
     if (!this.replays.has(ledger) && (typeof Feed === 'undefined' || !Feed.isLive(pos.sym))) return null;
     const R = Object.assign({}, this.RISK, cfg.risk || {});

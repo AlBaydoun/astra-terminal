@@ -626,6 +626,13 @@ const Chart = {
   /* --- data loading + live stream --- */
   async load(){
     const spin = document.getElementById('chartLoading');
+    const sym = STORE.symbol, tf = STORE.tf, request = this.loadRequest = (this.loadRequest || 0) + 1;
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)){
+      this.raw = []; this.renderAll();
+      this.resub(); spin.classList.remove('show');
+      document.getElementById('legend').textContent = 'Connect JustMarkets or choose an enabled instrument in Market settings.';
+      return;
+    }
     this._fold = null;
     /* second-by-second candles exist only where we get a real tick stream */
     if (CFG.SUB_MINUTE.includes(STORE.tf)){
@@ -639,8 +646,12 @@ const Chart = {
     }
     spin.classList.add('show');
     try {
-      this.raw = await API.klines(STORE.symbol, STORE.tf);
+      const data = await API.klines(sym, tf);
+      if (request !== this.loadRequest || sym !== STORE.symbol || tf !== STORE.tf ||
+          (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) return;
+      this.raw = data;
     } catch(e){
+      if (request !== this.loadRequest || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) return;
       toast('Could not load chart data — ' + e.message, 'error');
       spin.classList.remove('show');
       return;
@@ -662,6 +673,7 @@ const Chart = {
     /* anything without a public stream is polled: fast price ticks + slower full candles.
        The MT5 bridge is on this machine, so it can be polled about once a second. */
     const route = typeof Feed !== 'undefined' ? Feed.route(STORE.symbol) : { kind: 'binance' };
+    if (route.kind === 'disabled') return;
     if (route.kind !== 'binance'){
       BUS.emit('ws', { label: 'symbol', up: true, mode: 'poll' });
       const fast = route.kind === 'bridge' ? 1000 : 6000;
@@ -837,9 +849,11 @@ const Chart = {
   },
 
   async loadCompare(sym){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) return;
     let data;
     try { data = await API.klines(sym, STORE.tf); }
-    catch(e){ toast('Could not load ' + baseAsset(sym), 'error'); return; }
+    catch(e){ if (typeof MarketSources === 'undefined' || MarketSources.allowed(sym)) toast('Could not load ' + baseAsset(sym), 'error'); return; }
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) return;
     if (!this.compares.includes(sym)) return;
     let s = this.cmpSeries[sym];
     if (!s){
@@ -895,7 +909,7 @@ const Chart = {
   renderCmpChips(){
     const host = document.getElementById('cmpChips');
     if (!host) return;
-    host.innerHTML = this.compares.map((s, i) =>
+    host.innerHTML = this.compares.filter(s => typeof MarketSources === 'undefined' || MarketSources.allowed(s)).map((s, i) =>
       `<span class="cmpChip" style="--c:${this.cmpColors[i % this.cmpColors.length]}">vs ${esc(baseAsset(s))}<button data-sym="${esc(s)}" title="Remove">×</button></span>`).join('');
     host.querySelectorAll('button').forEach(b =>
       b.addEventListener('click', () => this.removeCompare(b.dataset.sym)));

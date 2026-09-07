@@ -318,6 +318,7 @@ const Bots = {
        different venue with its own spread. */
     const add = s => {
       if (!s || seen.has(s)) return;
+      if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(s)) return;
       const c = (typeof Feed !== 'undefined' && Feed.brokerName) ? Feed.brokerName(s) : s;
       if (canon.has(c)) return;
       seen.add(s); canon.add(c); out.push(s);
@@ -343,6 +344,7 @@ const Bots = {
   },
 
   quoteFor(sym){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.executable(sym, Feed.srcOf[sym])) return null;
     const t = STORE.tickers.get(sym);
     if (!t || !Number.isFinite(t.last) || !(t.last > 0) || !Feed.isLive(sym)) return null;
     const qt = Feed.quoteTime[sym];

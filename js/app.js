@@ -20,6 +20,7 @@ const SymbolSearch = {
     let hidden = 0;
     for (const s of [...BROKER.all(), ...MK.monitored, ...Watch.list, ...STORE.universe]){
       if (seen.has(s) || !match(s)) continue;
+      if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(s)) continue;
       seen.add(s);
       /* live-only: a delayed instrument is not offered at all, because choosing
          one is the first step towards trading on a price that no longer exists */
@@ -66,11 +67,12 @@ const Strip = {
     setInterval(() => this.build(), 60000);
   },
   build(){
-    if (!STORE.universe.length || !this.el) return;
-    const liquid = STORE.universe.filter(s => (STORE.tickers.get(s) || {}).quoteVol > 2e6);
+    if (!this.el) return;
+    const liquid = (typeof MarketSources !== 'undefined' ? MarketSources.list() : STORE.universe)
+      .filter(s => Number.isFinite(STORE.tickers.get(s)?.pct));
     const sorted = [...liquid].sort((a, b) => STORE.tickers.get(b).pct - STORE.tickers.get(a).pct);
     const items = [...sorted.slice(0, 8), ...sorted.slice(-8).reverse()];
-    if (!items.length) return;
+    if (!items.length){ this.el.innerHTML = '<div class="aiSub">Waiting for JustMarkets prices · use Market settings to check the connection.</div>'; return; }
     const chip = s => {
       const t = STORE.tickers.get(s);
       return `<span class="tsChip" data-sym="${esc(s)}"><b>${esc(baseAsset(s))}</b><span>${fmtPrice(t.last)}</span><i class="${pctClass(t.pct)}">${fmtPct(t.pct)}</i></span>`;
@@ -162,6 +164,7 @@ const App = {
     Draw.init();
     if (typeof Popout !== 'undefined') Popout.init();
     this.wireUI();
+    MarketSources.init();
     await Feed.init();
     this.updateFeedChip();
     try {
@@ -171,6 +174,7 @@ const App = {
     }
     MK.startPolling();
     startGlobalStream();
+    STORE.symbol = MarketSources.fallback(STORE.symbol);
     Watch.init(); Screener.init(); Alerts.init(); Port.init(); Book.init(); Heat.wire();
     await Chart.load();
     Screener.build();
@@ -182,6 +186,8 @@ const App = {
     Brain.init();
     OBChat.init();
     Bots.init();
+    MarketSources.ready = true;
+    MarketSources.refresh();
     this.updateSymBtn();
     this.stats();
     setInterval(() => this.stats(), 120000);
@@ -191,9 +197,12 @@ const App = {
   },
 
   setSymbol(sym){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)){
+      toast(MarketSources.reason(sym), 'warn'); return;
+    }
     const known = STORE.tickers.has(sym) ||
       (typeof MK !== 'undefined' && MK.isKnown(sym)) ||
-      (typeof BROKER !== 'undefined' && BROKER.is(sym));
+      (typeof BROKER !== 'undefined' && BROKER.is(sym)) || Feed.bridgeHas(sym);
     if (sym === STORE.symbol || !known) return;
     STORE.symbol = sym;
     localStorage.setItem('astra_symbol', sym);
@@ -216,12 +225,12 @@ const App = {
 
   updateSymBtn(){
     const t = STORE.tickers.get(STORE.symbol);
-    document.getElementById('symBtnName').textContent = baseAsset(STORE.symbol) + '/USDT';
+    document.getElementById('symBtnName').textContent = STORE.symbol ? MK.short(STORE.symbol) : 'Choose instrument';
     const px = document.getElementById('symBtnPx');
     if (t){
       px.innerHTML = `<b>${fmtPrice(t.last)}</b><span class="${pctClass(t.pct)}">${fmtPct(t.pct)}</span>`;
       document.title = fmtPrice(t.last) + ' ' + baseAsset(STORE.symbol) + ' · ASTRA';
-    }
+    } else { px.textContent = ''; document.title = 'ASTRA · JustMarkets Terminal'; }
   },
 
   renderTfPills(){
@@ -234,6 +243,7 @@ const App = {
 
   wireUI(){
     this.renderTfPills();
+    document.getElementById('marketSettingsBtn').addEventListener('click', () => this.openFeed());
 
     document.getElementById('symBtn').addEventListener('click', () => SymbolSearch.open());
     document.getElementById('symInput').addEventListener('input', e => SymbolSearch.render(e.target.value));
@@ -390,7 +400,7 @@ const App = {
       const dot = document.getElementById('wsDot');
       if (s.label === 'global' || s.label === 'symbol'){
         dot.classList.toggle('down', !s.up);
-        document.getElementById('wsLbl').textContent = s.up ? 'LIVE · BINANCE' : 'RECONNECTING…';
+        document.getElementById('wsLbl').textContent = s.mode === 'poll' ? 'MT5 · CONNECTED' : s.up ? 'LIVE · BINANCE' : 'RECONNECTING…';
       }
     });
   },
@@ -614,6 +624,7 @@ const App = {
   },
 
   async stats(){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) return;
     try {
       const g = await API.gecko('/global');
       const d = g.data;
@@ -642,6 +653,7 @@ const App = {
   },
 
   openFeed(){
+    MarketSources.render();
     const acct = document.getElementById('acctType');
     if (acct && !acct.dataset.wired){
       acct.dataset.wired = '1';
@@ -663,10 +675,10 @@ const App = {
       `<div class="feedRow"><i class="fdDot ${ok ? 'on' : 'off'}"></i><b>${esc(label)}</b><span>${esc(text)}</span></div>`;
     const b = Feed.bridge;
     el.innerHTML =
-      row('Crypto (Binance)', true, 'live stream · always on, no service needed') +
+      row('Crypto (Binance)', MarketSources.binanceOn(), MarketSources.binanceOn() ? 'Enabled in Market settings' : 'Disabled — no exchange connections') +
       row('Data service', Feed.apiReady, Feed.apiReady
         ? 'connected' + (Feed.apiBase ? ' · ' + Feed.apiBase : ' · this page') + ' — stocks, forex, indices, commodities'
-        : 'not reachable — only crypto is available') +
+        : 'not reachable') +
       row('MT5 bridge (' + BROKER.name + ')', !!b, b
         ? 'connected · account ' + (b.account || '?') + ' · ' + (b.server || '') + ' · ' + b.symbols.size + ' symbols, no delay'
         : 'not running — start START-MT5-Bridge.bat for your broker\'s own live prices');

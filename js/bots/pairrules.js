@@ -159,7 +159,7 @@ const PairRules = {
   searchPool(){
     const out = [];
     const seen = new Set();
-    const add = s => { if (s && !seen.has(this.key(s))){ seen.add(this.key(s)); out.push(s); } };
+    const add = s => { if (s && (typeof MarketSources === 'undefined' || MarketSources.allowed(s)) && !seen.has(this.key(s))){ seen.add(this.key(s)); out.push(s); } };
     for (const m of Object.values(this.book())) add(m.sym);
     for (const s of Object.keys(this.load().rules)) add(s);
     if (typeof Bots !== 'undefined' && Bots.universe) { try { for (const s of Bots.universe()) add(s); } catch(e){} }

@@ -10,7 +10,7 @@ const Sync = {
   API: '/api/sync',
   // Waiting instructions belong to this browser: syncing them to another device
   // could execute the same intent twice. Trade-history sync is unchanged.
-  EXCLUDE: ['astra_auth', 'astra_btc1d', 'astra_syncTs', 'astra_localTs', 'astra_manual_pending_v1'],
+  EXCLUDE: ['astra_auth', 'astra_btc1d', 'astra_syncTs', 'astra_localTs', 'astra_manual_pending_v1', 'astra_market_sources_v1'],
   auth: lsGet('astra_auth', null),
   timer: null,
   dirty: false,

@@ -223,6 +223,7 @@ const StratLab = {
 
   /* ---------- the research run ---------- */
   universe(){
+    if (typeof MarketSources !== 'undefined') return MarketSources.list().slice(0, 3);
     const syms = (typeof Feed !== 'undefined' && Feed.bridge)
       ? BotEngine.PRIORITY.filter(s => Feed.bridgeHas(s))
       : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];

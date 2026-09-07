@@ -29,10 +29,15 @@ const Watch = {
   },
 
   render(){
+    if (!this.el) return;
     BUS.emit('watch');
     this.el.innerHTML = '';
     this.rows = {};
-    for (const sym of this.list){
+    const visible = typeof MarketSources === 'undefined' ? this.list
+      : [...new Set([...this.list, ...MK.monitored])].filter(s => MarketSources.allowed(s));
+    if (!visible.length && typeof MarketSources !== 'undefined') visible.push(...MarketSources.brokerList().slice(0, 12));
+    if (!visible.length) this.el.innerHTML = '<div class="empty">No enabled instruments yet. Connect your JustMarkets MT5 bridge in Market settings.</div>';
+    for (const sym of visible){
       const row = document.createElement('div');
       row.className = 'wrow' + (sym === STORE.symbol ? ' sel' : '');
       row.innerHTML =

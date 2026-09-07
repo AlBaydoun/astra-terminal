@@ -6,8 +6,17 @@ const Heat = {
   timer: null,
 
   async load(){
+    const revision = typeof MarketSources !== 'undefined' ? MarketSources.revision : 0;
+    if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()){
+      this.data = MarketSources.brokerList().filter(s => Number.isFinite(STORE.tickers.get(s)?.pct)).map(s => {
+        const t = STORE.tickers.get(s);
+        return { name: s, full: s, w: 1, pct: t.pct, price: t.last };
+      });
+      this.src = 'JustMarkets · equal tiles · price change'; return;
+    }
     try {
       const d = await API.gecko('/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h');
+      if (typeof MarketSources !== 'undefined' && revision !== MarketSources.revision) return this.load();
       this.data = d.filter(x => x.market_cap > 0).map(x => ({
         name: (x.symbol || '').toUpperCase(),
         full: x.name,
@@ -120,7 +129,7 @@ const Heat = {
       const b = cv.getBoundingClientRect();
       const r = this.hit(e.clientX - b.left, e.clientY - b.top);
       if (!r) return;
-      const sym = r.name + 'USDT';
+      const sym = typeof MarketSources !== 'undefined' && !MarketSources.binanceOn() ? r.name : r.name + 'USDT';
       if (STORE.tickers.has(sym)) App.setSymbol(sym);
       else toast(r.name + ' is not tradable on Binance as a USDT pair', 'warn');
     });

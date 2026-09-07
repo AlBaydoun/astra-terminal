@@ -233,6 +233,7 @@ const Brain = {
   },
 
   makeNote(candles, sym, tf, res, source){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) return null;
     const n = candles.length - 1;
     const atr = res.ctx.atr[n];
     const px = candles[n].close;
@@ -261,6 +262,7 @@ const Brain = {
   },
 
   consider(force){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(STORE.symbol)) return;
     const res = this.analyze(Chart.raw);
     this.renderVerdict(res);
     if (!res || !res.dir || res.conf < 0.5) return;
@@ -273,6 +275,7 @@ const Brain = {
 
   /* ---------------- the Observer's own fund (fees on every side) ---------------- */
   fundOnSignal(note){
+    if (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || Feed.route(note.sym).kind !== 'binance' || !Feed.isLive(note.sym))) return;
     const f = this.state.fund;
     const t = STORE.tickers.get(note.sym);
     const px = t ? t.last : note.price;
@@ -295,6 +298,7 @@ const Brain = {
   },
 
   fundSell(sym, px, reason){
+    if (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || Feed.route(sym).kind !== 'binance' || !Feed.isLive(sym))) return;
     const f = this.state.fund;
     const p = f.positions[sym];
     if (!p || !(px > 0)) return;
@@ -438,7 +442,7 @@ const Brain = {
     this.scanning = true;
     this.state.lastScan = Date.now();
     if (manual) toast('Observer is scanning your watchlist…', 'info');
-    const syms = Watch.list.slice(0, 16);
+    const syms = Watch.list.filter(s => typeof MarketSources === 'undefined' || MarketSources.allowed(s)).slice(0, 16);
     const rows = [];
     await Promise.all(syms.map(async sym => {
       try {

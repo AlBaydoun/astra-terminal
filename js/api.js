@@ -1,16 +1,27 @@
 /* ASTRA Terminal — REST + WebSocket data layer (Binance public market data, CoinGecko, alternative.me) */
 const API = {
   restIdx: 0,
+  binanceRequests: new Set(),
+  cancelBinance(){ for (const c of this.binanceRequests) c.abort(); },
 
   async fetchJSON(path){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) throw new Error('Binance is disabled');
+    const revision = typeof MarketSources !== 'undefined' ? MarketSources.revision : 0;
     for (let i = 0; i < CFG.REST.length; i++){
+      if (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || revision !== MarketSources.revision)) throw new Error('Binance request cancelled');
       const base = CFG.REST[(this.restIdx + i) % CFG.REST.length];
+      const controller = new AbortController(); this.binanceRequests.add(controller);
       try {
-        const r = await fetch(base + path);
+        const r = await fetch(base + path, { signal: controller.signal });
         if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        if (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || revision !== MarketSources.revision)) throw new Error('Binance request cancelled');
         this.restIdx = (this.restIdx + i) % CFG.REST.length;
-        return await r.json();
-      } catch(e){ console.warn('REST failed on', base, e.message); }
+        return data;
+      } catch(e){
+        if (controller.signal.aborted || (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || revision !== MarketSources.revision))) throw new Error('Binance request cancelled');
+        console.warn('REST failed on', base, e.message);
+      } finally { this.binanceRequests.delete(controller); }
     }
     throw new Error('all market data endpoints failed');
   },
@@ -97,30 +108,37 @@ const API = {
 
 /* auto-reconnecting websocket around Binance combined streams */
 class Sock {
+  static instances = new Set();
+  static stopAll(){ for (const sock of [...Sock.instances]) sock.close(); }
   constructor(streams, onMsg, label){
     this.streams = streams; this.onMsg = onMsg; this.label = label || 'ws';
     this.idx = 0; this.tries = 0; this.closed = false;
+    Sock.instances.add(this);
     this.connect();
   }
   connect(){
+    if (this.closed || (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn())){ this.close(); return; }
     const url = CFG.WS[this.idx % CFG.WS.length] + this.streams.join('/');
     let ws;
     try { ws = this.ws = new WebSocket(url); }
     catch(e){ this.retry(); return; }
     ws.onopen = () => { this.tries = 0; BUS.emit('ws', { label: this.label, up: true }); };
     ws.onmessage = ev => {
+      if (this.closed || (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn())) return;
       try { const m = JSON.parse(ev.data); this.onMsg(m.data || m, m.stream || ''); } catch(e){}
     };
     ws.onclose = () => { if (!this.closed) { BUS.emit('ws', { label: this.label, up: false }); this.retry(); } };
     ws.onerror = () => { try { ws.close(); } catch(e){} };
   }
   retry(){
+    if (this.closed || (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn())) return;
     this.idx++;
     const wait = Math.min(30000, 1500 * Math.pow(2, this.tries++));
     this.timer = setTimeout(() => this.connect(), wait);
   }
   close(){
     this.closed = true;
+    Sock.instances.delete(this);
     clearTimeout(this.timer);
     try { this.ws.onclose = null; this.ws.close(); } catch(e){}
   }
@@ -128,7 +146,9 @@ class Sock {
 
 /* one-time market snapshot: builds the tradable USDT universe */
 async function bootMarketData(){
+  if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()){ STORE.universe = []; return; }
   const all = await API.all24h();
+  if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) return;
   const uni = [];
   for (const t of all){
     if (!t.symbol.endsWith('USDT')) continue;
@@ -148,6 +168,8 @@ async function bootMarketData(){
 /* live prices for every symbol at once (1 message/second).
    Broker instruments backed by a Binance pair (BTCUSD.m …) tick in real time too. */
 function startGlobalStream(){
+  if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) return;
+  if ([...Sock.instances].some(s => s.label === 'global' && !s.closed)) return;
   const alias = {};                       // binance pair -> broker symbol
   if (typeof BROKER !== 'undefined')
     for (const s of BROKER.all()){
@@ -170,6 +192,7 @@ function startGlobalStream(){
         Feed.quoteTime[s] = Number.isFinite(m.E) ? m.E / 1000 : 0;
       }
       for (const b of alias[s] || []){
+        if (typeof MarketSources !== 'undefined') continue; // CFDs require their own broker quote
         // An exchange proxy must never overwrite the broker's own CFD quote.
         if (typeof Feed !== 'undefined' && Feed.bridgeHas(b)) continue;
         const bt = STORE.tickers.get(b) || {};

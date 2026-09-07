@@ -82,6 +82,7 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
       Markets
     </button>
+    <button class="tbtn" id="marketSettingsBtn" title="Enable or disable market sources">Market settings</button>
     <button class="tbtn" id="layoutsBtn" title="Save / load named workspaces">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
     </button>
@@ -498,8 +499,9 @@
 
 <div class="modal" id="feedModal">
   <div class="mBox">
-    <div class="mHead">DATA <span>SOURCES</span><button class="mClose">×</button></div>
+    <div class="mHead">MARKET <span>SETTINGS</span><button class="mClose">×</button></div>
     <div class="mBody">
+      <div id="marketSourceSettings"></div>
       <div id="feedState"></div>
       <div class="formRow"><label>Account type</label>
         <select id="acctType" title="Changes the spread and commission used by backtests and paper trades">
@@ -507,7 +509,7 @@
           <option value="standard">JustMarkets Standard (wider spread, no commission)</option>
         </select></div>
       <div class="formRow"><label>Data service</label><input id="feedUrl" type="text" placeholder="http://localhost:8642 or your own address" spellcheck="false"></div>
-      <div class="aiSub">Crypto always streams live from Binance and needs no service. Stocks, forex, indices and commodities need this small service — it runs automatically when you start the terminal with the desktop shortcut.</div>
+      <div class="aiSub">JustMarkets prices need your running MT5 bridge. Binance is optional and controlled above. The local service also handles the terminal's existing sync and research tools.</div>
       <button class="mPrimary" id="feedSave">SAVE &amp; RECONNECT</button>
     </div>
   </div>
@@ -550,6 +552,7 @@
 <script src="js/indicatorDefs.js"></script>
 <script src="js/broker.js"></script>
 <script src="js/feed.js"></script>
+<script src="js/marketsources.js"></script>
 <script src="js/api.js"></script>
 <script src="js/markets.js"></script>
 <script src="js/alerts.js"></script>

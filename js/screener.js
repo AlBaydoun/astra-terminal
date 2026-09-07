@@ -29,15 +29,15 @@ const Screener = {
   },
 
   build(){
-    if (this.built || !STORE.universe.length) return;
+    if (this.built) return;
     this.built = true;
     this.tbody = document.querySelector('#scrTable tbody');
     this.rows = new Map();
-    for (const sym of STORE.universe){
+    for (const sym of this.symbols()){
       const tr = document.createElement('tr');
       tr.dataset.sym = sym;
       tr.innerHTML =
-        `<td class="c-sym"><i class="dot" style="--hue:${Watch.hue(sym)}"></i>${esc(baseAsset(sym))}<span class="q">/USDT</span></td>` +
+        `<td class="c-sym"><i class="dot" style="--hue:${Watch.hue(sym)}"></i>${esc(MK.short(sym))}</td>` +
         `<td class="c-last num"></td><td class="c-pct num"></td><td class="c-high num"></td>` +
         `<td class="c-low num"></td><td class="c-vol num"></td><td class="c-cnt num"></td>` +
         `<td class="c-act"><button class="rAct rStar${Watch.list.includes(sym) ? ' on' : ''}" title="Add / remove watchlist">★</button>` +
@@ -68,8 +68,9 @@ const Screener = {
     pc.className = 'c-pct num ' + pctClass(t.pct);
     tr.querySelector('.c-high').textContent = fmtPrice(t.high);
     tr.querySelector('.c-low').textContent = fmtPrice(t.low);
-    tr.querySelector('.c-vol').textContent = fmtNum(t.quoteVol);
-    tr.querySelector('.c-cnt').textContent = fmtNum(t.count || 0);
+    const broker = typeof MarketSources !== 'undefined' && MarketSources.brokerSymbol(sym);
+    tr.querySelector('.c-vol').textContent = broker ? '—' : fmtNum(t.quoteVol);
+    tr.querySelector('.c-cnt').textContent = broker ? '—' : fmtNum(t.count || 0);
   },
 
   liveUpdate(changed){
@@ -83,7 +84,7 @@ const Screener = {
 
   apply(){
     if (!this.built) return;
-    const syms = STORE.universe.filter(s => !this.query || s.includes(this.query));
+    const syms = this.symbols().filter(s => this.rows.has(s) && (!this.query || s.toUpperCase().includes(this.query)));
     const get = s => {
       if (this.sortKey === 'symbol') return s;
       const t = STORE.tickers.get(s);
@@ -99,4 +100,6 @@ const Screener = {
     this.tbody.appendChild(frag);
     document.getElementById('scrCount').textContent = syms.length + ' pairs';
   },
+  symbols(){ return typeof MarketSources !== 'undefined' ? MarketSources.list() : STORE.universe; },
+  rebuild(){ this.built = false; this.build(); },
 };

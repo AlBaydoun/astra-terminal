@@ -41,6 +41,9 @@ const Port = {
   },
 
   execute(sym, side, qty, who){
+    if (typeof MarketSources !== 'undefined' && (!MarketSources.binanceOn() || Feed.route(sym).kind !== 'binance' || !Feed.isLive(sym))){
+      toast('The exchange paper portfolio is paused. Use the Manual Trading Bot for JustMarkets.', 'warn'); return;
+    }
     const px = this.price(sym);
     if (!(qty > 0) || !(px > 0)){ toast('Enter a quantity first', 'warn'); return; }
     const st = this.state;

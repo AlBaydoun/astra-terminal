@@ -81,7 +81,7 @@ const Feed = {
       if (!was){ toast('MT5 bridge connected — live broker prices' + (j.server ? ' (' + j.server + ')' : ''), 'ok'); BUS.emit('feed'); }
     } catch(e){
       this.bridgeMisses++;
-      if (this.bridge){ this.bridge = null; toast('MT5 bridge disconnected — using public feeds', 'warn'); BUS.emit('feed'); }
+      if (this.bridge){ this.bridge = null; toast('MT5 bridge disconnected — broker instruments paused', 'warn'); BUS.emit('feed'); }
     }
   },
   bridgeOn(){ return !!this.bridge; },
@@ -141,6 +141,11 @@ const Feed = {
 
   /* ---------- routing ---------- */
   route(sym){
+    if (typeof MarketSources !== 'undefined'){
+      if (MarketSources.brokerSymbol(sym)) return { kind: 'bridge', addr: this.brokerName(sym) };
+      if (MarketSources.allowed(sym)) return { kind: 'binance', addr: sym };
+      return { kind: 'disabled', addr: sym };
+    }
     if (typeof BROKER !== 'undefined' && BROKER.is(sym)){
       const f = BROKER.feedFor(sym);
       if (f) return f.kind === 'bridge' ? { kind: 'bridge', addr: this.brokerName(sym) } : f;
@@ -153,6 +158,7 @@ const Feed = {
   /* ---------- candles ---------- */
   async klines(sym, tf, limit){
     const r = this.route(sym);
+    if (r.kind === 'disabled') throw new Error(MarketSources.reason(sym));
     // Candle routing is not evidence of a fresh executable quote.
     if (r.kind === 'bridge'){
       const url = this.BRIDGE_URL + '/candles?symbol=' + encodeURIComponent(r.addr) + '&tf=' + tf + '&limit=' + (limit || 1000);
@@ -286,6 +292,7 @@ const Feed = {
   specFor(sym){ return this.specs[sym] || this.specs[this.brokerName(sym)] || null; },
 
   async search(q){
+    if (typeof MarketSources !== 'undefined') return [];
     if (!this.apiReady) return [];
     try {
       const r = await fetch(this.apiBase + '/api/market/search?q=' + encodeURIComponent(q));
@@ -327,6 +334,8 @@ const Feed = {
 
   /* may this symbol be traded at all right now? */
   tradable(sym){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.executable(sym, this.srcOf[sym]))
+      return { ok: false, why: MarketSources.reason(sym) };
     // The display toggle may show delayed markets; it cannot authorize entries.
     if (this.isLive(sym)) return { ok: true };
     const st = this.status(sym);
@@ -353,6 +362,8 @@ const Feed = {
 
   /* ---------- how fresh is this price, honestly ---------- */
   status(sym){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))
+      return { cls: 'flat', label: 'DISABLED', tip: MarketSources.reason(sym) };
     const src = this.srcOf[sym] || this.route(sym).kind;
     if (this.isLive(sym)) return { cls: 'live', label: 'LIVE',
       tip: src === 'bridge' ? 'Direct from your MT5 terminal' : 'Binance real-time stream' };
