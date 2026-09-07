@@ -58,8 +58,8 @@ const MarketFit = {
   _groupsKey: '',
 
   buildGroups(){
-    const key = (typeof Feed !== 'undefined' && Feed.bridge)
-      ? 'b' + Feed.bridge.symbols.size + ':' + (Feed.aliasCount || 0) : 'none';
+    const key = (typeof MarketSources !== 'undefined' ? MarketSources.revision + ':' + MarketSources.brokerList().join(',') + ':' : '') + ((typeof Feed !== 'undefined' && Feed.bridge)
+      ? 'b' + Feed.bridge.symbols.size + ':' + (Feed.aliasCount || 0) : 'none');
     if (this._groups && this._groupsKey === key) return this._groups;
     const out = {};
     if (typeof BROKER !== 'undefined'){
@@ -67,10 +67,11 @@ const MarketFit = {
         const syms = BROKER.byGroup(bg)
           .filter(s => typeof Feed === 'undefined' || Feed.bridgeHas(s) || Feed.isLive(s));
         for (const e of (this.EXTRA[id] || [])) if (!syms.includes(e)) syms.push(e);
-        if (syms.length) out[id] = { label, syms };
+        const enabled = syms.filter(s => typeof MarketSources === 'undefined' || MarketSources.allowed(s));
+        if (enabled.length) out[id] = { label, syms: enabled };
       }
     }
-    this._groups = Object.keys(out).length ? out : this.FALLBACK;
+    this._groups = Object.keys(out).length || typeof MarketSources !== 'undefined' ? out : this.FALLBACK;
     this._groupsKey = key;
     return this._groups;
   },

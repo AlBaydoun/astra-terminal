@@ -45,6 +45,7 @@ const Alerts = {
   check(changed){
     let fired = false;
     for (const a of this.list){
+      if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(a.symbol)) continue;
       if (!a.active || changed.indexOf(a.symbol) === -1) continue;
       const t = STORE.tickers.get(a.symbol);
       if (!t) continue;

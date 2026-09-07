@@ -163,6 +163,7 @@ const Intel = {
 
   /* ---------------- long history + analogs ---------------- */
   async loadHistory(){
+    if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) return;
     try {
       this.btcDaily = await this.fetchBtcDaily();
       this.computeAnalogs();
