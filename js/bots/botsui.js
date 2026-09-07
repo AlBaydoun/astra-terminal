@@ -2,6 +2,7 @@
 Object.assign(Bots, {
 
   wire(){
+    if (typeof ManualOrders !== 'undefined') ManualOrders.start();
     if (!this.manualTimer) this.manualTimer = setInterval(() => {
       if (this.active === 'manual') this.manualCalc();
     }, 5000);
@@ -56,6 +57,7 @@ Object.assign(Bots, {
         this.bindPositionControls(manualLedger);
       }
       this.manualCalc();
+      if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
       return;
     }
     if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
@@ -114,7 +116,7 @@ Object.assign(Bots, {
      amount, a stop or a note being typed into the manual form was wiped
      mid-sentence — and the fund slider snapped back to zero — for no reason the
      user could see. The values and the caret are put back after the redraw. */
-  FORM_IDS: ['mbAmt', 'mbQty', 'mbSl', 'mbTp', 'mbNote', 'mbPct', 'mbTf'],
+  FORM_IDS: ['mbAmt', 'mbQty', 'mbSl', 'mbTp', 'mbNote', 'mbPct', 'mbTf', 'mbOrderType', 'mbEntry'],
 
   snapshotForm(host){
     const out = { vals: {}, focus: null, a: null, b: null,
@@ -511,6 +513,12 @@ Object.assign(Bots, {
         <button class="sideBtn buy${dir > 0 ? ' on' : ''}" data-mbside="1">BUY</button>
         <button class="sideBtn sell${dir < 0 ? ' on' : ''}" data-mbside="-1">SELL</button>
       </div>
+      <label class="bc">Order type <select id="mbOrderType">
+        <option value="market">Market — enter now</option>
+        <option value="limit">Limit — buy lower / sell higher</option>
+        <option value="stop">Stop entry — buy higher / sell lower</option>
+      </select></label>
+      <label class="bc" id="mbEntryLabel" hidden>Entry price <input id="mbEntry" type="number" step="any" min="0" placeholder="your chosen price"></label>
       <label class="bc">Amount <input id="mbAmt" type="number" step="any" min="0" placeholder="e.g. 100"></label>
       <span class="pctRow" title="what the amount means">
         <button class="pctBtn${Bots.amtMode === 'value' ? ' on' : ''}" data-mbamt="value">as position</button>
@@ -536,18 +544,20 @@ Object.assign(Bots, {
         <span class="pctRow">${ladder('tp')}</span>
       </div>
 
+      <div class="mbLine botNote" id="mbOrderHint"></div>
       <div class="mbCalc" id="mbCalc"></div>
 
       <label class="bc grow">Note <input id="mbNote" type="text" placeholder="why are you taking this trade?"></label>
       <button class="bBtn go" data-act="mopen" id="mbGo">${dir > 0 ? 'BUY' : 'SELL'} at market${px != null ? ' · ' + fmtPrice(px) : ''}</button>
     </div>
-    <div class="botNote">A market order — only the instrument is required. Leave <b>volume</b> empty and it is
-      sized from the risk limit; leave the <b>stop</b> empty and one is placed at 1.5 × ATR; leave the
+    <div class="botNote">Market enters now. Limit and Stop entry wait for your price and require an explicit stop-loss.
+      Leave <b>volume</b> empty to size from the risk limit when placing the order. For Market only, leave the
+      <b>stop</b> empty for an automatic stop at 1.5 × ATR; leave the
       <b>target</b> empty and the position simply runs until you close it or the stop is hit.
       Both levels can be changed at any time on the open position below, or on the Open Trades page.
       Saved stops and targets return after a restart. Paper execution pauses while the PC or browser is off
       and resumes on fresh prices when ASTRA reopens.</div>` +
-      '<div id="manualLedger">' + this.ledgerView('manual', L, st) + '</div>';
+      '<div id="manualPending"></div><div id="manualLedger">' + this.ledgerView('manual', L, st) + '</div>';
   },
 
   /* ---------- what this trade would win or lose ----------
@@ -565,7 +575,22 @@ Object.assign(Bots, {
     const pxEl = document.getElementById('mbPx');
     if (pxEl) pxEl.textContent = q ? fmtPrice(q.price) : '—';
     const go = document.getElementById('mbGo');
-    if (go) go.textContent = (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' at market' + (q ? ' · ' + fmtPrice(q.price) : ' · waiting for live price');
+    const orderType = document.getElementById('mbOrderType')?.value || 'market';
+    const waiting = orderType !== 'market';
+    const entryBox = document.getElementById('mbEntry');
+    const entry = waiting ? parseFloat(entryBox?.value) : q?.price;
+    const entryLabel = document.getElementById('mbEntryLabel');
+    if (entryLabel){ entryLabel.hidden = !waiting; entryLabel.style.display = waiting ? '' : 'none'; }
+    if (entryBox) entryBox.disabled = !waiting;
+    if (go) go.textContent = waiting ? 'Place ' + (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' ' + (orderType === 'limit' ? 'LIMIT' : 'STOP ENTRY')
+      : (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' at market' + (q ? ' · ' + fmtPrice(q.price) : ' · waiting for live price');
+    const hint = document.getElementById('mbOrderHint');
+    if (hint) hint.textContent = waiting
+      ? (orderType === 'limit'
+        ? 'Wait for the simulated buy price at or below your entry, or sell price at or above it. Spread and slippage are included.'
+        : 'Wait for the simulated buy price at or above your entry, or sell price at or below it. A gap can give a worse fill.') +
+        ' SL/TP percentages use your entry price. Size is fixed when placed; funds and risk are checked again at execution.'
+      : 'Enters at the current executable price, including spread and slippage.';
     if (!q){
       const pending = Feed.bridgeHas(sym) && Feed.bridgeClock?.offset == null;
       host.innerHTML = '<i>' + (pending ? 'Checking the broker clock and waiting for a new tick. ' : '') +
@@ -584,10 +609,11 @@ Object.assign(Bots, {
     const dir = Bots.manualSide;
     const sl = parseFloat((document.getElementById('mbSl') || {}).value);
     const tp = parseFloat((document.getElementById('mbTp') || {}).value);
-    const stopDist = sl > 0 ? Math.abs(q.price - sl) : 0;
+    const stopDist = sl > 0 ? Math.abs(entry - sl) : 0;
 
     /* the SAME function the order uses, so this is not a different trade */
-    const size = Bots.manualSize(sym, q.price, stopDist, sl);
+    const size = waiting && typeof ManualOrders !== 'undefined' ? ManualOrders.preview(ManualOrders.form(),q)
+      : Bots.manualSize(sym, q.price, stopDist, sl);
     const fill = size.gate ? size.gate.fill : q.price;
     const m = Bots.marginFor(size.qty, fill, size.lev);
 
@@ -624,9 +650,11 @@ Object.assign(Bots, {
       cell('If the stop is hit', risk == null ? 'set a stop' : '-' + fmtNum(risk), 'down') +
       cell('If the target is hit', reward == null ? 'no target' : '+' + fmtNum(reward), 'up') +
       cell('Reward to risk', rr == null ? '—' : rr.toFixed(2) + ' : 1', rr == null ? '' : (rr >= 1 ? 'up' : 'down')) +
-      cell('Stop is', sl > 0 ? (stopDist / q.price * 100).toFixed(2) + '% away' : '—') +
-      cell('Target is', tp > 0 ? (Math.abs(tp - q.price) / q.price * 100).toFixed(2) + '% away' : '—') +
-      (size.reason ? cell('Entry blocked', esc(size.reason), 'down') : cell('Sized by', esc(size.why)));
+      cell('Stop is', sl > 0 && entry > 0 ? (stopDist / entry * 100).toFixed(2) + '% away' : '—') +
+      cell('Target is', tp > 0 && entry > 0 ? (Math.abs(tp - entry) / entry * 100).toFixed(2) + '% away' : '—') +
+      (size.reason ? cell(waiting ? 'Order blocked' : 'Entry blocked', esc(size.reason), 'down')
+        : cell(waiting ? 'Estimate at entry' : 'Sized by', waiting ? fmtPrice(fill) + ' · rechecked at execution' : esc(size.why)));
+    if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
   },
 
   /* ---------------- automated bot ---------------- */
@@ -816,7 +844,7 @@ Object.assign(Bots, {
     /* ---- the manual form: side, quick percentages, live arithmetic ---- */
     if (b.manual){
       const recalc = () => this.manualCalc();
-      ['mbSl', 'mbTp', 'mbQty', 'mbAmt'].forEach(id => {
+      ['mbSl', 'mbTp', 'mbQty', 'mbAmt', 'mbEntry'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', () => {
           // Clear the alternative BEFORE calculating, so the preview reads the
@@ -827,12 +855,15 @@ Object.assign(Bots, {
           recalc();
         });
       });
+      document.getElementById('mbOrderType')?.addEventListener('change', recalc);
       /* pressing the instrument opens the search picker */
       const pick = document.getElementById('mbSym');
       if (pick) pick.addEventListener('click', () => SymbolSearch.open(sym => {
         pick.dataset.val = sym;
         pick.innerHTML = esc(baseAsset(sym)) + ' <i>▾</i>';
         const slb = document.getElementById('mbSl'), tpb = document.getElementById('mbTp');
+        const entryBox = document.getElementById('mbEntry');
+        if (entryBox) entryBox.value = '';
         if (slb) slb.value = ''; if (tpb) tpb.value = '';      // levels belonged to the old instrument
         recalc();
       }));
@@ -884,9 +915,11 @@ Object.assign(Bots, {
         const [which, pc] = el.dataset.mbpct.split(':');
         const sym = Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol;
         const q = Bots.quoteFor(sym);
-        if (!q) return toast('No live price yet for ' + baseAsset(sym), 'warn');
+        const waiting = document.getElementById('mbOrderType')?.value !== 'market';
+        const reference = waiting ? parseFloat(document.getElementById('mbEntry')?.value) : q?.price;
+        if (!(reference > 0)) return toast(waiting ? 'Set your entry price first' : 'No live price yet for ' + baseAsset(sym), 'warn');
         const box = document.getElementById(which === 'tp' ? 'mbTp' : 'mbSl');
-        if (box) box.value = +Bots.levelAt(q.price, Bots.manualSide, parseFloat(pc), which).toFixed(8);
+        if (box) box.value = +Bots.levelAt(reference, Bots.manualSide, parseFloat(pc), which).toFixed(8);
         host.querySelectorAll('[data-mbpct^="' + which + ':"]').forEach(x => x.classList.toggle('on', x === el));
         recalc();
       }));

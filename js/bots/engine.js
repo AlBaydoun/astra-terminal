@@ -431,8 +431,19 @@ const BotEngine = {
     const hitTp   = pos.tp ? (dir > 0 ? hi >= pos.tp : lo <= pos.tp) : false;
     const hitTp1  = pos.tp1 && !pos.tp1Done && (dir > 0 ? hi >= pos.tp1 : lo <= pos.tp1);
 
-    if (hitStop) return this.close(ledger, cfg, pos, pos.sl,
-      pos.trailed ? 'trailing stop' : pos.beMoved ? 'stop at breakeven' : 'stop-loss');
+    if (hitStop){
+      /* A stop is a trigger, not a guaranteed exit price. After a quote gap or
+         restart, use the observed price if it has already crossed the stop.
+         Historical bars use their opening price here, never their later close;
+         an ordinary intrabar crossing still fills at the stop. close() applies
+         the same adverse slippage and commission as every other exit. */
+      const firstPrice = candle ? candle.open : quote.price;
+      const stopFill = Number.isFinite(firstPrice) && firstPrice > 0
+        ? (dir > 0 ? Math.min(pos.sl, firstPrice) : Math.max(pos.sl, firstPrice))
+        : pos.sl;
+      return this.close(ledger, cfg, pos, stopFill,
+        pos.trailed ? 'trailing stop' : pos.beMoved ? 'stop at breakeven' : 'stop-loss');
+    }
 
     /* ---- ratchet trailing stop (opt-in via cfg.trail) ----
        Expressed in R, not in percent, so it means the same thing on gold as on

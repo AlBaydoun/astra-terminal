@@ -444,6 +444,67 @@ test('Repeated manual refreshes preserve the actual inputs, instrument, timefram
     assert(document.getElementById('mbSl').value === '90' && document.getElementById('mbTp').value === '110', 'Levels reset');
   } finally { Bots.active = active; Bots.refreshManualQuote = refresh; Bots.quoteFor = quote; }
 });
+test('A long stop crossed between quotes exits at the observed price, not the old stop', () => {
+  const L = ledger(), q = fresh(), sig = signal('BTCUSDT', 100, 95);
+  const p = BotEngine.open(L, {}, sig, q, BotEngine.check(L, {}, sig, q));
+  const rec = BotEngine.step(L, { noLearn: true }, p, null, { price: 90 });
+  near(rec.exit, 90 * (1 - BotEngine.RISK.slippagePct / 100), 'Long gap exit');
+  assert(rec.sl === 95 && rec.reason === 'stop-loss', 'Saved stop or reason changed');
+  assert(rec.pnl < -p.riskCash, 'Gap loss understated');
+});
+
+test('A short stop crossed between quotes exits at the observed price, not the old stop', () => {
+  const L = ledger(), q = fresh(), sig = { ...signal('BTCUSDT', 100, 105), dir: -1 };
+  const p = BotEngine.open(L, {}, sig, q, BotEngine.check(L, {}, sig, q));
+  const rec = BotEngine.step(L, { noLearn: true }, p, null, { price: 110 });
+  near(rec.exit, 110 * (1 + BotEngine.RISK.slippagePct / 100), 'Short gap exit');
+  assert(rec.sl === 105 && rec.reason === 'stop-loss', 'Saved stop or reason changed');
+});
+
+test('Candle gaps use the opening price; ordinary intrabar stops still use the stop', () => {
+  for (const dir of [1, -1]) for (const gap of [false, true]){
+    const L = ledger(), q = fresh(), sl = dir > 0 ? 95 : 105;
+    const sig = { ...signal('BTCUSDT', 100, sl), dir };
+    const p = BotEngine.open(L, {}, sig, q, BotEngine.check(L, {}, sig, q));
+    const opening = gap ? (dir > 0 ? 90 : 110) : 100;
+    const bar = { open: opening, high: 112, low: 88, close: 101 };
+    const rec = BotEngine.step(L, { noLearn: true }, p, bar, { price: bar.close });
+    near(rec.exit, (gap ? opening : sl) * (1 - dir * BotEngine.RISK.slippagePct / 100), 'Candle stop');
+  }
+});
+
+test('A restored position keeps its stop and target but uses the first fresh price after a gap', () => {
+  fixtureStorage = new Map();
+  try {
+    const L = ledger(), q = fresh(), sig = { ...signal('BTCUSDT', 100, 95), tp: 110 };
+    BotEngine.open(L, {}, sig, q, BotEngine.check(L, {}, sig, q)); BotEngine.save('test', L);
+    const restored = BotEngine.load('test');
+    Feed.quoteTime.BTCUSDT = Date.now()/1000 - 181;
+    BotEngine.step(restored, { noLearn: true }, restored.open[0], null, { price: 90 });
+    assert(restored.open.length === 1, 'Stale quote executed during outage');
+    fresh();
+    const rec = BotEngine.step(restored, { noLearn: true }, restored.open[0], null, { price: 90 });
+    near(rec.exit, 90 * (1 - BotEngine.RISK.slippagePct / 100), 'Restored gap exit');
+    assert(rec.sl === 95 && rec.tp === 110, 'Saved levels overwritten');
+  } finally { fixtureStorage = null; }
+});
+
+test('The historical backtester applies the adverse opening gap with unchanged costs', async () => {
+  const klines = API.klines;
+  const candles = Array.from({length:250}, (_, i) => ({ rawTime:1700000000+i*3600,
+    open:100, high:101, low:99, close:100, volume:10 }));
+  candles[241] = {...candles[241], open:90, high:96, low:89, close:94};
+  API.klines = async () => candles;
+  try {
+    const bot = { id:'gap-check', defaults:{tf:'1h'}, warmup:240,
+      signal:w => w.length === 241 ? {dir:1,entry:100,sl:95,tp:110} : null };
+    const result = await Backtest.run(bot,{sym:'BTCUSDT',tf:'1h'});
+    assert(!result.error && result.closed.length === 1, result.error || 'Missing backtest trade');
+    near(result.closed[0].exit, 90 * (1 - BotEngine.RISK.slippagePct / 100), 'Backtest gap');
+    assert(result.closed[0].sl === 95, 'Backtest rewrote original stop');
+  } finally { API.klines = klines; }
+});
+
 document.getElementById('run').onclick = async () => {
   const out = document.getElementById('results');
   out.textContent = 'Running…'; out.className = '';

@@ -8,7 +8,9 @@ const Sync = {
      console with errors while silently syncing nothing. Relative keeps it
      working locally and on whatever host it is served from. */
   API: '/api/sync',
-  EXCLUDE: ['astra_auth', 'astra_btc1d', 'astra_syncTs', 'astra_localTs'],
+  // Waiting instructions belong to this browser: syncing them to another device
+  // could execute the same intent twice. Trade-history sync is unchanged.
+  EXCLUDE: ['astra_auth', 'astra_btc1d', 'astra_syncTs', 'astra_localTs', 'astra_manual_pending_v1'],
   auth: lsGet('astra_auth', null),
   timer: null,
   dirty: false,

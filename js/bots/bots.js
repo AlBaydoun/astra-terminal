@@ -554,6 +554,9 @@ const Bots = {
     for (let i = 0; i < held.length; i += 40) await Feed.quotes(held.slice(i, i + 40));
     /* keep open paper positions marked to market first */
     for (const b of BOTS){
+      if (b.manual && typeof ManualOrders !== 'undefined'){
+        await ManualOrders.managePositions(); continue;
+      }
       const L = this.ledgers[b.id];
       let touched = false;
       for (const pos of L.open.slice()){
@@ -957,6 +960,7 @@ const Bots = {
   manualRequest(sym, price, inputs){
     const val = id => parseFloat((document.getElementById(id) || {}).value);
     const amt = inputs ? inputs.amt : val('mbAmt'), lots = inputs ? inputs.lots : val('mbQty');
+    const mode = inputs?.amtMode ?? this.amtMode;
     const spec = (typeof Feed !== 'undefined' && Feed.specFor) ? Feed.specFor(sym) : null;
     const contract = (spec && spec.contractSize) ? spec.contractSize : 1;
     const lev = (typeof Feed !== 'undefined' && Feed.account && Feed.account.leverage)
@@ -970,9 +974,9 @@ const Bots = {
          200,000 position, where 100 as POSITION VALUE is a 100 position. Getting
          that wrong would be catastrophic, so the form asks rather than assumes,
          and position value is the default because it is the safe reading. */
-      if (this.amtMode === 'margin' && !(Number.isFinite(lev) && lev > 0))
+      if (mode === 'margin' && !(Number.isFinite(lev) && lev > 0))
         return { qty: 0, basis: 'amount', lev, reason: 'Account leverage is unknown; margin cannot be converted into a position' };
-      const asMargin = this.amtMode === 'margin';
+      const asMargin = mode === 'margin';
       const qty = asMargin ? (amt * lev / price) : (amt / price);
       return { qty, lots: qty / contract, basis: 'amount', lev,
         why: fmtNum(amt) + (asMargin ? ' of margin at 1:' + lev : ' of position value') };
@@ -1028,16 +1032,18 @@ const Bots = {
      is sized from the risk limit, leave the stop out and one is placed for you,
      leave the target out and the position simply runs until you close it or the
      stop is hit. Both levels can be re-set afterwards. */
-  async manualOpen(){
-    const L = this.ledgers.manual, cfg = this.manualCfg();
-    const sym = this.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol;
-    const dir = this.manualSide;                     // set by the BUY / SELL buttons
-    const slIn = parseFloat(document.getElementById('mbSl').value);
-    const tpIn = parseFloat(document.getElementById('mbTp').value);
-    const tf = document.getElementById('mbTf').value;
-    const note = document.getElementById('mbNote').value.trim();
-    const inputs = { amt: parseFloat(document.getElementById('mbAmt').value),
-      lots: parseFloat(document.getElementById('mbQty').value) };
+  async manualOpen(){ return this.manualMarketOpen(); },
+  async manualMarketOpen(draft){
+    const L = this.ledgers.manual;
+    let cfg = this.manualCfg();
+    const sym = draft?.sym || this.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol;
+    const dir = draft?.dir ?? this.manualSide;                     // set by the BUY / SELL buttons
+    const slIn = draft ? draft.sl : parseFloat(document.getElementById('mbSl').value);
+    const tpIn = draft ? draft.tp : parseFloat(document.getElementById('mbTp').value);
+    const tf = draft?.tf || document.getElementById('mbTf').value;
+    const note = draft ? draft.note : document.getElementById('mbNote').value.trim();
+    const inputs = draft || { amt: parseFloat(document.getElementById('mbAmt').value),
+      lots: parseFloat(document.getElementById('mbQty').value), amtMode: this.amtMode };
 
     await Feed.loadSpecs([sym]);
     let q = await this.liveQuote(sym);
@@ -1061,6 +1067,8 @@ const Bots = {
 
     const sig = { sym, tf, dir, entry: q.price, sl, tp, score: 100, model: 'Manual', note, manual: true,
       reasons: ['Opened by hand' + (note ? ' — ' + note : '')], factors: { manual: true } };
+    if (typeof ManualOrders !== 'undefined') ManualOrders.syncPreferences();
+    cfg = this.manualCfg();
     const R = BotEngine.rules(cfg);
     const fill = q.price * (1 + dir * R.slippagePct / 100) + dir * q.spread / 2;
     const request = this.manualRequest(sym, fill, inputs);
@@ -1074,7 +1082,8 @@ const Bots = {
       this.render();
       return toast('Paper position opened but could not be saved. Keep ASTRA open; new entries are blocked until saving succeeds.', 'warn');
     }
-    document.getElementById('mbNote').value = '';
+    const noteBox = document.getElementById('mbNote');
+    if (noteBox && noteBox.value.trim() === note) noteBox.value = '';
     toast('Paper ' + (dir > 0 ? 'BUY' : 'SELL') + ' ' + baseAsset(sym) + ' at ' + fmtPrice(q.price) +
       (gate.lots ? ' · ' + gate.lots + ' lot' : '') + slWhy, 'ok');
     this.render();
@@ -1190,6 +1199,8 @@ const Bots = {
   },
 
   resetBot(id){
+    if (id === 'manual' && typeof ManualOrders !== 'undefined' && ManualOrders.read().some(o => ['waiting','processing','review'].includes(o.status)))
+      return toast('Cancel or review waiting entry orders before resetting the manual account.', 'warn');
     const b = BOT_BY_ID[id];
     if (!confirm('Reset ' + b.name + '?\n\nThis clears its paper ledger, history, decisions and lessons. It cannot be undone.')) return;
     this.ledgers[id] = BotEngine.reset(id);
