@@ -25,6 +25,10 @@ const Watch = {
   remove(sym){
     this.list = this.list.filter(s => s !== sym);
     lsSet('astra_watch', this.list);
+    if (typeof MarketSources !== 'undefined' && MK.monitored.includes(sym)){
+      MK.monitored = MK.monitored.filter(s => s !== sym);
+      lsSet('astra_monitored', MK.monitored);
+    }
     this.render();
   },
 
@@ -35,8 +39,7 @@ const Watch = {
     this.rows = {};
     const visible = typeof MarketSources === 'undefined' ? this.list
       : [...new Set([...this.list, ...MK.monitored])].filter(s => MarketSources.allowed(s));
-    if (!visible.length && typeof MarketSources !== 'undefined') visible.push(...MarketSources.brokerList().slice(0, 12));
-    if (!visible.length) this.el.innerHTML = '<div class="empty">No enabled instruments yet. Connect your JustMarkets MT5 bridge in Market settings.</div>';
+    if (!visible.length) this.el.innerHTML = '<div class="empty">No enabled instruments in your watchlist. Add a JustMarkets instrument with +, or check the bridge in Market settings.</div>';
     for (const sym of visible){
       const row = document.createElement('div');
       row.className = 'wrow' + (sym === STORE.symbol ? ' sel' : '');

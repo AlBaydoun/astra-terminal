@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ASTRA — fixed intraday bot research</title>
+<style>body{font:16px system-ui;background:#101722;color:#e3edf7;margin:28px;max-width:1500px}button{padding:12px;font:inherit}a{color:#9dd0ff}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px;border-bottom:1px solid #344050;text-align:right}td:first-child,th:first-child{text-align:left}.loss{color:#ffb399}.gain{color:#80e1ad}pre{white-space:pre-wrap}</style>
+<h1>Three intraday bot candidates</h1><p>Fixed rules, eight JustMarkets instruments, each half separately. These research bots use disposable data and cannot trade your account.</p>
+<p><a href="intraday-plan.md">Rules and acceptance requirement</a> · <a href="intraday-data.json">Captured M15 broker data</a></p>
+<button id="runStudy">Run fixed comparison</button><p id="status">Ready.</p><div id="verdicts"></div><div id="table"></div>
+<details><summary>Full results, trades and diagnostics</summary><pre id="raw"></pre></details>
+<script src="../tests/risk-fixture.js"></script><script src="../js/broker.js"></script><script src="../js/feed.js"></script><script src="../js/indicators.js"></script><script src="../js/bots/engine.js"></script>
+<script src="intraday-candidates.js"></script><script src="intraday-study.js"></script><script src="intraday-ui.js"></script></html>

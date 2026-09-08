@@ -62,6 +62,20 @@ test('An in-flight Binance response cannot repopulate markets after OFF',async()
   assert(await request instanceof Error,'Old response accepted');
   assert(STORE.universe.length===0 && !STORE.tickers.has('BTCUSDT'),'Old data republished');
 });
+test('Turning OFF during either kind of bot scan cancels it quietly',async()=>{
+  const allowed=Bots.allowed, klines=API.klines, report=console.error;
+  try {
+    for(const rankAll of [false,true]){
+      MarketSources.state.binance=true; let requests=0, errors=0;
+      const bot={id:'cancel',name:'Cancel check',rankAll,warmup:1,signal(){throw Error('Disabled strategy ran');}};
+      Bots.cfgs.cancel={tf:'15m',maxOpen:1}; Bots.ledgers.cancel=BotEngine.blank('cancel');
+      Bots.allowed=()=>['BTCUSDT','ETHUSDT']; console.error=()=>errors++;
+      API.klines=async()=>{requests++; MarketSources.state.binance=false; throw Error('Binance request cancelled');};
+      await Bots.runBot(bot,false);
+      assert(requests===1 && errors===0 && !Bots.ledgers.cancel.decisions.some(d=>d.kind==='error'),'Scan kept going after OFF');
+    }
+  } finally {Bots.allowed=allowed;API.klines=klines;console.error=report;}
+});
 test('The final entry gate refuses disabled cached prices and preserves broker sizing',()=>{
   const sig={sym:'ETHUSDT',dir:1,entry:100,sl:99,tp:102,tf:'1h'};
   const L=BotEngine.blank('test');
@@ -105,11 +119,21 @@ test('Settings button saves only its approved key, survives reload and respects 
     MarketSources.state=MarketSources.read(); await MarketSources.setBinance(false);
     assert(!MarketSources.read().binance,'OFF not saved');
     const set=localStorage.setItem; localStorage.setItem=()=>{throw Error('Full');};
-    try {assert(!await MarketSources.setBinance(true) && !MarketSources.binanceOn(),'Failed save changed state');}
-    finally {localStorage.setItem=set;}
+    const report=console.error; let reported=false; console.error=message=>{reported=/could not save/.test(message);};
+    try {assert(!await MarketSources.setBinance(true) && !MarketSources.binanceOn() && reported,'Failed save changed state or hid its error');}
+    finally {localStorage.setItem=set; console.error=report;}
     assert(sourceMemory.get('astra_bot_manual')==='history sentinel','History was rewritten');
     assert([...sourceMemory.keys()].every(k=>['astra_bot_manual',MarketSources.KEY].includes(k)),'Unexpected key');
   } finally {API.all24h=all24h;}
+});
+test('A monitored broker symbol can be removed without erasing hidden watchlist choices',()=>{
+  const spark=Watch.spark; Watch.spark=()=>{}; Watch.el=document.getElementById('watchBody');
+  Watch.list=['BTCUSDT']; MK.monitored=['ETHUSD.m'];
+  try {
+    Watch.render(); assert(document.getElementById('watchBody').textContent.includes('ETH'),'Monitored broker symbol missing');
+    Watch.remove('ETHUSD.m');
+    assert(!document.getElementById('watchBody').textContent.includes('ETH') && Watch.list.includes('BTCUSDT'),'Removal failed or hidden choice deleted');
+  } finally {Watch.spark=spark;}
 });
 test('A change from another window disables this window and cloud sync excludes the switch',async()=>{
   MarketSources.state.binance=true; new Sock(['x'],()=>{},'test');

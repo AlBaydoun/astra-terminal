@@ -18,7 +18,8 @@ const SymbolSearch = {
     const seen = new Set();
     const list = [];
     let hidden = 0;
-    for (const s of [...BROKER.all(), ...MK.monitored, ...Watch.list, ...STORE.universe]){
+    const available = typeof MarketSources !== 'undefined' ? MarketSources.list() : [...BROKER.all(), ...MK.monitored, ...Watch.list, ...STORE.universe];
+    for (const s of available){
       if (seen.has(s) || !match(s)) continue;
       if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(s)) continue;
       seen.add(s);

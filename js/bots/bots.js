@@ -737,6 +737,8 @@ const Bots = {
 
   /* ---------- one automated bot pass ---------- */
   botError(ledger, bot, sym, tf, error){
+    // Switching off a venue cancels an in-progress scan; that is not a strategy error.
+    if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) return;
     const message = bot.name + ' could not evaluate ' + baseAsset(sym) + ' ' + tf + ': ' + error.message;
     BotEngine.note(ledger, 'error', message, { sym, tf });
     console.error('ASTRA ' + message);
@@ -755,10 +757,11 @@ const Bots = {
     if (b.rankAll){
       const scored = [];
       for (const sym of syms){
+        if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) continue;
         let candles;
         try { candles = await API.klines(sym, cfg.tf, b.warmup + 120); }
         catch(e){ this.botError(L, b, sym, cfg.tf, e); continue; }
-        if (!candles || candles.length < b.warmup) continue;
+        if (!candles || candles.length < b.warmup || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) continue;
         preloaded[sym] = candles;
         let sig = null;
         try { sig = b.signal(candles, Object.assign({}, cfg, { sym }), L, null); }
@@ -773,6 +776,7 @@ const Bots = {
     }
 
     for (const sym of syms){
+      if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) continue;
       if (L.open.length >= BotEngine.rules(cfg).maxOpen) break;
       const tf = cfg.tf;
       let candles, higher = null;
@@ -780,7 +784,7 @@ const Bots = {
         candles = preloaded[sym] || await API.klines(sym, tf, b.warmup + 120);
         if (b.needsHigher) higher = await API.klines(sym, cfg.higherTf || '15m', 300);
       } catch(e){ this.botError(L, b, sym, tf, e); continue; }
-      if (!candles || candles.length < b.warmup) continue;
+      if (!candles || candles.length < b.warmup || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) continue;
 
       let sig;
       try { sig = b.signal(candles, Object.assign({}, cfg, { sym }), L, higher); }

@@ -21,6 +21,9 @@ visible; another window receives changes. Exclude this preference from cloud
 sync so another device cannot silently enable Binance here. The owner must
 approve this new key before implementation, per CODEX-BRIEF.md.
 
+The owner approved `astra_market_sources_v1` explicitly in this task before its
+implementation. The key and value above are therefore authorized.
+
 The production live arming files and bridge write endpoints are outside this
 change. Existing live-price freshness, cost and sizing rules remain in force.
 Research candidates run separately with disposable histories and no new bot

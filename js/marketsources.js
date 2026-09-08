@@ -125,6 +125,7 @@ const MarketSources = {
       <button class="mPrimary" id="binanceToggle">${on ? 'Disable Binance' : 'Enable Binance'}</button>
       <p class="aiSub">Broker crypto such as ETHUSD.m uses JustMarkets prices. Public-feed instruments are hidden.
       Existing trades, stops, targets and watchlist choices are kept. Paper positions and waiting orders on a disabled source pause until you enable it again and a fresh price arrives.</p>`;
+    host.insertAdjacentHTML('beforeend','<p class="aiSub"><a href="research/intraday.html" target="_blank" rel="noopener">Open bot research and split-test results</a></p>');
     host.querySelector('#binanceToggle').addEventListener('click', () => this.setBinance(!this.binanceOn()));
   },
 };

@@ -167,7 +167,8 @@ const Intel = {
     try {
       this.btcDaily = await this.fetchBtcDaily();
       this.computeAnalogs();
-    } catch(e){ console.warn('history unavailable:', e.message); }
+    } catch(e){ if (typeof MarketSources === 'undefined' || MarketSources.binanceOn()) console.warn('history unavailable:', e.message); }
+    if (typeof MarketSources !== 'undefined' && !MarketSources.binanceOn()) return;
     try {
       const r = await fetch('https://api.alternative.me/fng/?limit=0&format=json');
       const j = await r.json();

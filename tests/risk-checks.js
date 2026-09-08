@@ -147,7 +147,7 @@ test('Exchange event timestamps are recorded and never overwrite connected broke
     assert(Feed.srcOf['BTCUSD.m'] === 'bridge', 'Broker source overwritten');
     onMsg([{ s: 'BTCUSDT', c: '100', o: '99' }]);
     assert(!Feed.isLive('BTCUSDT'), 'Missing event time accepted');
-  } finally { Sock.prototype.connect = connect; Feed.bridge = bridge; fresh(); }
+  } finally { Sock.stopAll(); Sock.prototype.connect = connect; Feed.bridge = bridge; fresh(); }
 });
 test('Failed quote requests cannot relabel delayed prices as live', async () => {
   const fetchBefore = window.fetch, bridge = Feed.bridge;
