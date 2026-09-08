@@ -132,6 +132,9 @@ select#chartType {
   backdrop-filter: blur(14px); padding: 4px;
 }
 #mainWrap { position: relative; flex: 1; min-height: 0; }
+#confluencePanel strong { margin-left: 12px; color: var(--accent); }
+#confluencePanel .cfCheck { display: inline-block; margin-right: 14px; }
+#confluencePanel small { color: var(--dim); }
 #mainWrap.drawing { cursor: crosshair; }
 #mainChart { position: absolute; inset: 0; }
 #drawLayer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }

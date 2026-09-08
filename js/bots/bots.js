@@ -252,6 +252,7 @@ const Bots = {
     /* the workspace runs on a slow, deliberate cadence — bots act on closed candles */
     this.timer = setInterval(() => this.tick(), 30000);
     if (typeof Auto !== 'undefined') Auto.init();
+    if (typeof ConfluenceScanner !== 'undefined') ConfluenceScanner.start();
     setTimeout(() => this.tick(), 8000);
   },
 
@@ -556,6 +557,7 @@ const Bots = {
     for (let i = 0; i < held.length; i += 40) await Feed.quotes(held.slice(i, i + 40));
     /* keep open paper positions marked to market first */
     for (const b of BOTS){
+      if (b.managePaper){ await b.managePaper(); continue; }
       if (b.manual && typeof ManualOrders !== 'undefined'){
         await ManualOrders.managePositions(); continue;
       }
@@ -577,7 +579,7 @@ const Bots = {
     for (const b of BOTS){
       if (this.isPage(b) || b.manual) continue;
       const cfg = this.cfg(b.id);
-      if (cfg.paused) continue;
+      if (cfg.paused && !b.runPaper) continue;
       await this.runBot(b, false);
     }
     this.render();
@@ -744,6 +746,7 @@ const Bots = {
     console.error('ASTRA ' + message);
   },
   async runBot(b, manual){
+    if (b.runPaper) return b.runPaper(b); // Fixed experiments own a paper-only runner.
     const cfg = this.cfg(b.id);
     const L = this.ledgers[b.id];
     let syms = this.allowed(b).slice(0, cfg.scanDepth || 24);

@@ -105,7 +105,7 @@ const MarketFit = {
   save(){ lsSet('astra_marketfit', this.state); },
 
   bots(){
-    return BOTS.filter(b => !Bots.isPage(b) && !b.manual)
+    return BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.fixedResearch)
       .concat(BOT_BY_ID.scanner ? [BOT_BY_ID.scanner] : []);
   },
 

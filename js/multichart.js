@@ -68,7 +68,7 @@ const Multi = {
   },
 
   cfgOf(cell, def){ return Object.assign({}, def.def, cell.inds[def.id] || {}); },
-  activeDefs(cell){ return INDS.filter(d => cell.inds[d.id] && cell.inds[d.id].on); },
+  activeDefs(cell){ return INDS.filter(d => !d.mainOnly && cell.inds[d.id] && cell.inds[d.id].on); },
 
   symLabel(sym){
     if (typeof MK !== 'undefined' && !MK.isCrypto(sym)) return baseAsset(sym);
@@ -353,7 +353,7 @@ const Multi = {
     document.getElementById('miniIndTitle').textContent =
       'CHART ' + (cell.i + 2) + ' · ' + this.symLabel(cell.sym);
 
-    host.innerHTML = INDS.map(def => {
+    host.innerHTML = INDS.filter(def => !def.mainOnly).map(def => {
       const c = this.cfgOf(cell, def);
       const parts = def.parts || [];
       const params = (def.params || []).map(p => {

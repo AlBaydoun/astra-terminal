@@ -167,7 +167,7 @@ const Chart = {
     if (!this.priceSeries) return;
     const S = this.settings.patterns;
     const showable = ['candles', 'heikin', 'bars'].includes(STORE.chartType);
-    if (!S || !S.on || !showable || typeof PAT === 'undefined'){
+    if (!showable){
       try { this.priceSeries.setMarkers([]); } catch(e){}
       return;
     }
@@ -178,7 +178,7 @@ const Chart = {
        which made the chart look like the patterns had ended. The detector is
        cheap arithmetic per bar, so the only real cost is how many markers the
        chart is asked to hold — capped below purely to protect the renderer. */
-    for (let i = 4; i < v.length; i++){
+    for (let i = 4; S?.on && typeof PAT !== 'undefined' && i < v.length; i++){
       for (const p of PAT.at(v, i)){
         markers.push({
           time: v[i].time,
@@ -192,6 +192,8 @@ const Chart = {
     /* if a very long history produces an enormous number, keep the most recent
        ones rather than dropping the lot */
     if (markers.length > 4000) markers.splice(0, markers.length - 4000);
+    if (typeof ConfluenceOverlay !== 'undefined') markers.push(...ConfluenceOverlay.markers(v));
+    markers.sort((a,b)=>a.time-b.time);
     /* the whole set, not a tail slice — this line was the real limit */
     try { this.priceSeries.setMarkers(markers); } catch(e){}
     this._markerCount = markers.length;
@@ -804,6 +806,7 @@ const Chart = {
 
   /* --- legend + crosshair --- */
   updateLegend(hover){
+    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.panel();
     const el = document.getElementById('legend');
     const disp = this.displayCandles();
     const c = hover || (disp.length ? disp[disp.length - 1] : null);
@@ -950,6 +953,7 @@ const Chart = {
   replayRender(){
     this.priceSeries.setData(this.priceData());
     this.renderIndicators();
+    this.renderPatternMarkers();
     this.updateLegend(null);
     this.updateReplayUI();
     Draw.redraw();
@@ -966,6 +970,7 @@ const Chart = {
     else
       this.priceSeries.update({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close });
     this.renderIndicators();
+    this.renderPatternMarkers();
     this.updateLegend(null);
     this.updateReplayUI();
   },

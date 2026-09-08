@@ -27,8 +27,8 @@ const API = {
   },
 
   /* candles for ANY instrument — the Feed router picks bridge / Binance / data service */
-  async klines(symbol, interval, limit){
-    if (typeof Feed !== 'undefined') return Feed.klines(symbol, interval, limit);
+  async klines(symbol, interval, limit, options){
+    if (typeof Feed !== 'undefined') return Feed.klines(symbol, interval, limit, options);
     return this.binanceKlines(symbol, interval, limit);
   },
 

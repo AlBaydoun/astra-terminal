@@ -48,6 +48,15 @@ Object.assign(Bots, {
     const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
 
+    if (b.confluenceScanner && host.dataset.bot === b.id && host.querySelector('#cfScanRows')){
+      ConfluenceScanner.refresh(); // Keep the search field, filter and focus alive during scans.
+      return;
+    }
+    if (b.id === 'confluence' && host.dataset.bot === b.id && host.querySelector('#cfLimitsForm')){
+      ConfluenceBot.refresh(); // Never rebuild a trading rule while it is being typed.
+      return;
+    }
+
     // Keep the actual controls alive. Restoring text after replacing the DOM
     // still closes pickers, loses a partially typed number and resets selections.
     const manualLedger = host.querySelector('#manualLedger');
@@ -77,6 +86,7 @@ Object.assign(Bots, {
         : b.live ? this.liveView()
         : b.report ? BotReports.view()
         : b.brain ? this.brainView()
+        : b.confluenceScanner ? ConfluenceScanner.view()
         : b.scan ? this.scannerView()
         : b.manual ? this.manualView(L, st)
         : this.botView(b, L, st));
@@ -156,6 +166,8 @@ Object.assign(Bots, {
   },
 
   controls(b, cfg){
+    if (b.confluenceScanner) return ConfluenceScanner.controls();
+    if (b.id === 'confluence') return ConfluenceBot.controls();
     if (b.trades) return '<div class="botCtl"><span class="bcNote">Every position that is live right now, across every bot. Move the stop, set or clear the target, start a trailing stop on one trade, bank part of it, or close it. Paper positions only — nothing here reaches a broker.</span></div>';
     if (b.dash) return '<div class="botCtl"><span class="bcNote">Filter with the boxes below, click a bot row or a day to narrow everything, click a column heading to sort. Paper trades only.</span></div>';
     if (b.live) return '';
@@ -659,6 +671,10 @@ Object.assign(Bots, {
 
   /* ---------------- automated bot ---------------- */
   botView(b, L, st){
+    if (b.id === 'confluence'){
+      const display = ConfluenceBot.displayLedger(L);
+      return ConfluenceBot.view() + '<div id="cfLedger">' + this.ledgerView(b.id, display, BotEngine.stats(display)) + '</div>';
+    }
     return this.ledgerView(b.id, L, st) + this.btView(b.id);
   },
 
@@ -775,6 +791,8 @@ Object.assign(Bots, {
 
   bind(b){
     const host = document.getElementById('botBody');
+    if (b.id === 'confluence' || b.confluenceScanner) ConfluenceScanner.bind(host);
+    if (b.id === 'confluence') ConfluenceBot.bind(host);
     /* one handler for every sortable table in the workspace */
     host.querySelectorAll('[data-tsort]').forEach(el => el.addEventListener('click', () => {
       this.setTableSort(el.dataset.tsort, el.dataset.tkey);

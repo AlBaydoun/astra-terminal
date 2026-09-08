@@ -1,0 +1,26 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const root=path.join(__dirname,'..'), context=vm.createContext({console,setTimeout,Map,Set,WeakSet,Date,Intl});
+for(const file of ['tests/risk-fixture.js','js/broker.js','js/feed.js','js/indicators.js','js/bots/engine.js',
+  'js/bots/confluence.js','research/confluence-adapter.js','research/intraday-study.js'])
+  vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context,{filename:file});
+context.snapshot=JSON.parse(fs.readFileSync(path.join(__dirname,'intraday-data.json'),'utf8').replace(/^\uFEFF/,''));
+context.previous=JSON.parse(fs.readFileSync(path.join(__dirname,'channel20-results.json'),'utf8'));
+(async()=>{
+  const result=await vm.runInContext('IntradayStudy.run(snapshot,previous)',context);
+  fs.writeFileSync(path.join(__dirname,'confluence-results.json'),JSON.stringify(result,null,2)+'\n');
+  let md='# ASTRA Confluence: fixed M15 split test\n\n';
+  md+='**'+result.verdicts[0].verdict+'**. Positive in both halves: '+(result.verdicts[0].positiveBothHalves.join(', ')||'none')+'.\n\n';
+  md+='One new combination, no tuning. Eight JustMarkets markets, separate 10,000 USD accounts for each half. This reuses already-inspected data and is exploratory, not unseen validation. The bot is installed as a paused paper experiment at the owner’s request.\n\n';
+  md+='| Instrument | Half | Trades | Win rate | Profit factor | Average R | Max drawdown | Net USD |\n|---|---|---:|---:|---:|---:|---:|---:|\n';
+  for(const r of result.results) md+='| '+[r.symbol,r.half,r.trades,r.winRate.toFixed(1)+'%',Number(r.profitFactor).toFixed(2),r.averageR.toFixed(3),r.maxDrawdownPct.toFixed(2)+'%',r.netPnl.toFixed(2)].join(' | ')+' |\n';
+  md+='\nCosts: the greater of the Pro profile, prior study spread and captured spread. Commission 0.003% per side FX/metals/energy, zero indices/crypto. Slippage 0.005% per side. Both entry and exit fees included. Broker minimum, step and maximum lots enforced. Stop first on ambiguous bars. Intrabar drawdown uses the conservative candle model from the earlier study. Variable historical spreads, latency, tick paths and financing remain unknown.\n\n';
+  md+='Any row with zero trades has no evidence; zero drawdown is not safety. The 250-bar warmup is discarded separately in each half. Every trade and exact period appear in the JSON. Timestamps represent broker clock labels, not UTC instants. Historical open fills do not measure the forward bot’s 90-second expiry or 0.25 ATR chase guard.\n\n';
+  const over=result.results.filter(r=>r.overnightTrades);
+  md+=over.length?over.map(r=>'- Unknown overnight financing: '+r.symbol+', '+r.half+', '+r.overnightTrades+' trade(s).').join('\n')+'\n':'No positions crossed a broker date boundary in this replay.\n';
+  md+='\n## How to use the experiment\n\nOpen Bots → ASTRA Confluence → Open indicator chart. Use M15 with ordinary candles. Green ASTRA BUY and red ASTRA SELL mean all five checks passed on a completed candle. SELL proposes a short; it is not an instruction to close a buy. The panel shows the reference entry, stop and target only for the current setup. Historical labels remain visible but must not be chased. The chart labels every qualifying setup; the bot additionally applies daily, position, cost, quote and permission checks, so labels are not trade records.\n\n';
+  md+='At the owner’s subsequent request, the Confluence Scanner now automatically checks the entire JustMarkets catalogue. It chooses eligible pairs by lower round-trip cost relative to ATR, then ADX strength. The forward bot can open multiple pairs per scan and repeat a pair on a new completed-candle signal. Position counts and daily entries per pair are editable, with 0 meaning no count limit. Default size is at most 5% of equity per trade; all trades share the editable risk and allocation budgets. Open Bots → ASTRA Confluence to Save trading rules, load Maximum trade counts or Reset defaults, and Start paper bot to enable entries. It waits for 11:00–17:45 broker time. Keep ASTRA, MT5 and the PC running for exits. These eight independent historical tests used the original frozen rules and do not establish profitability for the expanded portfolio, multiple positions, repeat entries or changed allocations.\n\n';
+  md+='No most-profitable method has been established. Do not infer a win probability from the five-check score. The new bot has its own paper ledger and no broker-order route. Its bot page includes both entry and exit fees using the original fee and risk saved in strategy metadata; this is a display calculation, not a history migration. Existing terminal-wide reports retain their legacy convention. No old trade record was rewritten. Forward drawdown is sampled from available quotes, not every tick; the existing curve retains at most 1,500 points.\n\n';
+  md+='[Frozen rules and sources](confluence-plan.md) · [Browser study and guide](confluence.html) · [Every simulated trade](confluence-results.json)\n';
+  fs.writeFileSync(path.join(__dirname,'confluence-results.md'),md);
+  console.log(JSON.stringify({verdict:result.verdicts[0],folds:result.results.length,trades:result.results.reduce((n,r)=>n+r.trades,0),causalityChecks:result.causalityChecks},null,2));
+})().catch(e=>{console.error(e);process.exitCode=1;});
