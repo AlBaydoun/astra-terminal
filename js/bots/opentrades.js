@@ -144,6 +144,8 @@ const OpenTrades = {
 
   card(row){
     const p = row.p, l = this.live(row);
+    const ui = typeof WorkspaceUI !== 'undefined' ? WorkspaceUI : null;
+    const icon = name => ui ? ui.icon(name) : '';
     const k = row.bot + ':' + p.id;
     const trail = p.trail !== undefined ? p.trail : (Bots.cfg(row.bot) || {}).trail;
     const trailOn = !!trail;
@@ -170,6 +172,11 @@ const OpenTrades = {
         <span><label>Held</label><b data-f="held">${l.held}</b></span>
       </div>
 
+      ${ui ? `<div class="wsPriceMap">${ui.priceMap(p,l)}</div>
+        <div class="wsTradeLinks"><button data-ws-chart="${esc(p.sym)}">${icon('chart')} Chart · ${esc(p.sym)}</button>
+        <button data-ws-bot="${esc(row.bot)}">${icon('bot')} View bot</button></div>` : ''}
+
+      <section class="wsTradeSection"><h3>${icon('shield')} Stop loss &amp; take profit</h3>
       <div class="otCtl">
         <label class="otIn">Stop<input type="number" step="any" data-otsl="${esc(k)}" value="${p.sl}"></label>
         <span class="pctRow">${Bots.PCT_STEPS.map(pc =>
@@ -185,7 +192,9 @@ const OpenTrades = {
         <button class="bMini go" data-otset="${esc(k)}">Apply levels</button>
         <button class="bMini" data-otbe="${esc(k)}" title="move the stop to the entry price">Break even</button>
       </div>
+      </section>
 
+      <section class="wsTradeSection"><h3>${icon('chart')} Trailing stop</h3>
       <div class="otCtl">
         <label class="otIn">Trail starts at<input type="number" step="0.1" min="0.1" data-otts="${esc(k)}"
           value="${trailOn && trail.start != null ? trail.start : 1}"><i>R</i></label>
@@ -194,13 +203,16 @@ const OpenTrades = {
         <button class="bMini${trailOn ? ' on' : ''}" data-ottrail="${esc(k)}">${trailOn ? 'Update trail' : 'Start trailing'}</button>
         ${trailOn ? `<button class="bMini" data-ottrailoff="${esc(k)}">Stop trailing</button>` : ''}
       </div>
+      </section>
 
+      <section class="wsTradeSection wsExit"><h3>${icon('exit')} Reduce or close position</h3>
       <div class="otCtl">
         <button class="bMini" data-otpart="${esc(k)}:0.25">Take 25% off</button>
         <button class="bMini" data-otpart="${esc(k)}:0.5">Take half off</button>
         <button class="bMini danger" data-otclose="${esc(k)}" data-f="closebtn">Close at market · ${(l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal)}</button>
         <span class="otWhy">${esc((p.reasons || []).slice(0, 1).join('') || p.note || '')}</span>
       </div>
+      </section>
 
       ${p.edits && p.edits.length ? `<div class="otEdits">${
         p.edits.slice(-4).map(e => `<i>${esc(BotDash.clock(e.at))} — ${esc(e.what)}</i>`).join('')}</div>` : ''}
@@ -236,6 +248,8 @@ const OpenTrades = {
       set('totp', l.toTp == null ? 'none' : this.gap(l.pctToTp, l.cashToTp));
       set('mfe', '+' + fmtNum(p.mfe || 0) + ' / -' + fmtNum(p.mae || 0));
       set('held', l.held);
+      const map = card.querySelector('.wsPriceMap');
+      if (map && typeof WorkspaceUI !== 'undefined') map.innerHTML = WorkspaceUI.priceMap(p,l);
       const cb = card.querySelector('[data-f="closebtn"]');
       if (cb) cb.textContent = 'Close at market · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal);
       card.className = 'otCard ' + (l.unreal >= 0 ? 'up' : 'down');

@@ -27,7 +27,7 @@ const ManualRules = {
   message(text){ const el = document.getElementById('mrStatus'); if(el)el.textContent = text; },
   view(){
     const v = this.values();
-    return `<details class="manualRules" open><summary>Manual trading rules — you choose the budgets</summary>
+    return `<details class="manualRules"><summary>Manual trading rules — risk &amp; budgets</summary>
       <form id="manualRulesForm"><div class="manualRuleGrid">${this.fields.map(([key,label,min,max,step,kind])=>{
         const unlimited = kind === 'count' && v[key] === Number.MAX_SAFE_INTEGER;
         return `<div><label class="bc" for="mr_${key}">${esc(label)}</label>

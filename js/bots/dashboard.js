@@ -172,7 +172,7 @@ const BotDash = {
       '<header class="dashSecHead">' +
         '<button class="secFold" data-secfold="' + esc(id) + '" title="' +
           (shut ? 'Open' : 'Fold') + ' this section"><i>' + (shut ? '\u25B8' : '\u25BE') + '</i></button>' +
-        '<h3>' + title + '</h3>' +
+        '<h3>' + (typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon({money:'report',bots:'bot',instruments:'layers',breakdowns:'chart',days:'clock',open:'positions',log:'report',pairs:'shield'}[id]) + ' ' : '') + title + '</h3>' +
         (sub ? '<span class="dashSecSub">' + esc(sub) + '</span>' : '') +
         '<span class="dashSecTools">' + (tools || '') +
           '<button class="bMini secMove" data-secup="' + esc(id) + '" title="Move up">\u25B2</button>' +

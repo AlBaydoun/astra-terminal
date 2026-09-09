@@ -163,6 +163,7 @@ const App = {
     Brain.init();
     OBChat.init();
     Bots.init();
+    WorkspaceUI.init();
     MarketSources.ready = true;
     MarketSources.refresh();
     this.updateSymBtn();

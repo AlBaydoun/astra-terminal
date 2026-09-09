@@ -7,13 +7,15 @@ Object.assign(Bots, {
       if (this.active === 'manual') this.manualCalc();
     }, 5000);
     const nav = document.getElementById('botNav');
-    nav.innerHTML = `<button data-bot="permissions"${this.active === 'permissions' ? ' class="active"' : ''}>Instrument permissions</button>` + BOTS.map(b =>
+    nav.innerHTML = typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.nav(this.active) : `<button data-bot="permissions"${this.active === 'permissions' ? ' class="active"' : ''}>Instrument permissions</button>` + BOTS.map(b =>
       `<button data-bot="${b.id}"${b.id === this.active ? ' class="active"' : ''}>${esc(b.name)}</button>`).join('');
-    nav.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+    nav.querySelectorAll('[data-bot]').forEach(btn => btn.addEventListener('click', () => {
       this.active = btn.dataset.bot;
       nav.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === btn));
       this.render();
+      document.getElementById('botBody').scrollTop = 0;
     }));
+    if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.bindNav(nav);
   },
 
   h(v, d){ return v == null || isNaN(v) ? '—' : (d != null ? v.toFixed(d) : fmtNum(v)); },
@@ -22,6 +24,7 @@ Object.assign(Bots, {
   render(){
     const host = document.getElementById('botBody');
     if (!host) return;
+    if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.sync(this.active);
     if (this.active === 'permissions'){
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
       OpenTrades.stop();
@@ -74,7 +77,8 @@ Object.assign(Bots, {
     host.dataset.bot = b.id;
     host.innerHTML =
       `<div class="botHead">
-         <div class="botTitle"><b>${esc(b.name)}</b><span>${esc(b.blurb)}</span></div>
+         ${typeof WorkspaceUI !== 'undefined' ? '<div class="wsHeroIcon">' + WorkspaceUI.icon(WorkspaceUI.botIcon(b)) + '</div>' : ''}
+         <div class="botTitle"><b>${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}</b><span>${esc(b.blurb)}</span></div>
          ${b.live
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
@@ -168,7 +172,7 @@ Object.assign(Bots, {
   controls(b, cfg){
     if (b.confluenceScanner) return ConfluenceScanner.controls();
     if (b.id === 'confluence') return ConfluenceBot.controls();
-    if (b.trades) return '<div class="botCtl"><span class="bcNote">Every position that is live right now, across every bot. Move the stop, set or clear the target, start a trailing stop on one trade, bank part of it, or close it. Paper positions only — nothing here reaches a broker.</span></div>';
+    if (b.trades) return '<div class="botCtl"><span class="bcNote">Paper positions across your bots. Edit stop and target prices, then press <b>Apply levels</b> to save. The price graphic shows saved levels.</span></div>';
     if (b.dash) return '<div class="botCtl"><span class="bcNote">Filter with the boxes below, click a bot row or a day to narrow everything, click a column heading to sort. Paper trades only.</span></div>';
     if (b.live) return '';
     if (b.fit) return '';
@@ -691,6 +695,7 @@ Object.assign(Bots, {
 
   ledgerView(id, L, st){
     const pf = st.profitFactor === Infinity ? '∞' : st.profitFactor.toFixed(2);
+    const icon = name => typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon(name) : '';
     return `<div class="botStats">
         ${this.stat('EQUITY', fmtNum(st.equity), st.pnl)}
         ${this.stat('P&L', (st.pnl >= 0 ? '+' : '') + fmtNum(st.pnl) + ' (' + fmtPct(st.pnlPct) + ')', st.pnl)}
@@ -701,12 +706,13 @@ Object.assign(Bots, {
         ${this.stat('FEES PAID', fmtNum(st.fees), -1)}
         ${this.stat('WON / LOST', fmtNum(st.winAmount) + ' / ' + fmtNum(st.lossAmount))}
       </div>
+      ${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.equity(L) : ''}
       <div class="botGrid">
-        <div class="botCol"><div class="botH">OPEN POSITIONS · ${L.open.length}</div>${this.openView(id, L)}</div>
-        <div class="botCol"><div class="botH">CLOSED HISTORY</div>${this.closedView(L)}</div>
-        <div class="botCol"><div class="botH">DECISIONS</div>${this.decisionView(L)}</div>
-        <div class="botCol"><div class="botH">LESSONS FROM LOSSES</div>${this.lessonView(L)}
-          <div class="botH">DAILY</div>${this.dailyView(L)}</div>
+        <div class="botCol"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length}</div>${this.openView(id, L)}</div>
+        <div class="botCol"><div class="botH">${icon('clock')} CLOSED HISTORY</div>${this.closedView(L)}</div>
+        <div class="botCol"><div class="botH">${icon('scanner')} DECISIONS</div>${this.decisionView(L)}</div>
+        <div class="botCol"><div class="botH">${icon('report')} LESSONS FROM LOSSES</div>${this.lessonView(L)}
+          <div class="botH">${icon('chart')} DAILY</div>${this.dailyView(L)}</div>
       </div>`;
   },
 
