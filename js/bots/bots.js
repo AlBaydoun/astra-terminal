@@ -898,6 +898,7 @@ const Bots = {
     try {
       await Feed.loadSpecs([sym]);
       await Feed.quotes([sym]);
+      if(typeof ManualTicket!=='undefined')await ManualTicket.loadFx(sym);
     } catch(e){ console.warn('ASTRA manual price refresh failed:', sym, e.message); }
     finally {
       state.pending = false;
@@ -937,17 +938,20 @@ const Bots = {
   /* where to put a stop when none was typed: 1.5 x ATR on the chosen timeframe,
      falling back to a per-market percentage if the candles cannot be had */
   async autoStop(sym, tf, price, spread){
+    const cfg = this.manualCfg(), R = BotEngine.rules(cfg);
+    const mult = cfg.manualAutoStopAtr ?? 1.5;
     let dist = 0, why = '';
     try {
       const c = await API.klines(sym, tf, 120);
       if (c && c.length > 20){
         const a = IND.atr(c, 14);
         const atr = a[a.length - 1];
-        if (atr > 0){ dist = atr * 1.5; why = '1.5 × ATR(14) on ' + tf; }
+        if (atr > 0){ dist = atr * mult; why = mult + ' × ATR(14) on ' + tf; }
       }
-    } catch(e){}
+    } catch(e){ console.warn('ASTRA manual automatic stop: history unavailable; using percentage fallback.', e.message); }
     if (!dist){
-      const pct = { metal: 0.6, energy: 1.2, index: 0.5, fx: 0.3, crypto: 1.5 }[BROKER.costGroup(sym)] || 1;
+      const pct = cfg.manualFallbackPct > 0 ? cfg.manualFallbackPct
+        : ({ metal: 0.6, energy: 1.2, index: 0.5, fx: 0.3, crypto: 1.5 }[BROKER.costGroup(sym)] || 1);
       dist = price * pct / 100;
       why = pct + '% of the price';
     }
@@ -956,8 +960,8 @@ const Bots = {
        stop distance, so the automatic stop clears that bar by construction —
        otherwise a plain market order on a wide instrument like platinum is
        rejected for a stop the app itself picked. */
-    const floor = (spread > 0) ? spread * 4 : 0;
-    if (floor > dist){ dist = floor; why = 'four times the ' + fmtPrice(spread) + ' spread'; }
+    const floor = (spread > 0 && R.maxSpreadAtrPct > 0) ? spread * 100 / R.maxSpreadAtrPct : 0;
+    if (floor > dist){ dist = floor; why = 'spread / your ' + R.maxSpreadAtrPct + '% spread-to-stop limit'; }
     return { dist, why };
   },
 
@@ -972,11 +976,16 @@ const Bots = {
     const mode = inputs?.amtMode ?? this.amtMode;
     const spec = (typeof Feed !== 'undefined' && Feed.specFor) ? Feed.specFor(sym) : null;
     const contract = (spec && spec.contractSize) ? spec.contractSize : 1;
+    const cashRate=typeof ManualTicket!=='undefined'?(ManualTicket.fx(sym)?.loss??1):1;
     const lev = (typeof Feed !== 'undefined' && Feed.account && Feed.account.leverage)
       ? Feed.account.leverage : null;
     if ([amt, lots].some(v => !Number.isNaN(v) && !(Number.isFinite(v) && v > 0)))
       return { qty: 0, basis: 'none', lev, reason: 'Size must be positive or left empty' };
 
+    if(lots>0){
+      if(!spec)return {qty:0,basis:'lots',lev,reason:'Broker specifications are required to enter lots'};
+      return {qty:lots*contract,lots,basis:'lots',lev,why:lots+' lot'};
+    }
     if (amt > 0 && price > 0){
       /* "enter with 100" is genuinely ambiguous and the two readings are miles
          apart: on this account's 1:2000 leverage, 100 as MARGIN controls a
@@ -986,30 +995,35 @@ const Bots = {
       if (mode === 'margin' && !(Number.isFinite(lev) && lev > 0))
         return { qty: 0, basis: 'amount', lev, reason: 'Account leverage is unknown; margin cannot be converted into a position' };
       const asMargin = mode === 'margin';
-      const qty = asMargin ? (amt * lev / price) : (amt / price);
+      const qty = asMargin ? (amt * lev / (price*cashRate)) : (amt / (price*cashRate));
       return { qty, lots: qty / contract, basis: 'amount', lev,
         why: fmtNum(amt) + (asMargin ? ' of margin at 1:' + lev : ' of position value') };
-    }
-    if (lots > 0){
-      if (!spec) return { qty: 0, basis: 'lots', lev, reason: 'Broker specifications are required to enter lots' };
-      return { qty: lots * contract, lots, basis: 'lots', lev, why: lots + ' lot' };
     }
     return { qty: null, lots: null, basis: 'risk', lev, why: 'risk and position-value limits' };
   },
 
   manualSize(sym, price, stopDist, sl){
-    const q = this.quoteFor(sym), R = BotEngine.rules(this.manualCfg());
+    const q = this.manualPreviewQuote(sym), R = BotEngine.rules(this.manualCfg());
     const fill = q ? q.price * (1 + this.manualSide * R.slippagePct / 100) + this.manualSide * q.spread / 2 : price;
     const request = this.manualRequest(sym, fill);
     const none = Object.assign({}, request, { qty: 0, lots: null,
-      requestedNotional: request.qty > 0 ? request.qty * fill : 0 });
+      requestedNotional: request.qty > 0 ? request.qty * fill * (typeof ManualTicket!=='undefined'?(ManualTicket.fx(sym)?.loss??1):1) : 0 });
     if (request.reason) return none;
     if (!(stopDist > 0)) return Object.assign(none, { reason: 'Set a stop to preview the allowed size; an automatic stop is chosen on entry' });
     const sig = { sym, dir: this.manualSide, entry: price, sl: sl == null ? price - this.manualSide * stopDist : sl,
-      manual: true, requestedQty: request.qty };
+      manual: true, requestedQty: request.qty, tp:parseFloat(document.getElementById('mbTp')?.value)||null };
+    if(typeof ManualTicket!=='undefined'){
+      const plan=ManualTicket.fit(this.ledgers.manual,this.manualCfg(),sig,q),gate=plan.estimate;
+      return {...request,qty:gate?.qty||0,lots:gate?.lots??null,riskCash:gate?.riskCash,gate,reason:plan.reason,plan};
+    }
     const gate = BotEngine.check(this.ledgers.manual, this.manualCfg(), sig, q);
     if (!gate.ok) return Object.assign(none, { reason: gate.reason });
     return Object.assign({}, request, { qty: gate.qty, lots: gate.lots || null, riskCash: gate.riskCash, gate });
+  },
+  manualPreviewQuote(sym){
+    const live=this.quoteFor(sym);if(live)return live;
+    const t=STORE.tickers.get(sym);if(!(t?.last>0))return null;
+    return {price:t.last,spread:t.spread??0,ageSec:Infinity,time:Feed.quoteTime[sym],source:Feed.srcOf[sym]};
   },
 
   /* ---------- what the account has to work with ----------
@@ -1055,6 +1069,7 @@ const Bots = {
       lots: parseFloat(document.getElementById('mbQty').value), amtMode: this.amtMode };
 
     await Feed.loadSpecs([sym]);
+    if(typeof ManualTicket!=='undefined')await ManualTicket.loadFx(sym);
     let q = await this.liveQuote(sym);
     if (!q) return toast('No live price for ' + baseAsset(sym) +
       (Feed.bridge ? ' — the broker did not answer for that symbol' : ' — start START-MT5-Bridge.bat'), 'warn');
@@ -1069,10 +1084,12 @@ const Bots = {
     q = await this.liveQuote(sym);
     if (!q) return toast('No fresh live price — entry refused', 'warn');
     const tp = tpIn > 0 ? tpIn : null;
-    if (dir > 0 && sl >= q.price) return toast('For a buy the stop must be below ' + fmtPrice(q.price), 'warn');
-    if (dir < 0 && sl <= q.price) return toast('For a sell the stop must be above ' + fmtPrice(q.price), 'warn');
-    if (tp != null && dir > 0 && tp <= q.price) return toast('For a buy the target must be above ' + fmtPrice(q.price), 'warn');
-    if (tp != null && dir < 0 && tp >= q.price) return toast('For a sell the target must be below ' + fmtPrice(q.price), 'warn');
+    if(cfg.manualAutoFit===false || typeof ManualTicket==='undefined'){
+      if (dir > 0 && sl >= q.price) return toast('For a buy the stop must be below ' + fmtPrice(q.price), 'warn');
+      if (dir < 0 && sl <= q.price) return toast('For a sell the stop must be above ' + fmtPrice(q.price), 'warn');
+      if (tp != null && dir > 0 && tp <= q.price) return toast('For a buy the target must be above ' + fmtPrice(q.price), 'warn');
+      if (tp != null && dir < 0 && tp >= q.price) return toast('For a sell the target must be below ' + fmtPrice(q.price), 'warn');
+    }
 
     const sig = { sym, tf, dir, entry: q.price, sl, tp, score: 100, model: 'Manual', note, manual: true,
       reasons: ['Opened by hand' + (note ? ' — ' + note : '')], factors: { manual: true } };
@@ -1083,7 +1100,13 @@ const Bots = {
     const request = this.manualRequest(sym, fill, inputs);
     if (request.reason) return toast('Rejected: ' + request.reason, 'warn');
     sig.requestedQty = request.qty;
-    const gate = BotEngine.check(L, cfg, sig, q);
+    let gate;
+    if(typeof ManualTicket!=='undefined'){
+      const plan=ManualTicket.fit(L,cfg,sig,q);gate=plan.gate;
+      if(!gate)return toast('Not ready: '+plan.reason,'warn');
+      Object.assign(sig,plan.sig);
+      if(plan.adjustments.length){sig.note=[sig.note,...plan.adjustments].filter(Boolean).join(' · ');this.applyManualFit?.(plan);}
+    }else gate=BotEngine.check(L, cfg, sig, q);
     if (!gate.ok) return toast('Rejected: ' + gate.reason, 'warn');
 
     if (!BotEngine.open(L, cfg, sig, q, gate)) return toast('Entry refused after final risk check', 'warn');
@@ -1119,9 +1142,13 @@ const Bots = {
       if (!(patch.sl > 0)) return toast('The stop has to be a price', 'warn');
       if (pos.dir > 0 && patch.sl >= price) return toast('For a buy the stop must stay below ' + fmtPrice(price), 'warn');
       if (pos.dir < 0 && patch.sl <= price) return toast('For a sell the stop must stay above ' + fmtPrice(price), 'warn');
-      const R = BotEngine.rules(this.cfg(botId) || {});
+      const cfg = botId === 'manual' ? this.manualCfg() : this.cfg(botId) || {};
+      const R = BotEngine.rules(cfg);
       const risk = BotEngine.remainingRisk(pos, R, patch.sl) + (pos.fees || 0);
-      if (risk > Math.min(pos.riskCash, L.equity * R.riskPct / 100) + 1e-8)
+      const riskCeiling = botId === 'manual' && cfg.manualAllowWiderStop
+        ? Math.min(L.equity, BotEngine.equityNow(L)) * R.riskPct / 100
+        : Math.min(pos.riskCash, L.equity * R.riskPct / 100);
+      if (risk > riskCeiling + 1e-8)
         return toast('Stop change exceeds the position risk limit', 'warn');
       const reserved = L.open.reduce((sum, p) => sum + BotEngine.remainingRisk(p, R, p === pos ? patch.sl : null), 0);
       if (reserved > L.startEquity * R.maxDailyLossPct / 100 + Math.min(0, BotEngine.dailyPnl(L, Date.now())) + 1e-8)

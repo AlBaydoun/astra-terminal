@@ -375,6 +375,7 @@ const Multi = {
         `<span class="indPane inputs">${params}${colors}</span></div>`;
     }).join('');
 
+    App.bindIndicatorSearch('miniIndModal','miniIndSearch','miniIndSearchCount');
     if (focusId){
       const row = host.querySelector('.indRow.focus');
       if (row) setTimeout(() => row.scrollIntoView({ block: 'center' }), 30);

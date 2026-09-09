@@ -258,7 +258,7 @@ document.getElementById('run').addEventListener('click',async()=>{
     await test('A per-trade allocation below the actual broker minimum refuses the entry',async()=>{
       setup();ConfluenceBot.saveLimits(ConfluenceBot.defaultLimits());
       assert(!await Bots.runBot(BOT_BY_ID.confluence),'Allocation was rounded up to an oversized lot');
-      assert(ConfluenceScanner.rows[0].why.includes('Smallest broker size'),'Minimum-lot explanation missing');
+      assert(ConfluenceScanner.rows[0].why.includes('Minimum '),'Minimum-lot explanation missing');
     });
     // Draw the actual marker adapter over captured history for visual inspection.
     STORE.symbol=sym;STORE.tf='15m';Chart.settings.confluence.on=true;ConfluenceOverlay.key='';

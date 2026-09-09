@@ -192,15 +192,7 @@ Object.assign(Bots, {
         <span class="bcNote">${this.scan.busy ? 'scanning…' : this.scan.at ? 'updated ' + this.when(this.scan.at) : 'not scanned yet'}
           ${this.scan.universe ? ' · ' + this.scan.universe + ' instruments' : ''}</span>
       </div>`;
-    if (b.manual)
-      return `<div class="botCtl">
-        <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen ?? 20}" min="0" max="100"></label>
-        <label class="bc">Per instrument <input type="number" data-cfg="maxPerSymbol" value="${cfg.maxPerSymbol ?? 10}" min="0" max="50"></label>
-        <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause new entries</label>
-        <button class="bBtn danger" data-act="reset">Reset</button>
-        <button class="bBtn" data-act="permissions">Instrument permissions</button>
-        <span class="bcNote">Stops and targets keep working while entries are paused. All open positions together are capped at ${BotEngine.rules(cfg).maxNotionalPct}% of equity; at most ${BotEngine.rules(cfg).maxCorrelated} related positions per virtual account.</span>
-      </div>`;
+    if (b.manual) return typeof ManualRules !== 'undefined' ? ManualRules.view() : '';
     return `<div class="botCtl">
       ${this.tfSel(cfg)}
       <label class="bc">Min score <input type="number" data-cfg="minScore" value="${cfg.minScore}" min="0" max="100"></label>
@@ -564,7 +556,7 @@ Object.assign(Bots, {
     </div>
     <div class="botNote">Market enters now. Limit and Stop entry wait for your price and require an explicit stop-loss.
       Leave <b>volume</b> empty to size from the risk limit when placing the order. For Market only, leave the
-      <b>stop</b> empty for an automatic stop at 1.5 × ATR; leave the
+      <b>stop</b> empty for an automatic stop using your saved ATR multiplier; leave the
       <b>target</b> empty and the position simply runs until you close it or the stop is hit.
       Both levels can be changed at any time on the open position below, or on the Open Trades page.
       Saved stops and targets return after a restart. Paper execution pauses while the PC or browser is off
@@ -577,13 +569,13 @@ Object.assign(Bots, {
      stop is a decision about money, not about a price. When the volume is left
      to the risk limit, the size is worked out the way the ENGINE will work it
      out, so the figures shown are the figures you actually get. */
-  manualCalc(){
+  manualCalc(applyFit=false){
     const host = document.getElementById('mbCalc');
     if (!host) return;
     const symBtn = document.getElementById('mbSym');
     const sym = Bots.resolveSymbol(symBtn ? symBtn.dataset.val : '') || STORE.symbol;
     this.refreshManualQuote(sym);
-    const q = Bots.quoteFor(sym);
+    const liveQuote=Bots.quoteFor(sym),q = Bots.manualPreviewQuote(sym);
     const pxEl = document.getElementById('mbPx');
     if (pxEl) pxEl.textContent = q ? fmtPrice(q.price) : '—';
     const go = document.getElementById('mbGo');
@@ -604,6 +596,7 @@ Object.assign(Bots, {
         ' SL/TP percentages use your entry price. Size is fixed when placed; funds and risk are checked again at execution.'
       : 'Enters at the current executable price, including spread and slippage.';
     if (!q){
+      if(go)go.disabled=true;
       const pending = Feed.bridgeHas(sym) && Feed.bridgeClock?.offset == null;
       host.innerHTML = '<i>' + (pending ? 'Checking the broker clock and waiting for a new tick. ' : '') +
         'No verified live price for ' + esc(baseAsset(sym)) + ' yet. Entries stay blocked until a fresh quote arrives.</i>';
@@ -626,13 +619,21 @@ Object.assign(Bots, {
     /* the SAME function the order uses, so this is not a different trade */
     const size = waiting && typeof ManualOrders !== 'undefined' ? ManualOrders.preview(ManualOrders.form(),q)
       : Bots.manualSize(sym, q.price, stopDist, sl);
+    if(size.estimate&&!size.gate)size.gate=size.estimate;
+    this.manualPreviewPlan=size.plan;
+    if(applyFit&&size.plan?.estimate&&Bots.manualCfg().manualAutoFit!==false)this.applyManualFit(size.plan);
+    const automaticStop=!waiting&&!(sl>0);
+    if(go){go.disabled=(!!size.reason&&!automaticStop)||!liveQuote;
+      go.title=go.disabled?(size.reason||'Waiting for a fresh broker price'):'';}
     const fill = size.gate ? size.gate.fill : q.price;
-    const m = Bots.marginFor(size.qty, fill, size.lev);
+    const m = Bots.marginFor(size.qty*(size.gate?.fx?.loss??1), fill, size.lev);
 
     const risk = size.riskCash != null ? size.riskCash : null;
-    const exit = size.gate ? tp * (1 - dir * size.gate.R.slippagePct / 100) : tp;
-    const reward = (size.gate && tp > 0) ? ((exit - fill) * dir -
-      (exit + fill) * BotEngine.commissionFrac(sym, size.gate.R)) * size.qty : null;
+    const usedTp=size.plan?.sig?.tp??tp,usedSl=size.plan?.sig?.sl??sl;
+    const exit = size.gate ? usedTp * (1 - dir * size.gate.R.slippagePct / 100) : usedTp;
+    const quoteReward=(exit-fill)*dir;
+    const reward = (size.gate && usedTp > 0) ? (quoteReward*(size.gate.fx?.[quoteReward<0?'loss':'profit']??1) -
+      (exit + fill)*(size.gate.fx?.loss??1) * BotEngine.commissionFrac(sym, size.gate.R)) * size.qty : null;
     const rr = (risk > 0 && reward > 0) ? reward / risk : null;
     const eq = Bots.ledgers.manual ? Bots.ledgers.manual.equity : 0;
 
@@ -660,13 +661,23 @@ Object.assign(Bots, {
         ? cell('⚠ Stop would cost', (risk / eq * 100).toFixed(1) + '% of the account', 'down') : '') +
       cell('Size', size.qty > 0 ? (size.lots != null ? size.lots + ' lot' : +size.qty.toPrecision(6) + ' units') : '—') +
       cell('If the stop is hit', risk == null ? 'set a stop' : '-' + fmtNum(risk), 'down') +
-      cell('If the target is hit', reward == null ? 'no target' : '+' + fmtNum(reward), 'up') +
+      cell('If the target is hit', reward == null ? 'no target' : (reward>=0?'+':'') + fmtNum(reward), reward<0?'down':'up') +
       cell('Reward to risk', rr == null ? '—' : rr.toFixed(2) + ' : 1', rr == null ? '' : (rr >= 1 ? 'up' : 'down')) +
-      cell('Stop is', sl > 0 && entry > 0 ? (stopDist / entry * 100).toFixed(2) + '% away' : '—') +
-      cell('Target is', tp > 0 && entry > 0 ? (Math.abs(tp - entry) / entry * 100).toFixed(2) + '% away' : '—') +
-      (size.reason ? cell(waiting ? 'Order blocked' : 'Entry blocked', esc(size.reason), 'down')
+      cell('Stop is', usedSl > 0 && entry > 0 ? (Math.abs(entry-usedSl) / entry * 100).toFixed(2) + '% away' : '—') +
+      cell('Target is', usedTp > 0 && entry > 0 ? (Math.abs(usedTp - entry) / entry * 100).toFixed(2) + '% away' : '—') +
+      (size.plan?.adjustments?.length?cell('Auto-fit',esc(size.plan.adjustments.join(' · '))):'') +
+      (size.gate?.fx?.from&&size.gate.fx.from!==size.gate.fx.currency?cell('Cash currency',esc(size.gate.fx.currency+' · '+size.gate.fx.from+' conversion estimate, fixed at entry')):'') +
+      (!liveQuote?cell('Preview only','Last available price; waiting for a fresh tradable quote','warn'):'') +
+      (size.reason ? cell(automaticStop?'Automatic stop':waiting ? 'Order blocked' : 'Entry blocked', esc(size.reason), automaticStop?'':'down')
         : cell(waiting ? 'Estimate at entry' : 'Sized by', waiting ? fmtPrice(fill) + ' · rechecked at execution' : esc(size.why)));
     if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
+  },
+  applyManualFit(plan){
+    const gate=plan.estimate;if(!gate)return;
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+    set('mbSl',plan.sig.sl);if(plan.sig.tp!=null)set('mbTp',plan.sig.tp);
+    if(gate.lots!=null){set('mbQty',gate.lots);set('mbAmt','');}
+    else set('mbAmt',gate.notional);
   },
 
   /* ---------------- automated bot ---------------- */
@@ -861,7 +872,8 @@ Object.assign(Bots, {
     }));
     /* ---- the manual form: side, quick percentages, live arithmetic ---- */
     if (b.manual){
-      const recalc = () => this.manualCalc();
+      if (typeof ManualRules !== 'undefined') ManualRules.bind(host);
+      const recalc = (apply=true) => this.manualCalc(apply);
       ['mbSl', 'mbTp', 'mbQty', 'mbAmt', 'mbEntry'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('input', () => {
@@ -870,8 +882,9 @@ Object.assign(Bots, {
           const otherId = id === 'mbAmt' ? 'mbQty' : id === 'mbQty' ? 'mbAmt' : null;
           const other = otherId && document.getElementById(otherId);
           if (other && el.value) other.value = '';
-          recalc();
+          recalc(false);
         });
+        if(el)el.addEventListener('change',()=>recalc(true));
       });
       document.getElementById('mbOrderType')?.addEventListener('change', recalc);
       /* pressing the instrument opens the search picker */
@@ -886,16 +899,23 @@ Object.assign(Bots, {
         recalc();
       }));
       host.querySelectorAll('[data-mbside]').forEach(el => el.addEventListener('click', () => {
+        const previousSide=Bots.manualSide;
         Bots.manualSide = parseInt(el.dataset.mbside, 10);
         host.querySelectorAll('[data-mbside]').forEach(x =>
           x.classList.toggle('on', x === el));
         const go = document.getElementById('mbGo');
-        const q = Bots.quoteFor(Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol);
+        const q = Bots.manualPreviewQuote(Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol);
         if (go) go.textContent = (Bots.manualSide > 0 ? 'BUY' : 'SELL') + ' at market' +
           (q ? ' · ' + fmtPrice(q.price) : '');
         /* the levels were on the other side of the market a moment ago */
         const sl = document.getElementById('mbSl'), tp = document.getElementById('mbTp');
-        if (sl) sl.value = ''; if (tp) tp.value = '';
+        if(previousSide!==Bots.manualSide){
+          const reference=document.getElementById('mbOrderType')?.value==='market'?q?.price:+document.getElementById('mbEntry')?.value;
+          if(Bots.manualCfg().manualAutoFit!==false&&reference>0){
+            if(+sl?.value>0)sl.value=reference-Bots.manualSide*Math.abs(+sl.value-reference);
+            if(+tp?.value>0)tp.value=reference+Bots.manualSide*Math.abs(+tp.value-reference);
+          }else{if (sl) sl.value = ''; if (tp) tp.value = '';}
+        }
         recalc();
       }));
       /* the fund bar is a way of SAYING an amount: it fills the amount box with
@@ -932,7 +952,7 @@ Object.assign(Bots, {
       host.querySelectorAll('[data-mbpct]').forEach(el => el.addEventListener('click', () => {
         const [which, pc] = el.dataset.mbpct.split(':');
         const sym = Bots.resolveSymbol((document.getElementById('mbSym') || {}).dataset.val) || STORE.symbol;
-        const q = Bots.quoteFor(sym);
+        const q = Bots.manualPreviewQuote(sym);
         const waiting = document.getElementById('mbOrderType')?.value !== 'market';
         const reference = waiting ? parseFloat(document.getElementById('mbEntry')?.value) : q?.price;
         if (!(reference > 0)) return toast(waiting ? 'Set your entry price first' : 'No live price yet for ' + baseAsset(sym), 'warn');

@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.join(__dirname,'..');
 const context=vm.createContext({console,setTimeout,Map,Set,WeakSet,Date,Intl});
-for(const file of ['tests/risk-fixture.js','js/broker.js','js/feed.js','js/indicators.js','js/bots/engine.js',
+for(const file of ['tests/risk-fixture.js','js/broker.js','js/feed.js','js/indicators.js','js/bots/engine.js','research/legacy-costs.js',
   'research/intraday-candidates.js','research/intraday-study.js'])
   vm.runInContext(fs.readFileSync(path.join(root,file),'utf8'),context,{filename:file});
 context.snapshot=JSON.parse(fs.readFileSync(path.join(__dirname,'intraday-data.json'),'utf8').replace(/^\uFEFF/,''));

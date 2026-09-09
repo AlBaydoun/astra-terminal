@@ -81,12 +81,12 @@ const BotDash = {
   /* what one trade actually put on the table: the full value of the position,
      not the margin. qty is in units of the instrument, so qty x entry is the
      money the position controlled. */
-  notional(t){ return Math.abs((t.qty || 0) * (t.entry || 0)); },
+  notional(t){ return Math.abs((t.qty || 0) * (t.entry || 0)) * BotEngine.cashRate(t,true); },
 
   /* and what it stood to lose if the stop had been hit */
   risked(t){
     if (!t.sl || !t.entry) return 0;
-    return Math.abs(t.entry - t.sl) * (t.qty || 0);
+    return Math.abs(t.entry - t.sl) * (t.qty || 0) * BotEngine.cashRate(t,true);
   },
 
   sum(list){

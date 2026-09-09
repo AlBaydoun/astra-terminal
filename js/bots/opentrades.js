@@ -37,7 +37,7 @@ const OpenTrades = {
     const p = row.p;
     const q = Bots.quoteFor(p.sym);
     const px = q ? q.price : (p.last || p.entry);
-    const unreal = (px - p.entry) * p.dir * p.qty - p.fees;
+    const unreal = BotEngine.cashPnl(p,(px - p.entry) * p.dir * p.qty) - p.fees;
     const R1 = p.stopDist || Math.abs(p.entry - (p.slInit || p.sl)) || 0;
     const rNow = R1 > 0 ? (px - p.entry) * p.dir / R1 : 0;
     /* how far price has to travel before each level is reached */
@@ -48,10 +48,10 @@ const OpenTrades = {
       stale: !q,
       pctToStop: px > 0 ? toStop / px * 100 : 0,
       pctToTp: (p.tp != null && px > 0) ? toTp / px * 100 : null,
-      cashToStop: toStop * p.qty,
-      cashToTp: toTp == null ? null : toTp * p.qty,
+      cashToStop: toStop * p.qty * BotEngine.cashRate(p,true),
+      cashToTp: toTp == null ? null : toTp * p.qty * BotEngine.cashRate(p),
       held: BotDash.held(p.entryTime, Date.now()),
-      value: Math.abs(p.qty * p.entry),
+      value: Math.abs(p.qty * p.entry)*BotEngine.cashRate(p,true),
     };
   },
 
@@ -75,9 +75,9 @@ const OpenTrades = {
     const tpRaw = tpEl ? tpEl.value.trim() : (p.tp == null ? '' : String(p.tp));
     const tp = tpRaw === '' ? null : parseFloat(tpRaw);
 
-    const atStop = (sl > 0) ? Bots.moneyAt(p.entry, p.dir, p.qty, sl) - p.fees : null;
-    const atTp = (tp > 0) ? Bots.moneyAt(p.entry, p.dir, p.qty, tp) - p.fees : null;
-    const fromHere = (sl > 0) ? (sl - l.px) * p.dir * p.qty : null;
+    const atStop = (sl > 0) ? BotEngine.cashPnl(p,Bots.moneyAt(p.entry, p.dir, p.qty, sl)) - p.fees : null;
+    const atTp = (tp > 0) ? BotEngine.cashPnl(p,Bots.moneyAt(p.entry, p.dir, p.qty, tp)) - p.fees : null;
+    const fromHere = (sl > 0) ? BotEngine.cashPnl(p,(sl - l.px) * p.dir * p.qty) : null;
 
     const cell = (label, value, cls) =>
       `<span class="mbCell"><label>${esc(label)}</label><b class="${cls || ''}">${value}</b></span>`;
@@ -100,7 +100,7 @@ const OpenTrades = {
          toStop is positive while price is still on the right side of the
          stop, so THAT is the exposure — negating it read almost every
          healthy position as risking nothing. */
-      a.risk += Math.max(0, l.toStop) * r.p.qty;
+      a.risk += Math.max(0, l.toStop) * r.p.qty * BotEngine.cashRate(r.p,true);
       if (l.unreal >= 0) a.up++; else a.down++;
       return a;
     }, { unreal: 0, value: 0, risk: 0, up: 0, down: 0 });

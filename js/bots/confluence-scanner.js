@@ -18,7 +18,7 @@ const ConfluenceScanner = {
     if(!jobs.length){this.refresh();return this.rows;}
     this.scanNumber++;
     // A new slot must never retain a previously actionable signal after a failed request.
-    for(const r of jobs){r.signal=null;r.status='QUEUED';r.why='Waiting for fresh candles';}
+    for(const r of jobs){r.signal=null;r.move=null;r.status='QUEUED';r.why='Waiting for fresh candles';}
     let next=0;
     this.pending=(async()=>{
       await Promise.all(Array.from({length:Math.min(6,jobs.length)},async()=>{
@@ -30,6 +30,13 @@ const ConfluenceScanner = {
             const bars=await API.klines(r.sym,'15m',Confluence.warmup+1,{signal:controller.signal});
             if(!MarketSources.allowed(r.sym) || !Feed.bridgeHas(r.sym)) throw Error('JustMarkets instrument disconnected');
             const s=Confluence.inspect(bars,bars.length-1,'15m');s.sym=r.sym;
+            if(bars.length>=23){
+              const i=bars.length-2,last=bars[i],prior=bars.slice(i-20,i);
+              const tr=(b,prev)=>Math.max(b.high-b.low,Math.abs(b.high-prev.close),Math.abs(b.low-prev.close));
+              const mean=prior.reduce((sum,b,j)=>sum+tr(b,bars[i-21+j]),0)/20;
+              if(mean>0&&Number.isFinite(mean)&&bars[i+1].rawTime-last.rawTime===900)
+                r.move={time:last.rawTime,ratio:tr(last,bars[i-1])/mean};
+            }
             r.signal=s;r.status=s.dir?'SETUP':'WAIT';r.why=s.dir?'All five checks passed':s.failed?.[0]||'Waiting';
             r.adx=Number(s.checks?.find(c=>c.name==='ADX strength')?.value.split(' / ')[0])||0;
           }catch(e){

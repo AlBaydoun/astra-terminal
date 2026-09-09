@@ -169,6 +169,7 @@ const Chart = {
     const showable = ['candles', 'heikin', 'bars'].includes(STORE.chartType);
     if (!showable){
       try { this.priceSeries.setMarkers([]); } catch(e){}
+      if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:0,confluence:0});
       return;
     }
     const v = this.view();
@@ -192,11 +193,13 @@ const Chart = {
     /* if a very long history produces an enormous number, keep the most recent
        ones rather than dropping the lot */
     if (markers.length > 4000) markers.splice(0, markers.length - 4000);
+    const patternCount=markers.length;
     if (typeof ConfluenceOverlay !== 'undefined') markers.push(...ConfluenceOverlay.markers(v));
     markers.sort((a,b)=>a.time-b.time);
     /* the whole set, not a tail slice — this line was the real limit */
     try { this.priceSeries.setMarkers(markers); } catch(e){}
     this._markerCount = markers.length;
+    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:patternCount,confluence:markers.length-patternCount});
   },
 
   /* compose a PNG of the chart (panes + drawings) and download it */

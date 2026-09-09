@@ -215,7 +215,7 @@ const Feed = {
     return raw - (clock.offset ?? 0);
   },
 
-  async quotes(symbols){
+  async quotes(symbols, options){
     const bridgeSyms = [], proxySyms = [], map = {};
     for (const s of symbols){
       const r = this.route(s);
@@ -228,15 +228,15 @@ const Feed = {
     const out = [];
     if (bridgeSyms.length){
       try {
-        const r = await fetch(this.BRIDGE_URL + '/quotes?symbols=' + encodeURIComponent(bridgeSyms.join(',')));
+        const r = await fetch(this.BRIDGE_URL + '/quotes?symbols=' + encodeURIComponent(bridgeSyms.join(',')),options?.signal?{signal:options.signal}:undefined);
         if (r.ok){
           const j = await r.json();
           for (const q of j.quotes || []){
             const time = this.bridgeTime(q.symbol, q.time);
             for (const sym of map[q.symbol] || [q.symbol]) out.push({ ...q, time, symbol: sym, src: 'bridge' });
           }
-        }
-      } catch(e){}
+        }else if(options?.strict)throw Error('Broker quotes HTTP '+r.status);
+      } catch(e){if(options?.strict)throw e;}
     }
     if (proxySyms.length && this.apiReady){
       for (let i = 0; i < proxySyms.length; i += 40){

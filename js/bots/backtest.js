@@ -47,7 +47,7 @@ const Backtest = {
     const liveT = STORE.tickers.get(sym);
     const livePct = (liveT && liveT.spread > 0 && liveT.last > 0) ? liveT.spread / liveT.last * 100 : null;
     const costs = (typeof BROKER !== 'undefined') ? BROKER.costsFor(sym, livePct)
-      : { spreadPct: 0.02, commissionPct: 0.001, source: 'default' };
+      : { spreadPct: 0.02, commissionPct: 0, source: 'Pro default' };
     const spread = candles[candles.length - 1].close * (opts.spreadPct != null ? opts.spreadPct : costs.spreadPct) / 100;
     cfg.risk = Object.assign({}, cfg.risk, { commissionPct: costs.commissionPct });
     /* a cost-aware strategy needs the round trip and the instrument, the same

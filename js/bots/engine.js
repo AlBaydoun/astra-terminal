@@ -28,12 +28,9 @@ const BotEngine = {
     maxSpreadPct: 0.10,       // reject if spread > 0.10% of price
     maxSpreadManualPct: 1.5,  // a trade you place by hand may cross a wider spread
     staleQuoteSec: 180,       // reject on quotes older than this
-    /* Costs are modelled per side of the trade. 0.1% is a realistic exchange
-       taker fee; JustMarkets CFDs are mostly spread-only, so set this lower for
-       those bots. Getting this number wrong changes everything: with tight stops
-       the position is large, so a fee that is 2x too high can turn a break-even
-       strategy into a clear loser on paper. */
-    commissionPct: 0.003,     // PERCENT per side (0.003 = 0.003%), see commissionFrac
+    /* Pro and Standard charge zero commission, confirmed against broker terms.
+       Spreads and slippage still apply. Archived research pins its former model. */
+    commissionPct: 0,         // PERCENT per side; resolved by account in commissionFrac
     slippagePct: 0.005,       // per side, % of price
     timeLimitBars: 240,       // give up on a trade after this many bars
     startEquity: 10000,
@@ -104,15 +101,17 @@ const BotEngine = {
     const sl = stop == null ? pos.sl : stop;
     if (!(Number.isFinite(sl) && sl > 0)) return Infinity;
     const exit = sl * (1 - pos.dir * R.slippagePct / 100);
-    return Math.max(0, (pos.entry - exit) * pos.dir * pos.qty) +
-      exit * pos.qty * this.commissionFrac(pos.sym, R);
+    return Math.max(0, -this.cashPnl(pos,(exit-pos.entry)*pos.dir*pos.qty)) +
+      exit * pos.qty * this.cashRate(pos,true) * this.commissionFrac(pos.sym, R);
   },
+  cashRate(pos,loss=false){ return pos.meta?.accountFx?.[loss?'loss':'profit'] ?? 1; },
+  cashPnl(pos,quoteCash){ return quoteCash*this.cashRate(pos,quoteCash<0); },
 
   funds(ledger, R){
     const equity = Math.min(ledger.equity, this.equityNow(ledger));
     // Reserve full position value, not margin divided by broker leverage.
     // A losing position cannot release its allocation just because price fell.
-    const used = ledger.open.reduce((sum, p) => sum + Math.abs(p.qty) * Math.max(p.entry, p.last ?? p.entry), 0);
+    const used = ledger.open.reduce((sum, p) => sum + Math.abs(p.qty) * Math.max(p.entry, p.last ?? p.entry)*this.cashRate(p,true), 0);
     const limit = Math.max(0, equity * R.maxNotionalPct / 100);
     return { equity, used, limit, free: Math.max(0, limit - used) };
   },
@@ -129,15 +128,15 @@ const BotEngine = {
      0.006%, and slippagePct is divided by 100 at every use. commissionPct was
      the one exception — it was multiplied straight into the notional, so the
      default 0.001 charged 0.1% a side and the broker table's 0.003 charged
-     0.3%. The real figure on this account is 0.003% a side on FX, metals and
-     energy, and ZERO on indices and crypto: between 33 and 100 times less than
-     what was being taken out of every paper trade.
+     0.3%. That historical unit bug remains fixed. The Pro commission input was
+     separately corrected to zero on 2026-09-09 using the broker's account terms;
+     archived studies retain their former inputs for reproducibility.
 
      It also has to be per instrument. Charging an index the FX commission is
      wrong in the direction that matters most to a scalper, where the cost IS
      the strategy. */
   commissionFrac(sym, R){
-    let pct = R && R.commissionPct != null ? R.commissionPct : 0.003;
+    let pct = R && R.commissionPct != null ? R.commissionPct : 0;
     if (sym && typeof BROKER !== 'undefined' && BROKER.costsFor){
       const c = BROKER.costsFor(sym);
       if (c && c.commissionPct != null) pct = c.commissionPct;
@@ -180,7 +179,7 @@ const BotEngine = {
     const dayPnl = this.dailyPnl(ledger, now);
     const dailyLimit = ledger.startEquity * R.maxDailyLossPct / 100;
     const floatingLoss = ledger.open.reduce((sum, p) => sum + Math.min(0,
-      ((p.last || p.entry) - p.entry) * p.dir * p.qty), 0);
+      this.cashPnl(p,((p.last || p.entry) - p.entry) * p.dir * p.qty)), 0);
     if (!Number.isFinite(dayPnl) || !Number.isFinite(floatingLoss))
       return { ok: false, reason: 'Daily loss or open-position values are invalid' };
     if (dayPnl + floatingLoss <= -dailyLimit){
@@ -234,7 +233,8 @@ const BotEngine = {
       return { ok: false, reason: 'Spread ' + spreadPct.toFixed(3) + '% is above the limit of ' + spreadCap + '%' };
 
     const stopDist = Math.abs(quote.price - sig.sl);
-    if (spread / stopDist * 100 > R.maxSpreadAtrPct)
+    // Decimal broker prices can put an exact boundary a few binary ULPs over.
+    if (spread / stopDist * 100 > R.maxSpreadAtrPct + 1e-9)
       return { ok: false, reason: 'Spread is ' + (spread / stopDist * 100).toFixed(0) +
         '% of the stop distance (limit ' + R.maxSpreadAtrPct + '%) — the stop needs to be at least ' +
         fmtPrice(spread * 100 / R.maxSpreadAtrPct) + ' away, or leave it empty and one will be placed for you' };
@@ -264,7 +264,7 @@ const BotEngine = {
     const exit = sig.sl * (1 - sig.dir * R.slippagePct / 100);
     const stopDist = (fill - sig.sl) * sig.dir;
     const fee = this.commissionFrac(sig.sym, R);
-    const lossPerUnit = (fill - exit) * sig.dir + (fill + exit) * fee;
+    let lossPerUnit = (fill - exit) * sig.dir + (fill + exit) * fee;
     if (![fill, exit, stopDist, lossPerUnit].every(v => Number.isFinite(v) && v > 0))
       return { ok: false, reason: 'Position loss at the executable stop could not be calculated' };
     const riskLimit = equity * R.riskPct / 100;
@@ -277,25 +277,30 @@ const BotEngine = {
       (typeof BROKER !== 'undefined' && BROKER.is(sig.sym)));
     if (broker && !spec)
       return { ok: false, reason: 'Broker specifications are missing for ' + baseAsset(sig.sym) + ' — waiting for /specs' };
-    let contract = 1;
+    let contract = 1,fx=null;
     if (spec){
       if (!['tickSize', 'tickValue', 'contractSize', 'volumeMin', 'volumeStep', 'volumeMax']
           .every(k => Number.isFinite(spec[k]) && spec[k] > 0) || spec.volumeMax < spec.volumeMin)
         return { ok: false, reason: 'Broker specifications are incomplete or invalid for ' + baseAsset(sig.sym) };
       contract = spec.contractSize;
-      // This ledger expresses P&L as price change times units. Refuse a contract
-      // needing currency conversion rather than mixing quote cash with account cash.
+      // Manual tickets explicitly convert profit currency using broker FX quotes.
+      // Existing strategies/replays retain their former valuation assumptions.
       const cashPerPoint = spec.tickValue / spec.tickSize;
-      if (Math.abs(cashPerPoint / contract - 1) > 0.000001)
+      if(sig.manual && typeof ManualTicket!=='undefined'){
+        fx=ManualTicket.fx(sig.sym);
+        if(!fx)return {ok:false,reason:'Waiting for a fresh broker currency-conversion quote'};
+      }else if (Math.abs(cashPerPoint / contract - 1) > 0.000001)
         return { ok: false, reason: 'This contract needs account-currency conversion; paper sizing cannot safely value ' + baseAsset(sig.sym) };
     }
-    let qty = Math.min(riskLimit / lossPerUnit, notionalLimit / fill);
+    const cashRate=fx?.loss??1;
+    lossPerUnit*=cashRate;
+    let qty = Math.min(riskLimit / lossPerUnit, notionalLimit / (fill*cashRate));
     if (sig.requestedQty != null){
       if (!(Number.isFinite(sig.requestedQty) && sig.requestedQty > 0))
         return { ok: false, reason: 'Requested size must be finite and positive' };
       if (sig.requestedQty * lossPerUnit > riskLimit + 1e-8)
         return { ok: false, reason: 'Requested size exceeds the ' + R.riskPct + '% risk limit' };
-      if (sig.requestedQty * fill > notionalLimit + 1e-8)
+      if (sig.requestedQty * fill * cashRate > notionalLimit + 1e-8)
         return { ok: false, reason: 'Requested size exceeds the remaining position-value budget of ' + fmtNum(notionalLimit) };
       qty = sig.requestedQty;
     }
@@ -304,13 +309,21 @@ const BotEngine = {
       if (sig.requestedQty != null && qty / contract > spec.volumeMax + 1e-10)
         return { ok: false, reason: 'Requested lots exceed the broker maximum of ' + spec.volumeMax };
       lots = this.floorLots(Math.min(qty / contract, spec.volumeMax), spec.volumeStep);
-      if (lots < spec.volumeMin - 1e-10)
-        return { ok: false, reason: 'Smallest broker size (' + spec.volumeMin + ' lot) exceeds the risk or position-value budget' };
+      if (lots < spec.volumeMin - 1e-10){
+        const minQty = spec.volumeMin * contract, minRisk = minQty * lossPerUnit, minValue = minQty * fill * cashRate;
+        const required = 'Minimum ' + spec.volumeMin + ' lot needs ' + fmtNum(minRisk) +
+          ' stop risk (' + (minRisk / equity * 100).toFixed(3) + '% of equity) and ' + fmtNum(minValue) +
+          ' position value. Available: ' + fmtNum(riskLimit) + ' risk, ' + fmtNum(notionalLimit) + ' position value. ';
+        return { ok: false, reason: required + (sig.requestedQty != null
+          ? 'Your typed amount/lots is below the broker minimum; increase it or leave size empty for automatic sizing.'
+          : (sig.manual ? 'Adjust Risk per trade or Total position value in Manual trading rules, or choose a smaller contract.'
+            : 'The configured risk or position-value budget is too small for this broker contract.')) };
+      }
       qty = lots * contract;
     }
     if (!(Number.isFinite(qty) && qty > 0)) return { ok: false, reason: 'Position size could not be calculated' };
-    return { ok: true, qty, lots, riskCash: qty * lossPerUnit, stopDist, spread, R, spec,
-      fill, notional: qty * fill, riskLimit, notionalLimit };
+    return { ok: true, qty, lots, riskCash: qty * lossPerUnit, stopDist, spread, R, spec, fx,
+      fill, notional: qty * fill * cashRate, riskLimit, notionalLimit };
   },
 
   floorLots(lots, step){
@@ -355,8 +368,8 @@ const BotEngine = {
     }
     const R = this.rules(cfg);
     const fill = price * (1 - pos.dir * R.slippagePct / 100);
-    const fee = qty * fill * this.commissionFrac(pos.sym, R);
-    const pnl = (fill - pos.entry) * pos.dir * qty - fee;
+    const fee = qty * fill * this.cashRate(pos,true) * this.commissionFrac(pos.sym, R);
+    const pnl = this.cashPnl(pos,(fill - pos.entry) * pos.dir * qty) - fee;
     pos.qty -= qty;
     if (remainingLots != null) pos.lots = remainingLots;
     pos.fees += fee;
@@ -379,7 +392,7 @@ const BotEngine = {
     const dir = sig.dir;                                   // 1 long, -1 short
     const slipped = quote.price * (1 + dir * R.slippagePct / 100);
     const fill = slipped + dir * (gate.spread / 2);        // buy at ask, sell at bid
-    const notional = gate.qty * fill;
+    const notional = gate.notional;
     const feeIn = notional * this.commissionFrac(sig.sym, R);
 
     const pos = {
@@ -388,11 +401,11 @@ const BotEngine = {
       qty: gate.qty, lots: gate.lots || null, entry: fill, entryTime: this.now(ledger, cfg),
       sl: sig.sl, tp: sig.tp, tp1: sig.tp1 || null, tp1Done: false, beMoved: false,
       score: sig.score, reasons: sig.reasons || [], model: sig.model || '',
-      feeIn, fees: feeIn, slippage: Math.abs(fill - quote.price) * gate.qty,
+      feeIn, fees: feeIn, slippage: Math.abs(fill - quote.price) * gate.qty * (gate.fx?.loss??1),
       riskCash: gate.riskCash, stopDist: gate.stopDist, slInit: sig.sl, peak: null, trailed: false,
       mfe: 0, mae: 0, note: sig.note || '',
       barsHeld: 0, timeLimitBars: cfg.timeLimitBars || R.timeLimitBars,
-      factors: sig.factors || {}, meta: sig.meta || {}, state: sig.state || null,
+      factors: sig.factors || {}, meta: gate.fx?{...(sig.meta||{}),accountFx:{...gate.fx}}:sig.meta || {}, state: sig.state || null,
     };
     ledger.open.push(pos);
     ledger.equity -= feeIn;
@@ -426,10 +439,10 @@ const BotEngine = {
 
     const favour = dir > 0 ? (hi - pos.entry) : (pos.entry - lo);
     const against = dir > 0 ? (pos.entry - lo) : (hi - pos.entry);
-    pos.mfe = Math.max(pos.mfe, favour * pos.qty);
-    pos.mae = Math.max(pos.mae, against * pos.qty);
+    pos.mfe = Math.max(pos.mfe, favour * pos.qty * this.cashRate(pos));
+    pos.mae = Math.max(pos.mae, against * pos.qty * this.cashRate(pos,true));
     pos.last = px;
-    pos.unreal = (px - pos.entry) * dir * pos.qty - pos.fees;
+    pos.unreal = this.cashPnl(pos,(px - pos.entry) * dir * pos.qty) - pos.fees;
 
     const hitStop = dir > 0 ? lo <= pos.sl : hi >= pos.sl;
     /* a position may deliberately run with no target. Without this guard
@@ -512,11 +525,12 @@ const BotEngine = {
     const R = Object.assign({}, this.RISK, cfg.risk || {});
     const dir = pos.dir;
     const slipped = price * (1 - dir * R.slippagePct / 100);
-    const feeOut = pos.qty * slipped * this.commissionFrac(pos.sym, R);
-    const pnl = (slipped - pos.entry) * dir * pos.qty - feeOut + (pos.partialPnl || 0);
+    const feeOut = pos.qty * slipped * this.cashRate(pos,true) * this.commissionFrac(pos.sym, R);
+    const movePnl=this.cashPnl(pos,(slipped-pos.entry)*dir*pos.qty);
+    const pnl = movePnl - feeOut + (pos.partialPnl || 0);
     const fees = pos.fees + feeOut;
 
-    ledger.equity += (slipped - pos.entry) * dir * pos.qty - feeOut;
+    ledger.equity += movePnl - feeOut;
     ledger.open = ledger.open.filter(p => p.id !== pos.id);
 
     const rec = {
@@ -603,7 +617,7 @@ const BotEngine = {
     // Entry and partial-exit fees already left the cash balance. Adding the
     // displayed net P&L would charge those fees a second time and could retain
     // the old full quantity after a partial exit until the next price tick.
-    for (const p of ledger.open) eq += ((p.last ?? p.entry) - p.entry) * p.dir * p.qty;
+    for (const p of ledger.open) eq += this.cashPnl(p,((p.last ?? p.entry) - p.entry) * p.dir * p.qty);
     return eq;
   },
 

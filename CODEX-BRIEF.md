@@ -41,11 +41,15 @@ the trading system (engine, strategies, backtest, the bot registry, the UI pages
 
 ### 1. Never change a cost assumption to improve a result
 
-The cost model is the foundation every conclusion rests on. Measured live from
-this account:
+The cost model is the foundation every conclusion rests on. Correction verified
+2026-09-09 at the owner's request: JustMarkets Pro and Standard have **zero
+commission on all instruments**. Pro is not Raw Spread. Official evidence:
+https://get.justmarkets.help/hc/en-us/articles/14317768789532-Trading-account-types
 
-- **Commission:** 0.003% per side on FX, metals and energy. **Zero** on indices
-  and crypto. Resolved per instrument in `BotEngine.commissionFrac()`.
+- **Commission:** zero for Pro and Standard. Resolved in `BotEngine.commissionFrac()`.
+  The former 0.003% FX/metals/energy assumption was incorrect for Pro; archived
+  studies explicitly retain that old model. Current corrected Confluence results
+  are in `research/confluence-pro-results.md`. Do not reprice saved trade history.
 - **Spread:** read live from MT5 when the bridge runs, else the profile in
   `js/broker.js`.
 - **Slippage:** 0.005% per side (`RISK.slippagePct`).

@@ -265,12 +265,12 @@ test('Manual preview and submitted paper order use the same approved size', asyn
     assert(/Rejected/.test(lastToast), 'Rejection must be visible');
   } finally { BotEngine.save = save; Bots.quoteFor = quote; Bots.liveQuote = liveQuote; }
 });
-test('Manual partial exit: FX commission is 0.003%, indices and crypto are zero', () => {
+test('Manual partial exits use zero Pro commission and retain slippage', () => {
   const save = BotEngine.save, quote = Bots.quoteFor;
   BotEngine.save = () => {};
   Bots.quoteFor = () => ({ price: 100, spread: 0, ageSec: 0 });
   try {
-    for (const [sym, expected] of [['EURUSD.m', 0.00299985], ['US100.std', 0], ['BTCUSD.m', 0]]){
+    for (const [sym, expected] of [['EURUSD.m', 0], ['US100.std', 0], ['BTCUSD.m', 0]]){
       fresh(sym); spec(sym, { contractSize: 1, tickValue: 0.01 });
       const L = ledger();
       L.open.push({ id: 1, sym, qty: 2, dir: 1, entry: 100, fees: 0 });
@@ -336,9 +336,31 @@ test('A successful quote publishes matching price, timestamp and source together
     assert(Feed.srcOf.TEST === 'bridge', 'Published source');
   } finally { window.fetch = fetchBefore; Feed.bridge = bridge; }
 });
-test('Broker suffix aliases retain the measured commission for every asset class', () => {
-  for (const [sym, expected] of [['XAUUSD.s', 0.00003], ['EURUSD.s', 0.00003], ['WTI.s', 0.00003],
+test('Pro broker suffix aliases have zero commission for every asset class', () => {
+  for (const [sym, expected] of [['XAUUSD.s', 0], ['EURUSD.s', 0], ['WTI.s', 0],
     ['US100.s', 0], ['BTCUSD.s', 0]]) near(BotEngine.commissionFrac(sym, BotEngine.RISK), expected, sym);
+});
+test('Commission follows Pro and Standard; old fee overrides do not rewrite stored data', () => {
+  const account = BROKER.account, storage = fixtureStorage;
+  fixtureStorage = new Map([['astra_costOverride', JSON.stringify({'XAUUSD.s':{spreadPct:0.123,commissionPct:0.003}})]]);
+  const before = fixtureStorage.get('astra_costOverride');
+  try {
+    for (const type of ['pro','standard']) {
+      BROKER.account = type;
+      assert(Object.values(BROKER.COSTS[type]).every(c => c.commissionPct === 0), 'Nonzero account commission');
+      near(BROKER.costsFor('XAUUSD.s').commissionPct, 0, 'Legacy commission ignored');
+      near(BROKER.costsFor('XAUUSD.s').spreadPct, 0.123, 'Spread override preserved');
+    }
+    assert(fixtureStorage.get('astra_costOverride') === before, 'Override history mutated');
+  } finally { BROKER.account = account; fixtureStorage = storage; }
+});
+test('Zero commission still charges spread and slippage on an unchanged price', () => {
+  const L = ledger(), sig = signal(), q = fresh(); q.spread = 0.02;
+  const p = BotEngine.open(L, {}, sig, q, BotEngine.check(L, {}, sig, q));
+  assert(p && p.fees === 0 && p.entry > q.price, 'Entry commission or spread incorrect');
+  BotEngine.close(L, {}, p, 100, 'test');
+  assert(L.closed.length === 1 && L.closed[0].pnl < 0, 'Trading friction disappeared');
+  assert(L.closed[0].fees === 0, 'Exit commission incorrect');
 });
 test('Strategy failures are recorded in the bot decisions and reported to the console', async () => {
   const saved = { allowed: Bots.allowed, save: BotEngine.save, klines: API.klines, log: console.error };

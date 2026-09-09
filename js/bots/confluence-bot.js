@@ -174,7 +174,7 @@ const ConfluenceBot = {
     return `<div class="botCtl"><b>M15 · all ${ConfluenceScanner.catalogue().length} JustMarkets instruments · paper only</b>
       <button class="bBtn ${c.paused?'go':'danger'}" data-cf="toggle">${c.paused?'Start paper bot':'Pause paper bot'}</button>
       <button class="bBtn" data-cf="check">Scan all pairs now</button>
-      <button class="bBtn" data-cf="chart" title="Opens M15 candles with ASTRA labels and hides other candle-pattern labels">Open indicator chart</button>
+      <button class="bBtn" data-cf="chart" title="Opens M15 candles with ASTRA labels and preserves your candle-pattern display">Open indicator chart</button>
       <a class="bBtn" href="research/confluence.html" target="_blank" rel="noopener">Split-test results &amp; guide</a></div>
       <form id="cfLimitsForm"><div class="botCtl">${this.limitFields.map(([key,label,min,max,step])=>
         `<label class="bc" for="cfLimit_${key}">${label}<input id="cfLimit_${key}" name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${esc(String(c.limits[key]))}"></label>`).join('')}</div>
@@ -211,8 +211,8 @@ const ConfluenceBot = {
   },
   async openChart(sym){
     if(!sym || !MarketSources.allowed(sym))return toast('Connect the JustMarkets bridge first','warn');
-    Chart.settings.confluence.on=true;Chart.settings.patterns.on=false;
-    lsSet('astra_ind',Chart.settings);App.setType('candles');App.setTf('15m');App.setSymbol(sym);await Chart.load();
+    if(!ConfluenceOverlay.setMode(Chart.settings.patterns?.on?'both':'confluence'))return;
+    App.setType('candles');App.setTf('15m');App.setSymbol(sym);await Chart.load();
     document.getElementById('bottomPanel').classList.add('collapsed');toast('ASTRA Confluence · M15. Click BOTS to return to its controls.','ok');
   },
   bind(host){

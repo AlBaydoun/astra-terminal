@@ -54,10 +54,12 @@ body::after {
 .num { font-family: var(--font-mono); font-size: 12px; }
 .empty { color: var(--dim); text-align: center; padding: 24px 10px; font-size: 13px; line-height: 1.6; }
 
-#app { position: relative; z-index: 1; display: grid; grid-template-rows: 52px 1fr 28px; height: 100vh; }
+/* A long toolbar must not widen the terminal beyond the browser window. */
+#app { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 52px 1fr 28px; height: 100vh; }
 
 /* ============ TOP BAR ============ */
 #topbar {
+  min-width: 0; overflow-x: auto;
   display: flex; align-items: center; gap: 10px; padding: 0 12px;
   background: linear-gradient(180deg, rgba(13, 20, 40, 0.9), rgba(9, 14, 28, 0.75));
   border-bottom: 1px solid var(--border);
@@ -640,18 +642,27 @@ select#chartType {
 /* ============ TOP MOVERS STRIP ============ */
 #app { grid-template-rows: 52px 26px 1fr 28px; }
 #tickerStrip {
+  display:flex; min-width:0;
   overflow: hidden; white-space: nowrap; border-bottom: 1px solid var(--border);
   background: rgba(7, 11, 24, 0.75); backdrop-filter: blur(10px);
 }
 [data-theme="light"] #tickerStrip { background: rgba(255, 255, 255, 0.8); }
-.tsTrack { display: inline-flex; gap: 22px; padding: 4px 0 4px 22px; animation: tsScroll 70s linear infinite; will-change: transform; }
-#tickerStrip:hover .tsTrack { animation-play-state: paused; }
+.tsWindow { flex:1; min-width:0; overflow:hidden; }
+.tsTrack { display:flex; width:max-content; animation:tsScroll var(--tsDuration,70s) linear infinite; will-change:transform; }
+.tsGroup { display:flex; }
+#tickerStrip:hover .tsTrack, #tickerStrip:has(.tsChip:focus) .tsTrack { animation-play-state: paused; }
 @keyframes tsScroll { to { transform: translateX(-50%); } }
-.tsChip { display: inline-flex; align-items: baseline; gap: 7px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; }
+.tsChip { display:inline-flex; flex:0 0 310px; width:310px; height:25px; align-items:center; gap:6px; padding:0 10px; box-sizing:border-box; background:transparent; border:0; border-right:1px solid var(--border); cursor:pointer; font-family:var(--font-mono); font-size:10px; color:var(--text); overflow:hidden; }
 .tsChip b { font-family: var(--font-head); font-size: 12px; letter-spacing: 0.5px; color: var(--text); }
 .tsChip span { color: var(--dim); }
 .tsChip i { font-style: normal; }
 .tsChip:hover b { color: var(--accent); }
+.tsChip em { margin-left:auto; font-size:9px; font-style:normal; color:var(--warn); white-space:nowrap; }
+.tsChip[data-kind="focus"] { background:rgba(82,219,198,.07); }
+.tsSetup em { color:var(--accent); font-weight:bold; }
+.tsWatch em { color:var(--warn); }
+.tsStale { opacity:.55; }
+.tsControl { flex-shrink:0; background:var(--panel); border:0; border-right:1px solid var(--border); color:var(--accent); cursor:pointer; font-size:10px; padding:0 8px; }
 
 /* ============ MINI EMA BUTTON ============ */
 .miniEma {
@@ -1019,7 +1030,7 @@ select option {
 
 /* ============ BOTS WORKSPACE ============ */
 #bot-bots.active { display: block; }
-.botsWrap { position: absolute; inset: 0; display: grid; grid-template-columns: 176px 1fr; gap: 8px; padding: 8px 10px; overflow: hidden; }
+.botsWrap { position: absolute; inset: 0; display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 8px; padding: 8px 10px; overflow: hidden; }
 #botNav { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
 #botNav button {
   background: var(--field); border: 1px solid var(--border-soft); color: var(--dim);
@@ -1031,7 +1042,7 @@ select option {
   color: var(--accent); border-color: rgba(0, 229, 255, 0.4);
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.14), rgba(139, 108, 255, 0.14));
 }
-#botBody { overflow-y: auto; padding-right: 4px; min-height: 0; }
+#botBody { overflow-y: auto; padding-right: 4px; min-height: 0; min-width: 0; }
 .botHead { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
 .botTitle b { font-size: 15px; letter-spacing: 0.5px; display: block; }
 .botTitle span { color: var(--dim); font-size: 11.5px; line-height: 1.45; }
@@ -1806,9 +1817,27 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 }
 .dashSecBody .dashCols{ gap:18px; }
 
+/* Keep chart label choices visible and independent of bot controls. */
+#topbar > * { flex-shrink: 0; }
+#chartLabelBar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; flex-shrink:0; padding:6px 8px; font-size:11px; border-bottom:1px solid var(--border); }
+#chartLabelBar select { max-width:100%; padding:4px 6px; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:4px; }
+#chartLabelStatus { color:var(--dim); font-size:10px; }
+
 /* the totals line under the day table */
 .dashTable tfoot .dashTotal td{
   border-top:2px solid var(--line); background:rgba(120,150,220,.10);
   font-weight:700; padding-top:8px; padding-bottom:8px;
 }
 .dashTable tfoot .dashTotal td.c-sym{ letter-spacing:.06em; color:var(--text); }
+/* Manual rules stay readable without widening the trading workspace. */
+.manualRules{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px}
+.manualRules summary{cursor:pointer;font-weight:600;margin-bottom:12px}
+.manualRuleGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.manualRuleGrid .bc{display:block;margin-bottom:6px}
+.manualRuleGrid input[type=number]{width:100%;min-width:0;box-sizing:border-box;padding:8px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:4px}
+.mrUnlimited{display:block;margin-top:6px;font-size:12px;color:var(--dim)}
+.manualRules .botCtl{padding-left:0;gap:12px}
+.manualRules .botNote{line-height:1.6}
+.indRow[hidden]{display:none!important}
+.indSearchBox{display:grid;gap:6px;color:var(--text);font-size:13px}
+.indSearchBox input{width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px}

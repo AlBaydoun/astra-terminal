@@ -97,6 +97,10 @@ const ManualOrders = {
     const projected = {...q, spread, price:(d.entry - d.dir*spread/2)/(1 + d.dir*R.slippagePct/100)};
     const request = Bots.manualRequest(d.sym, this.fill(projected,d.dir,R), d);
     if (request.reason) return {...none, reason:request.reason};
+    if(typeof ManualTicket!=='undefined'){
+      const plan=ManualTicket.fit({...L},cfg,this.signal({...d,qty:request.qty},d.entry),projected),estimate=plan.estimate;
+      return {...request,qty:estimate?.qty||0,lots:estimate?.lots??null,riskCash:estimate?.riskCash,gate:plan.gate,estimate,reason:plan.reason,plan};
+    }
     const gate = BotEngine.check({...L}, cfg, this.signal({...d,qty:request.qty},d.entry), projected);
     if (!gate.ok) return {...none, reason:gate.reason};
     return {...request, qty:gate.qty, lots:gate.lots ?? null, riskCash:gate.riskCash, gate};
@@ -109,12 +113,13 @@ const ManualOrders = {
       await this.exclusive(async () => {
         if (d.type === 'market') return Bots.manualMarketOpen(d);
         await Feed.loadSpecs([d.sym]); await Feed.quotes([d.sym]);
+        if(typeof ManualTicket!=='undefined')await ManualTicket.loadFx(d.sym);
         const orders = this.read();
         if (orders.filter(o => o.status === 'waiting').length >= 50) throw Error('Cancel an existing waiting order before adding more than 50.');
         const p = this.preview(d, Bots.quoteFor(d.sym));
         if (!p.gate) return toast('Order rejected: ' + p.reason, 'warn');
         orders.push({id:crypto.randomUUID(), sym:d.sym, dir:d.dir, type:d.type,
-          entry:d.entry, qty:p.qty, sl:d.sl, tp:d.tp, tf:d.tf, note:d.note,
+          entry:d.entry, qty:p.qty, sl:p.plan?.sig.sl??d.sl, tp:p.plan?.sig.tp??d.tp, tf:d.tf, note:[d.note,...(p.plan?.adjustments||[])].filter(Boolean).join(' · '),
           createdAt:Date.now(), status:'waiting'});
         this.save(orders);
         toast('Saved paper ' + (d.dir > 0 ? 'BUY' : 'SELL') + ' ' + d.type + ' at ' + fmtPrice(d.entry), 'ok');
@@ -138,7 +143,8 @@ const ManualOrders = {
     try {
       const waiting = this.read().filter(o => o.status === 'waiting');
       const syms = [...new Set(waiting.map(o => o.sym))];
-      if (syms.length){ await Feed.loadSpecs(syms); await Feed.quotes(syms); }
+      if (syms.length){ await Feed.loadSpecs(syms); await Feed.quotes(syms);
+        if(typeof ManualTicket!=='undefined')for(const sym of syms)await ManualTicket.loadFx(sym); }
       await this.exclusive(() => this.process());
     } catch(e){ this.fail(e); }
     finally {

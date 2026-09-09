@@ -60,31 +60,6 @@ const SymbolSearch = {
   },
 };
 
-/* top movers ticker strip */
-const Strip = {
-  init(){
-    this.el = document.getElementById('tickerStrip');
-    this.build();
-    setInterval(() => this.build(), 60000);
-  },
-  build(){
-    if (!this.el) return;
-    const liquid = (typeof MarketSources !== 'undefined' ? MarketSources.list() : STORE.universe)
-      .filter(s => Number.isFinite(STORE.tickers.get(s)?.pct));
-    const sorted = [...liquid].sort((a, b) => STORE.tickers.get(b).pct - STORE.tickers.get(a).pct);
-    const items = [...sorted.slice(0, 8), ...sorted.slice(-8).reverse()];
-    if (!items.length){ this.el.innerHTML = '<div class="aiSub">Waiting for JustMarkets prices · use Market settings to check the connection.</div>'; return; }
-    const chip = s => {
-      const t = STORE.tickers.get(s);
-      return `<span class="tsChip" data-sym="${esc(s)}"><b>${esc(baseAsset(s))}</b><span>${fmtPrice(t.last)}</span><i class="${pctClass(t.pct)}">${fmtPct(t.pct)}</i></span>`;
-    };
-    const html = items.map(chip).join('');
-    this.el.innerHTML = `<div class="tsTrack">${html}${html}</div>`;
-    this.el.querySelectorAll('.tsChip').forEach(c =>
-      c.addEventListener('click', () => App.setSymbol(c.dataset.sym)));
-  },
-};
-
 /* named workspaces: save / load the whole screen setup */
 const Layouts = {
   saved: lsGet('astra_workspaces', {}),
@@ -419,6 +394,23 @@ const App = {
 
   indTab: 'inputs',
 
+  bindIndicatorSearch(modalId, inputId, countId){
+    const modal=document.getElementById(modalId), input=document.getElementById(inputId);
+    const rows=[...modal.querySelectorAll('.indRow')];
+    for(const row of rows){
+      const control=row.querySelector('[data-id],[data-mid]');
+      const def=IND_BY_ID[control?.dataset.id || control?.dataset.mid];
+      row.dataset.search=[def?.id,def?.label,def?.note,row.querySelector('.main')?.textContent,
+        row.querySelector('#i_pat')?'candlestick bullish bearish engulfing hammer doji shooting star patterns':''].filter(Boolean).join(' ').toLowerCase();
+    }
+    const filter=()=>{
+      const words=input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);let count=0;
+      for(const row of rows){row.hidden=!words.every(w=>row.dataset.search.includes(w));if(!row.hidden)count++;}
+      document.getElementById(countId).textContent=count?`${count} of ${rows.length} indicators`:'No matching indicators. Try another name.';
+    };
+    input.value='';input.oninput=filter;filter();
+  },
+
   openIndicators(){
     const host = document.getElementById('indList');
     host.innerHTML = INDS.map(def => {
@@ -484,7 +476,9 @@ const App = {
 
     document.getElementById('i_vp').checked = Chart.settings.vp.on;
     document.getElementById('i_pat').checked = Chart.settings.patterns.on;
+    this.bindIndicatorSearch('indModal','indSearch','indSearchCount');
     this.showModal('indModal');
+    document.getElementById('indSearch').focus();
   },
 
   applyIndTab(){

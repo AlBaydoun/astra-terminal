@@ -70,20 +70,21 @@ const BROKER = {
      bridge is running the spread is taken from your terminal's live bid/ask —
      the real number, on your real account type. These figures are only the
      fallback used when the bridge is closed, and they can be edited in the
-     interface. JustMarkets Pro is a raw-spread account: tight spreads with a
-     commission, which is very different from a standard account.        */
+     interface. Pro and Standard are commission-free. Raw Spread is a separate
+     account type, not Pro. Verified 2026-09-09 against JustMarkets account terms:
+     https://get.justmarkets.help/hc/en-us/articles/14317768789532-Trading-account-types */
   account: lsGet('astra_account', 'pro'),      // 'pro' | 'standard'
   COSTS: {
     /* typical raw spread as a % of price, and commission per side as % of notional */
     /* measured from the live account on 2026-08-31 with the bridge connected:
        XAUUSD.m 0.0060%, US100.std 0.0093%, BRENT.m 0.0212%, WTI.m 0.0335% */
     pro: {
-      metal:  { spreadPct: 0.006, commissionPct: 0.0030 },
-      energy: { spreadPct: 0.028, commissionPct: 0.0030 },
+      metal:  { spreadPct: 0.006, commissionPct: 0 },
+      energy: { spreadPct: 0.028, commissionPct: 0 },
       index:  { spreadPct: 0.009, commissionPct: 0.0000 },
-      fx:     { spreadPct: 0.002, commissionPct: 0.0030 },
+      fx:     { spreadPct: 0.002, commissionPct: 0 },
       crypto: { spreadPct: 0.050, commissionPct: 0.0000 },
-      other:  { spreadPct: 0.020, commissionPct: 0.0020 },
+      other:  { spreadPct: 0.020, commissionPct: 0 },
     },
     standard: {
       metal:  { spreadPct: 0.030, commissionPct: 0 },
@@ -120,7 +121,9 @@ const BROKER = {
     return {
       spreadPct: o.spreadPct != null ? o.spreadPct
         : (liveSpreadPct != null && liveSpreadPct > 0 ? liveSpreadPct : c.spreadPct),
-      commissionPct: o.commissionPct != null ? o.commissionPct : c.commissionPct,
+      // Commission follows the account type; legacy per-pair fee overrides
+      // cannot turn Pro back into Raw Spread. Saved spread overrides are kept.
+      commissionPct: c.commissionPct,
       source: o.spreadPct != null ? 'your override'
         : (liveSpreadPct != null && liveSpreadPct > 0 ? 'live from MT5' : 'JustMarkets ' + this.account + ' estimate'),
     };

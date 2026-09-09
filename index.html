@@ -111,7 +111,7 @@
   </header>
 
   <!-- ================= TOP MOVERS STRIP ================= -->
-  <div id="tickerStrip" title="Top movers (24h) — click to open"></div>
+  <div id="tickerStrip" title="All JustMarkets instruments with repeated swing and Confluence spotlights. Hover to pause; click a pair for its chart."></div>
 
   <!-- ================= MAIN ================= -->
   <div id="main">
@@ -172,6 +172,10 @@
     <div id="center">
       <div id="chartGrid" class="layout-1">
       <div id="chartArea">
+        <div id="chartLabelBar"><label for="chartLabelMode">Chart labels</label>
+          <select id="chartLabelMode"><option value="patterns">Candlestick Patterns</option><option value="confluence">ASTRA Confluence (15m)</option><option value="both">Both indicators</option><option value="none">None</option></select>
+          <span id="chartLabelStatus">Hammer, Bullish Engulfing and other candle patterns.</span>
+        </div>
         <div id="confluencePanel" style="display:none;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);font-size:11px;line-height:1.8;flex-shrink:0" aria-live="polite"></div>
         <div id="mainWrap">
           <div id="mainChart"></div>
@@ -426,6 +430,8 @@
   <div class="mBox">
     <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
     <div class="mBody">
+      <label class="indSearchBox">Search indicators<input id="indSearch" type="search" placeholder="Name or keyword: RSI, Confluence, hammer…" autocomplete="off"></label>
+      <div id="indSearchCount" class="indHint" role="status"></div>
       <div id="indTabs">
         <button data-itab="inputs" class="active">Inputs</button>
         <button data-itab="style">Style</button>
@@ -445,6 +451,8 @@
     <div class="mHead"><span id="miniIndTitle">CHART</span> <span>INDICATORS</span><button class="mClose">×</button></div>
     <div class="mBody">
       <div class="indHint">Indicators for this split chart only — the main chart keeps its own. Right-click the chart for the same list, plus the quick switches.</div>
+      <label class="indSearchBox">Search split-chart indicators<input id="miniIndSearch" type="search" placeholder="Name or keyword…" autocomplete="off"></label>
+      <div id="miniIndSearchCount" class="indHint" role="status"></div>
       <div id="miniIndList"></div>
       <div class="ipBtns">
         <button class="mPrimary" id="miniIndApply">APPLY</button>
@@ -504,9 +512,10 @@
     <div class="mBody">
       <div id="marketSourceSettings"></div>
       <div id="feedState"></div>
+      <div class="aiSub" id="costProfileSummary">Pro and Standard commission: 0%. Spread and 0.005% slippage per side still apply. Saved trade history is not repriced. <a href="https://get.justmarkets.help/hc/en-us/articles/14317768789532-Trading-account-types" target="_blank" rel="noopener">Broker account terms</a></div>
       <div class="formRow"><label>Account type</label>
         <select id="acctType" title="Changes the spread and commission used by backtests and paper trades">
-          <option value="pro">JustMarkets Pro (raw spread + commission)</option>
+          <option value="pro">JustMarkets Pro (no commission)</option>
           <option value="standard">JustMarkets Standard (wider spread, no commission)</option>
         </select></div>
       <div class="formRow"><label>Data service</label><input id="feedUrl" type="text" placeholder="http://localhost:8642 or your own address" spellcheck="false"></div>
@@ -580,6 +589,8 @@
 <script src="js/bots/pairrules.js"></script>
 <script src="js/bots/bots.js"></script>
 <script src="js/bots/manualorders.js"></script>
+<script src="js/bots/manual-ticket.js"></script>
+<script src="js/bots/manual-rules.js"></script>
 <script src="js/bots/lab.js"></script>
 <script src="js/bots/xlsx.js"></script>
 <script src="js/bots/reports.js"></script>
@@ -595,6 +606,7 @@
 <script src="js/bots/confluence-scanner.js"></script>
 <script src="js/confluence-indicator.js"></script>
 <script src="js/popout.js"></script>
+<script src="js/market-ticker.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

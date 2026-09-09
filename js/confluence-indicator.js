@@ -1,6 +1,23 @@
 /* Closed-candle labels. The open candle never votes on its own setup. */
 const ConfluenceOverlay = {
   rows:[], averages:[], key:'', latest:null,
+  mode(){return Chart.settings.patterns?.on?(Chart.settings.confluence?.on?'both':'patterns'):(Chart.settings.confluence?.on?'confluence':'none');},
+  setMode(mode){
+    if(!['patterns','confluence','both','none'].includes(mode))return false;
+    const settings={...Chart.settings,patterns:{...Chart.settings.patterns,on:mode==='patterns'||mode==='both'},
+      confluence:{...Chart.settings.confluence,on:mode==='confluence'||mode==='both'}};
+    if(lsSet('astra_ind',settings)===false){toast('Could not save the chart label choice','warn');this.syncPicker();return false;}
+    Object.assign(Chart.settings,settings);Chart.renderAll();return true;
+  },
+  syncPicker(counts){
+    const picker=document.getElementById('chartLabelMode');if(!picker)return;
+    const mode=this.mode();if(picker.value!==mode)picker.value=mode;
+    if(counts){
+      const parts=[];if(Chart.settings.patterns?.on)parts.push(counts.patterns+' pattern labels');
+      if(Chart.settings.confluence?.on)parts.push(STORE.tf==='15m'?counts.confluence+' Confluence labels':'Confluence needs 15m');
+      document.getElementById('chartLabelStatus').textContent=(parts.join(' · ')||'Chart labels off')+' · Display only; bot rules stay the same.';
+    }
+  },
   calculate(v){
     const last=v[v.length-2], key=[STORE.symbol,STORE.tf,v.length,v[0]?.rawTime,last?.rawTime,last?.close,last?.volume,v[v.length-1]?.open].join('|');
     if(key===this.key) return;
@@ -19,6 +36,7 @@ const ConfluenceOverlay = {
       color:r.signal.dir>0?'#50edbc':'#ff8799',shape:r.signal.dir>0?'arrowUp':'arrowDown',text:'ASTRA '+(r.signal.dir>0?'BUY':'SELL')}));
   },
   panel(){
+    this.syncPicker();
     const host=document.getElementById('confluencePanel'); if(!host) return;
     host.style.display=Chart.settings.confluence?.on?'block':'none';
     if(!Chart.settings.confluence?.on) return;
@@ -45,3 +63,4 @@ const confluenceIndicatorDef={id:'confluence',label:'ASTRA Confluence · BUY / S
   }};
 INDS.push(confluenceIndicatorDef); IND_BY_ID.confluence=confluenceIndicatorDef;
 Chart.settings.confluence={...confluenceIndicatorDef.def,...lsGet('astra_ind',{}).confluence};
+document.getElementById('chartLabelMode')?.addEventListener('change',e=>ConfluenceOverlay.setMode(e.target.value));
