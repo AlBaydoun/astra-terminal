@@ -159,6 +159,7 @@ const App = {
     Strip.init();
     Notes.init();
     Intel.init();
+    MarketNews.init();
     Brain.init();
     OBChat.init();
     Bots.init();
@@ -324,6 +325,7 @@ const App = {
         if (b.dataset.tab === 'heatmap') Heat.show();
         if (b.dataset.tab === 'observer') Brain.renderDash();
         if (b.dataset.tab === 'intel') Intel.render();
+        if (b.dataset.tab === 'news') MarketNews.show();
         if (b.dataset.tab === 'bots') Bots.render();
       }));
     document.getElementById('botCollapse').addEventListener('click', () => {

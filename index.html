@@ -17,6 +17,7 @@
 (function(){ var p = new URLSearchParams(location.search).get('panel');
   if (p) document.documentElement.dataset.panel = p; })();</script>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/market-news.css">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>if(!window.LightweightCharts) document.write('<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"><\/script>');</script>
 </head>
@@ -216,12 +217,14 @@
           <button data-tab="heatmap">HEATMAP</button>
           <button data-tab="observer">OBSERVER</button>
           <button data-tab="intel">INTEL</button>
+          <button data-tab="news">◉ NEWS &amp; ALERTS <span id="mnBadge" hidden></span></button>
           <button data-tab="bots">BOTS</button>
           <button id="botCollapse" title="Collapse / expand">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
         </div>
         <div class="botBody">
+          <div id="bot-news" class="botPanel"></div>
           <div id="bot-screener" class="botPanel active">
             <div class="scrHead">
               <input id="scrSearch" type="text" placeholder="Filter pairs… e.g. SOL" spellcheck="false">
@@ -607,6 +610,7 @@
 <script src="js/confluence-indicator.js"></script>
 <script src="js/popout.js"></script>
 <script src="js/market-ticker.js"></script>
+<script src="js/market-news.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

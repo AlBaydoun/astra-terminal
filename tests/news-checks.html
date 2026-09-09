@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ASTRA news regression checks</title>
+<link rel="stylesheet" href="../css/style.css"><link rel="stylesheet" href="../css/market-news.css">
+<style>body{display:block;height:auto;overflow:auto;padding:20px}#bot-news{position:relative;display:block}#results{white-space:pre-wrap;line-height:1.7}button#run{padding:12px}#fixtureLabel{color:#e7b568}</style>
+<h1>News & alerts checks</h1><p id="fixtureLabel">Synthetic headlines for testing only. No trading scripts or storage access.</p><button id="run">Run news checks</button><pre id="results">Ready.</pre><span id="mnBadge"></span><div id="bot-news"></div>
+<script>const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let notifications=[];const toast=s=>notifications.push(s);</script>
+<script src="../js/market-news.js"></script><script src="news-checks.js"></script></html>

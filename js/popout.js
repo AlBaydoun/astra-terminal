@@ -17,6 +17,7 @@ const Popout = {
     heatmap:   { label: 'Heatmap',       w: 1000, h: 800 },
     observer:  { label: 'Observer',      w: 1100, h: 850 },
     intel:     { label: 'Intel & news',  w: 900,  h: 900 },
+    news:      { label: 'News & alerts', w: 1280, h: 900 },
     watch:     { label: 'Watchlist',     w: 460,  h: 900 },
     book:      { label: 'Order book',    w: 460,  h: 900 },
     alerts:    { label: 'Alerts',        w: 520,  h: 700 },
@@ -24,7 +25,7 @@ const Popout = {
   },
 
   /* which panels live in the lower strip vs the right sidebar */
-  BOTTOM: ['screener', 'heatmap', 'observer', 'intel', 'bots'],
+  BOTTOM: ['screener', 'heatmap', 'observer', 'intel', 'news', 'bots'],
   SIDE: ['watch', 'book', 'alerts', 'portfolio', 'ai', 'notes'],
 
   chan: null,
