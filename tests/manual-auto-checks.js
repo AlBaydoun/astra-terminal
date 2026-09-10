@@ -116,4 +116,31 @@ test('Scanner mode obeys selected pair and direction and does not start the sepa
   }finally{ConfluenceScanner.scan=scan;ConfluenceBot.run=run;}
 });
 const autoRun=document.getElementById('run').onclick;
+test('Signal catalogue includes strategy and scanner sources but excludes account pages',()=>{
+  const ids=ManualAuto.sources().map(b=>b.id);
+  assert(ids.includes('candle')&&ids.includes('scanner')&&ids.includes('confluence'),'Missing sources');
+  assert(!ids.includes('manual')&&!ids.includes('liveManual')&&!ids.includes('dash'),'Account page became a source');
+});
+test('A selected source scans completed bars at its timeframe with higher confirmation and no other ledger writes',async()=>{
+  autoFixture();const klines=API.klines,b=BOT_BY_ID.maMacd,signal=b.signal,requests=[];
+  const original=JSON.stringify(Bots.ledgers.manual);
+  API.klines=async(sym,tf)=>{requests.push(tf);return Array.from({length:350},(_,i)=>({rawTime:Date.now()/1000-(349-i)*300,open:2491,close:2491,high:2492,low:2490,volume:100}));};
+  b.signal=(bars,cfg,L,higher)=>{assert(cfg.tf==='5m'&&higher.length===350,'Source settings lost');L.open.push({fake:true});return {dir:1,score:100,entry:2491,sl:2471,tp:2531,atr:10};};
+  try{const rows=await ManualAuto.scan({source:b.id,scope:'all'},ManualAuto.revision);
+    assert(rows[0].signal.meta.manualAutoSource===b.id&&requests.includes('5m')&&requests.includes('15m'),'Wrong adapter');
+    assert(JSON.stringify(Bots.ledgers.manual)===original,'Signal mutated ledger');
+    await ManualAuto.enter(rows[0],ManualAuto.revision);assert(Bots.ledgers.manual.open[0]?.tf==='5m','Entry lost timeframe');
+  }finally{API.klines=klines;b.signal=signal;}
+});
+test('Sources deduplicate independently and retain their session guard after a reload',()=>{
+  const row=autoFixture(),s={...row.signal,meta:{manualAutoSource:'jdub',manualAutoSession:'session1'}};
+  const L=Bots.ledgers.manual;L.closed.push({sym:s.sym,meta:{manualAutoSource:'jdub',manualAutoSession:'session1',manualAutoBar:s.entryBar-60}});
+  assert(ManualAuto.repeat(L,s),'Session repeated');
+  assert(!ManualAuto.repeat(L,{...s,meta:{manualAutoSource:'candle'}}),'Unrelated source suppressed');
+});
+test('Signal-source failures remain visible and never become an entry',async()=>{
+  autoFixture();const klines=API.klines;API.klines=async()=>{throw Error('Fixture broker unavailable');};
+  try{const rows=await ManualAuto.scan({source:'candle',scope:'all'},ManualAuto.revision);assert(rows[0].status==='ERROR'&&rows[0].why.includes('Fixture broker unavailable')&&!rows[0].signal,'Failure swallowed');}
+  finally{API.klines=klines;}
+});
 document.getElementById('run').onclick=async()=>{try{await autoRun();}finally{ManualAuto.stop();OpenTrades.stop();}};

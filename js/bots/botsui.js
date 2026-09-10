@@ -24,6 +24,7 @@ Object.assign(Bots, {
   render(){
     const host = document.getElementById('botBody');
     if (!host) return;
+    if(this.active!=='liveManual'&&typeof LiveManual!=='undefined'&&(LiveManual.auto?.running||LiveManual.auto?.starting))LiveManual.auto.stop('Stopped because you left the live desk.');
     if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.sync(this.active);
     if (this.active === 'permissions'){
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
@@ -515,17 +516,17 @@ Object.assign(Bots, {
   },
 
   /* ---------------- Manual bot ---------------- */
-  manualView(L, st){
+  manualTicketView(live=false){
     const q = Bots.quoteFor(STORE.symbol);
     const px = q ? q.price : null;
-    const dir = Bots.manualSide;
+    const dir = live ? (LiveManual.draft.side==='buy'?1:-1) : Bots.manualSide;
 
     /* one row of quick percentages. Clicking one fills the box with the actual
        price that far away, on the correct side for the side you are taking. */
     const ladder = which => Bots.PCT_STEPS.map(pc =>
       `<button class="pctBtn" data-mbpct="${which}:${pc}" title="${pc}% away from the price">${pc}%</button>`).join('');
 
-    return `<div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · separate real account</button></div><div class="mbForm">
+    return `<div class="mbForm">
       <label class="bc">Instrument
         <button id="mbSym" class="mbPick" data-val="${esc(STORE.symbol)}" title="Search every instrument">${esc(baseAsset(STORE.symbol))} <i>▾</i></button></label>
       <div class="mbPrice"><label>Price now</label><b id="mbPx">${px == null ? '—' : fmtPrice(px)}</b></div>
@@ -568,8 +569,12 @@ Object.assign(Bots, {
       <div class="mbCalc" id="mbCalc"></div>
 
       <label class="bc grow">Note <input id="mbNote" type="text" placeholder="why are you taking this trade?"></label>
-      <button class="bBtn go" data-act="mopen" id="mbGo">${dir > 0 ? 'BUY' : 'SELL'} at market${px != null ? ' · ' + fmtPrice(px) : ''}</button>
+      <button class="bBtn go" ${live?'data-lm-act="preview"':'data-act="mopen"'} id="mbGo">${live?'Calculate & review REAL order':(dir > 0 ? 'BUY' : 'SELL')+' at market'+(px != null ? ' · ' + fmtPrice(px) : '')}</button>
     </div>
+`;
+  },
+  manualView(L, st){
+    return `<div class="wsTradeLinks"><button data-ws-bot="manual">PAPER · Manual trading</button><button data-ws-bot="liveManual">REAL · LIVE trading bot</button></div>`+this.manualTicketView()+`
     <div class="botNote">Market enters now. Limit and Stop entry wait for your price and require an explicit stop-loss.
       Leave <b>volume</b> empty to size from the risk limit when placing the order. For Market only, leave the
       <b>stop</b> empty for an automatic stop using your saved ATR multiplier; leave the

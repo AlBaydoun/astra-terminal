@@ -24,6 +24,10 @@ The only change to arming eligibility is for this **human-operated** ticket: nam
 
 ## Validation and activation
 
+- **29/29** isolated Python broker tests passed.
+- **69/69** browser workspace checks passed, including separate-window navigation, paper/live separation, arming phrases, stale quotes, expired previews, changed limits/accounts, duplicate clicks and uncertain outcomes.
+- JavaScript syntax, Python compilation and Git whitespace checks passed. The final browser checks and the running app console were clean.
+
 Broker calculations were checked against the connected real account through an adapter that explicitly prohibits `order_send` and `order_check`. A read-only ETH/USD example returned 0.05 lots, 0.67 USD estimated stop risk, 1.21 USD target result and 0.24 USD margin. These are validation examples at the quoted prices, not a recommended trade.
 
 The running main page was checked for account reading, separation from paper, blocked submission and visual layout. Submission tests use a fake broker exclusively; no real order was placed or closed.

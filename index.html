@@ -437,6 +437,8 @@
     <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
     <div class="mBody">
       <label class="indSearchBox">Search indicators<input id="indSearch" type="search" placeholder="Name or keyword: RSI, Confluence, hammer…" autocomplete="off"></label>
+      <div class="indFolders" aria-label="Indicator folders"><button data-ind-folder="all" class="active">All indicators</button><button data-ind-folder="oscillators">∿ Oscillators</button><button data-ind-folder="trend">↗ Trend</button><button data-ind-folder="other">Other &amp; custom</button></div>
+      <button class="bBtn" id="indRsiMacd">Prepare RSI + MetaTrader MACD</button>
       <div id="indSearchCount" class="indHint" role="status"></div>
       <div id="indTabs">
         <button data-itab="inputs" class="active">Inputs</button>
@@ -565,6 +567,7 @@
 <script src="js/config.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/indicators.js"></script>
+<script src="js/mt5-oscillators.js"></script>
 <script src="js/indicatorDefs.js"></script>
 <script src="js/broker.js"></script>
 <script src="js/feed.js"></script>

@@ -1841,3 +1841,4 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 .indRow[hidden]{display:none!important}
 .indSearchBox{display:grid;gap:6px;color:var(--text);font-size:13px}
 .indSearchBox input{width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px}
+.indFolders{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.indFolders button{padding:9px 13px;border:1px solid var(--border);border-radius:7px;background:var(--field);color:var(--text);cursor:pointer}.indFolders button.active{border-color:#00b8cc;background:rgba(0,184,204,.13);color:#00b8cc}#indRsiMacd{margin-bottom:10px}

@@ -572,10 +572,12 @@ class Handler(BaseHTTPRequestHandler):
                     "currency": getattr(acc, "currency", ""),
                     "balance": getattr(acc, "balance", None),
                     "equity": getattr(acc, "equity", None),
+                    "margin_free": getattr(acc, "margin_free", None),
                     "symbols": all_symbols(),
                     "trading": TRADING_ENABLED,
                     "magic": MAGIC,
                     "manualTickets": 1,
+                    "manualTicketSizing": 2,
                 })
 
             if u.path == "/manual-preview":

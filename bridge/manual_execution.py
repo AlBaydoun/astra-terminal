@@ -136,6 +136,14 @@ class ManualExecution:
         budget = min(equity*caps['riskPct']/100,daily_remaining,max(0,equity-base*(1-caps['maxTotalLossPct']/100)))
         value_budget = max(0,equity*caps['maxNotionalPct']/100-used_value)
         bound = min(budget/risk_per_lot,value_budget/value_per_lot,caps['maxLots'],maximum,max(0,free)*0.95/margin_per_lot)
+        # The shared manual desk's amount is denominated in ACCOUNT currency.
+        # Re-evaluate it at submission; never approximate a CFD's FX conversion.
+        amount = self.number(body.get('amount',0) or 0,'Amount',False)
+        mode = body.get('amountMode','value')
+        if amount < 0 or mode not in ('value','margin'):
+            raise ValueError('Enter a non-negative amount and a valid amount mode')
+        if amount:
+            bound = min(bound,amount/(value_per_lot if mode == 'value' else margin_per_lot))
         requested = self.number(body.get('lots',0) or 0,'Lots',False)
         if requested < 0:
             raise ValueError('Lots cannot be negative')

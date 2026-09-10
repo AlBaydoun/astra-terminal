@@ -29,10 +29,12 @@ if __name__=='__main__':
         mt5.symbol_select(sym,True)
         tick=mt5.symbol_info_tick(sym)
         body=dict(symbol=sym,side='buy',sl=tick.bid*.995,tp=tick.ask*1.01,lots=0,riskPct=.5,maxLots=.05,maxOpen=2,maxDailyLossPct=2,maxTotalLossPct=10,maxNotionalPct=100,maxCorrelated=2,startBalance=account.balance)
+        body.update(amount=account.equity*.1,amountMode='value')
         desk=ManualExecution(ReadOnlyMT5(),20260902)
         for attempt in range(10):
             try:
                 result=desk.preview(body)
+                assert result['notional'] <= body['amount']+1e-7, 'Position exceeds selected account-currency amount'
                 print(json.dumps({k:result[k] for k in ('ok','currency','entry','lots','sl','tp','risk','reward','margin','notional','volumeMin','volumeStep','volumeMax')},indent=2))
                 print('READ-ONLY: no order-check or order-send API was available to the calculation.')
                 break

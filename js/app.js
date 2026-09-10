@@ -403,15 +403,21 @@ const App = {
     for(const row of rows){
       const control=row.querySelector('[data-id],[data-mid]');
       const def=IND_BY_ID[control?.dataset.id || control?.dataset.mid];
-      row.dataset.search=[def?.id,def?.label,def?.note,row.querySelector('.main')?.textContent,
+      row.dataset.category=def?.category||'other';
+      row.dataset.search=[def?.id,def?.label,def?.note,def?.category,row.querySelector('.main')?.textContent,
         row.querySelector('#i_pat')?'candlestick bullish bearish engulfing hammer doji shooting star patterns':''].filter(Boolean).join(' ').toLowerCase();
     }
+    let folder='all';
     const filter=()=>{
       const words=input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);let count=0;
-      for(const row of rows){row.hidden=!words.every(w=>row.dataset.search.includes(w));if(!row.hidden)count++;}
+      for(const row of rows){row.hidden=(folder!=='all'&&row.dataset.category!==folder)||!words.every(w=>row.dataset.search.includes(w));if(!row.hidden)count++;}
       document.getElementById(countId).textContent=count?`${count} of ${rows.length} indicators`:'No matching indicators. Try another name.';
     };
     input.value='';input.oninput=filter;filter();
+    modal.querySelectorAll('[data-ind-folder]').forEach(btn=>{
+      btn.classList.toggle('active',btn.dataset.indFolder==='all');
+      btn.onclick=()=>{folder=btn.dataset.indFolder;modal.querySelectorAll('[data-ind-folder]').forEach(b=>b.classList.toggle('active',b===btn));filter();};
+    });
   },
 
   openIndicators(){
@@ -480,6 +486,15 @@ const App = {
     document.getElementById('i_vp').checked = Chart.settings.vp.on;
     document.getElementById('i_pat').checked = Chart.settings.patterns.on;
     this.bindIndicatorSearch('indModal','indSearch','indSearchCount');
+    document.getElementById('indRsiMacd').onclick=()=>{
+      for(const [id,target] of [['rsi','p1'],['macd_mt5','p2']]){
+        host.querySelector(`[data-id="${id}"][data-k="on"]`).checked=true;
+        host.querySelector(`[data-id="${id}"][data-k="target"]`).value=target;
+      }
+      document.getElementById('indSearch').value='';
+      document.querySelector('[data-ind-folder="oscillators"]').click();
+      document.getElementById('indSearchCount').textContent='RSI → Window 1 · MetaTrader MACD → Window 2. Press APPLY to show them. Other indicators stay as you set them.';
+    };
     this.showModal('indModal');
     document.getElementById('indSearch').focus();
   },

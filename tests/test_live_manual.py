@@ -61,6 +61,15 @@ class ManualTests(unittest.TestCase):
         p=self.preview();self.assertEqual(p['lots'],.76);self.assertLessEqual(p['risk'],10);self.assertEqual(p['sl'],99);self.assertEqual(p['tp'],103);self.assertFalse(self.api.sent)
     def test_sell_uses_bid_and_direction(self):
         self.body.update(side='sell',sl=101,tp=97);p=self.preview();self.assertEqual(p['entry'],100);self.assertGreater(p['reward'],0)
+    def test_account_currency_position_amount(self):
+        self.body.update(amount=100,amountMode='value')
+        p=self.preview();self.assertLessEqual(p['notional'],100);self.assertEqual(p['currency'],'USD')
+    def test_account_currency_margin_amount(self):
+        self.body.update(amount=5,amountMode='margin')
+        p=self.preview();self.assertLessEqual(p['margin'],5);self.assertEqual(p['lots'],.05)
+    def test_invalid_amount_mode_is_refused(self):
+        self.body.update(amount=100,amountMode='percent')
+        with self.assertRaises(ValueError):self.preview()
     def test_close_stop_cannot_exceed_notional(self):
         self.body['sl']=99.98;p=self.preview();self.assertLessEqual(p['notional'],1000)
     def test_free_margin_limits_size(self):

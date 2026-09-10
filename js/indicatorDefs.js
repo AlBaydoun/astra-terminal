@@ -151,7 +151,7 @@ const INDS = [
 
   /* ============================ IN A WINDOW ============================ */
   {
-    id: 'rsi', label: 'RSI', kind: 'osc', applyTo: true, range: [0, 100],
+    id: 'rsi', label: 'Relative Strength Index (RSI)', kind: 'osc', applyTo: true, range: [0, 100],
     def: { on: true, len: 14, src: 'close', target: 'p1' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#c084fc' }],
@@ -174,7 +174,8 @@ const INDS = [
     },
   },
   {
-    id: 'macd', label: 'MACD', kind: 'osc', applyTo: true,
+    id: 'macd', label: 'MACD (EMA signal)', kind: 'osc', applyTo: true,
+    note: 'ASTRA original: EMA signal line and difference histogram. Choose MACD (MetaTrader) for the broker-style SMA signal and MACD bars.',
     def: { on: false, f: 12, s: 26, sig: 9, src: 'close', target: 'p2' },
     params: [{ k: 'f', kind: 'num', min: 2, max: 100 }, { k: 's', kind: 'num', min: 2, max: 200 }, { k: 'sig', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'h', label: 'Histogram', color: '#3d5a80' }, { key: 'm', label: 'MACD', color: '#00e5ff' }, { key: 's', label: 'Signal', color: '#ffb03a' }],
@@ -189,7 +190,7 @@ const INDS = [
     },
   },
   {
-    id: 'cci', label: 'CCI', kind: 'osc',
+    id: 'cci', label: 'Commodity Channel Index (CCI)', kind: 'osc',
     def: { on: false, len: 20, target: 'p2' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 200 }],
     parts: [{ key: 'l', label: 'Line', color: '#fb923c' }],
@@ -265,7 +266,7 @@ const INDS = [
     build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.forceIndex(ctx.v, c.len)) }]; },
   },
   {
-    id: 'atr', label: 'ATR', kind: 'osc',
+    id: 'atr', label: 'Average True Range (ATR)', kind: 'osc',
     def: { on: false, len: 14, target: 'p3' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#ff9f6b' }],
@@ -292,6 +293,59 @@ const INDS = [
     },
   },
 ];
+
+// These are additional chart definitions: existing saved MACD and bot math stay intact.
+INDS.push(
+  {
+    id:'macd_mt5',label:'MACD (MetaTrader)',kind:'osc',applyTo:true,
+    note:'MetaTrader-style MACD: fast EMA minus slow EMA, displayed as bars, with a simple moving-average signal. Defaults 12 / 26 / 9. Warm-up history can cause small differences from MT5.',
+    def:{on:false,f:12,s:26,sig:9,src:'close',target:'p2'},
+    params:[{k:'f',kind:'num',min:2,max:100},{k:'s',kind:'num',min:2,max:200},{k:'sig',kind:'num',min:2,max:100}],
+    parts:[{key:'m',label:'MACD bars',color:'#2ebd85'},{key:'s',label:'Signal (SMA)',color:'#ffb03a'}],
+    build(ctx,c){const m=MT5Osc.macd(ctx.srcOf(c),c.f,c.s,c.sig);return [{key:'m',type:'hist',precision:5,levels:[[0,'#65748b']],data:MT5Osc.histogram(ctx,m.main)},{key:'s',lineStyle:2,data:ctx.line(m.signal)}];},
+  },
+  {
+    id:'osma',label:'Moving Average of Oscillator (OsMA)',kind:'osc',applyTo:true,
+    note:'Difference between MetaTrader-style MACD and its SMA signal. Not the MACD main bars.',
+    def:{on:false,f:12,s:26,sig:9,src:'close',target:'p2'},
+    params:[{k:'f',kind:'num',min:2,max:100},{k:'s',kind:'num',min:2,max:200},{k:'sig',kind:'num',min:2,max:100}],
+    parts:[{key:'h',label:'OsMA bars',color:'#2ebd85'}],
+    build(ctx,c){return [{key:'h',type:'hist',precision:5,levels:[[0,'#65748b']],data:MT5Osc.histogram(ctx,MT5Osc.macd(ctx.srcOf(c),c.f,c.s,c.sig).osma)}];},
+  },
+  ...[['bull','Bulls Power'],['bear','Bears Power']].map(([side,label])=>({
+    id:side+'power',label,kind:'osc',
+    note:(side==='bull'?'High':'Low')+' minus the EMA of close. Default period 13.',
+    def:{on:false,len:13,target:'p3'},params:[{k:'len',kind:'num',min:2,max:200}],
+    parts:[{key:'h',label:'Power',color:side==='bull'?'#2ebd85':'#f6465d'}],
+    build(ctx,c){return [{key:'h',type:'hist',precision:5,levels:[[0,'#65748b']],data:MT5Osc.histogram(ctx,MT5Osc.power(ctx.v,c.len,side))}];},
+  })),
+  {
+    id:'chaikin',label:'Chaikin Oscillator',kind:'osc',
+    note:'Fast minus slow EMA of Accumulation/Distribution. Uses the chart’s volume; JustMarkets commonly supplies tick activity, not exchange-wide traded volume.',
+    def:{on:false,f:3,s:10,target:'p3'},params:[{k:'f',kind:'num',min:2,max:100},{k:'s',kind:'num',min:2,max:200}],
+    parts:[{key:'l',label:'Chaikin',color:'#38bdf8'}],
+    build(ctx,c){return [{key:'l',levels:[[0,'#65748b']],data:ctx.line(MT5Osc.chaikin(ctx.v,c.f,c.s))}];},
+  },
+  {
+    id:'rvi',label:'Relative Vigor Index (RVI)',kind:'osc',
+    note:'Smoothed close-minus-open divided by smoothed high-minus-low, with a four-bar weighted signal. Default period 10.',
+    def:{on:false,len:10,target:'p3'},params:[{k:'len',kind:'num',min:2,max:200}],
+    parts:[{key:'m',label:'RVI',color:'#2ebd85'},{key:'s',label:'Signal',color:'#f6465d'}],
+    build(ctx,c){const r=MT5Osc.rvi(ctx.v,c.len);return [{key:'m',precision:4,levels:[[0,'#65748b']],data:ctx.line(r.main)},{key:'s',data:ctx.line(r.signal)}];},
+  },
+  {
+    id:'trix',label:'Triple Exponential Average (TRIX)',kind:'osc',applyTo:true,
+    note:'One-bar fractional change of a triple-smoothed EMA. Ratio units, not percent. Default period 14.',
+    def:{on:false,len:14,src:'close',target:'p3'},params:[{k:'len',kind:'num',min:2,max:200}],
+    parts:[{key:'l',label:'TRIX',color:'#c084fc'}],
+    build(ctx,c){return [{key:'l',precision:6,levels:[[0,'#65748b']],data:ctx.line(MT5Osc.trix(ctx.srcOf(c),c.len))}];},
+  }
+);
+
+const MT5_OSCILLATORS = ['atr','bearpower','bullpower','chaikin','cci','dem','force','macd_mt5','mom','osma','rsi','rvi','stoch','trix','wpr'];
+for(const def of INDS){
+  def.category=MT5_OSCILLATORS.includes(def.id)?'oscillators':def.kind==='price'?'trend':'other';
+}
 
 const IND_BY_ID = {};
 for (const d of INDS) IND_BY_ID[d.id] = d;
