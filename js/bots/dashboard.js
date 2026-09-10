@@ -235,6 +235,7 @@ const BotDash = {
     const anyShut = this._shownIds.some(id => this.folded[id]);
 
     return `<div class="dashWrap">
+      <div class="wsTradeLinks"><button data-ws-bot="analysis">▥ Buy / Sell Analysis</button></div>
       ${this.filterBar(all)}
       <div class="botStats">
         ${Bots.stat('TRADES', S.n)}

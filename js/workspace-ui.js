@@ -27,7 +27,7 @@ const WorkspaceUI = {
   },
   name(b){ return b.name.replace(/^[▦★◎●◈]\s*/, ''); },
   group(b){
-    if (b.dash || b.trades || b.report) return 'Overview';
+    if (b.dash || b.trades || b.report || b.analysis) return 'Overview';
     if (b.manual || b.id === 'confluence') return 'Trading desk';
     if (b.scan || b.confluenceScanner || b.fit || b.brain) return 'Scanners & research';
     if (b.live || b.id === 'permissions') return 'Settings & safety';
@@ -35,7 +35,7 @@ const WorkspaceUI = {
   },
   botIcon(b){
     return b.dash ? 'dashboard' : b.trades ? 'positions' : b.manual ? 'manual'
-      : b.scan || b.confluenceScanner ? 'scanner' : b.report || b.fit ? 'report'
+      : b.scan || b.confluenceScanner ? 'scanner' : b.report || b.fit || b.analysis ? 'report'
       : b.live || b.id === 'permissions' ? 'shield' : 'bot';
   },
   nav(active){

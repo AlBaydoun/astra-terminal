@@ -51,6 +51,11 @@ Object.assign(Bots, {
     const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
 
+    if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults')){
+      TradeAnalysis.refresh();
+      return;
+    }
+
     if (b.confluenceScanner && host.dataset.bot === b.id && host.querySelector('#cfScanRows')){
       ConfluenceScanner.refresh(); // Keep the search field, filter and focus alive during scans.
       return;
@@ -86,6 +91,7 @@ Object.assign(Bots, {
        </div>` +
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
+        : b.analysis ? TradeAnalysis.view()
         : b.trades ? OpenTrades.view()
         : b.fit ? this.fitView()
         : b.live ? this.liveView()
@@ -171,6 +177,7 @@ Object.assign(Bots, {
   },
 
   controls(b, cfg){
+    if (b.analysis) return '';
     if (b.confluenceScanner) return ConfluenceScanner.controls();
     if (b.id === 'confluence') return ConfluenceBot.controls();
     if (b.trades) return '<div class="botCtl"><span class="bcNote">Paper positions across your bots. Edit stop and target prices, then press <b>Apply levels</b> to save. The price graphic shows saved levels.</span></div>';
@@ -821,6 +828,7 @@ Object.assign(Bots, {
     if (b.trades) OpenTrades.bind(host); else if (b.manual) OpenTrades.bind(host.querySelector('#manualPositions')); else OpenTrades.stop();
     if(b.manual&&typeof ManualAuto!=='undefined')ManualAuto.bind(host);
     if (b.dash) BotDash.bind(host);
+    if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.live) this.bindLive(host);

@@ -15,6 +15,12 @@ const BOTS = [
     warmup: 0, signal: () => null,
   },
   {
+    id: 'analysis', name: 'Buy / Sell Analysis', analysis: true,
+    blurb: 'Discover which direction earned more: completed trades, wins, losses, net results and the instruments behind them.',
+    defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 0 },
+    warmup: 0, signal: () => null,
+  },
+  {
     id: 'brain', name: '★ Master Brain', brain: true,
     blurb: 'Learns from every finished trade and every backtest, then decides which signals are worth taking. It can veto or shrink a trade — never create one.',
     defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 0 },
@@ -544,7 +550,7 @@ const Bots = {
      dash and not fit and not live", and every new page meant remembering all
      six. Two of them had already drifted: the report backtested the Dashboard,
      and the tick loop ran a scan for every page. One list, asked once. */
-  isPage(b){ return !!(b && (b.brain || b.scan || b.report || b.dash || b.fit || b.live || b.trades)); },
+  isPage(b){ return !!(b && (b.brain || b.scan || b.report || b.dash || b.fit || b.live || b.trades || b.analysis)); },
   tradingBots(){ return BOTS.filter(b => !this.isPage(b)); },
 
   /* ---------- the periodic pass ---------- */
