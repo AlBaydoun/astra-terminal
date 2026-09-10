@@ -130,7 +130,7 @@ const Heat = {
       const r = this.hit(e.clientX - b.left, e.clientY - b.top);
       if (!r) return;
       const sym = typeof MarketSources !== 'undefined' && !MarketSources.binanceOn() ? r.name : r.name + 'USDT';
-      if (STORE.tickers.has(sym)) App.setSymbol(sym);
+      if (STORE.tickers.has(sym)) (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(sym):App.setSymbol(sym));
       else toast(r.name + ' is not tradable on Binance as a USDT pair', 'warn');
     });
     new ResizeObserver(() => this.draw()).observe(document.getElementById('heatWrap'));

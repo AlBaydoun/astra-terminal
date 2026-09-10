@@ -110,7 +110,7 @@ const ConfluenceScanner = {
       if(this.filter==='ready')rows=rows.filter(r=>r.status==='READY');
       if(this.filter==='issues')rows=rows.filter(r=>['BLOCKED','ERROR'].includes(r.status));
     }else rows=rows.slice(0,8);
-    return rows.map(r=>`<tr><td><b>${esc(r.sym)}</b></td><td class="${r.signal?.dir>0?'up':r.signal?.dir<0?'down':''}">${r.signal?.dir>0?'BUY':r.signal?.dir<0?'SELL':'WAIT'}</td><td>${(r.signal?.checks||[]).filter(c=>c.ok).length}/5</td><td>${r.status}</td><td>${esc(r.why)}</td><td>${r.signal?.dir?fmtPrice(r.signal.sl)+' / '+fmtPrice(r.signal.tp):'—'}</td><td><button class="bMini" data-cf-pair="${esc(r.sym)}">Chart</button></td></tr>`).join('')||'<tr><td colspan="7">No matching instruments. The scanner waits for the connected JustMarkets catalogue.</td></tr>';
+    return rows.map(r=>`<tr><td><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.sym,r.sym):esc(r.sym)}</b></td><td class="${r.signal?.dir>0?'up':r.signal?.dir<0?'down':''}">${r.signal?.dir>0?'BUY':r.signal?.dir<0?'SELL':'WAIT'}</td><td>${(r.signal?.checks||[]).filter(c=>c.ok).length}/5</td><td>${r.status}</td><td>${esc(r.why)}</td><td>${r.signal?.dir?fmtPrice(r.signal.sl)+' / '+fmtPrice(r.signal.tp):'—'}</td><td><button class="bMini" data-cf-pair="${esc(r.sym)}">Chart</button></td></tr>`).join('')||'<tr><td colspan="7">No matching instruments. The scanner waits for the connected JustMarkets catalogue.</td></tr>';
   },
   refresh(){
     if(!['confluence','confluenceScanner'].includes(Bots.active))return;

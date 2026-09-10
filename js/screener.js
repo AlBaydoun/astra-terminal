@@ -37,7 +37,7 @@ const Screener = {
       const tr = document.createElement('tr');
       tr.dataset.sym = sym;
       tr.innerHTML =
-        `<td class="c-sym"><i class="dot" style="--hue:${Watch.hue(sym)}"></i>${esc(MK.short(sym))}</td>` +
+        `<td class="c-sym"><i class="dot" style="--hue:${Watch.hue(sym)}"></i>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(sym,MK.short(sym)):esc(MK.short(sym))}</td>` +
         `<td class="c-last num"></td><td class="c-pct num"></td><td class="c-high num"></td>` +
         `<td class="c-low num"></td><td class="c-vol num"></td><td class="c-cnt num"></td>` +
         `<td class="c-act"><button class="rAct rStar${Watch.list.includes(sym) ? ' on' : ''}" title="Add / remove watchlist">★</button>` +
@@ -51,7 +51,7 @@ const Screener = {
           return;
         }
         if (e.target.closest('.rBell')){ Alerts.openModal(null, sym); return; }
-        App.setSymbol(sym);
+        (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(sym):App.setSymbol(sym));
       });
       this.rows.set(sym, tr);
       this.fill(sym);

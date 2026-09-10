@@ -98,7 +98,7 @@ const Port = {
       const upnl = (px - p.avg) * p.qty;
       const upct = p.avg ? (px - p.avg) / p.avg * 100 : 0;
       return `<div class="posrow" data-sym="${s}">` +
-        `<div class="posl"><b>${esc(baseAsset(s))}</b><span>${+p.qty.toPrecision(6)} @ ${fmtPrice(p.avg)}</span></div>` +
+        `<div class="posl"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(s):esc(baseAsset(s))}</b><span>${+p.qty.toPrecision(6)} @ ${fmtPrice(p.avg)}</span></div>` +
         `<div class="posr"><b>${fmtNum(val)}</b><span class="${pctClass(upnl)}">${(upnl >= 0 ? '+' : '') + fmtNum(upnl)} · ${fmtPct(upct)}</span></div></div>`;
     }).join('');
     posHost.querySelectorAll('.posrow').forEach(r => r.addEventListener('click', () => App.setSymbol(r.dataset.sym)));
@@ -107,7 +107,7 @@ const Port = {
     if (!st.history.length) hist.innerHTML = '<div class="empty">No trades yet</div>';
     else hist.innerHTML = st.history.slice(0, 15).map(h =>
       `<div class="histrow"><span class="${h.side === 'buy' ? 'up' : 'down'}">${h.side.toUpperCase()}</span>` +
-      `<span>${esc(baseAsset(h.sym))}</span><span>${+h.qty.toPrecision(5)}</span><span>@ ${fmtPrice(h.px)}</span>` +
+      `<span>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(h.sym):esc(baseAsset(h.sym))}</span><span>${+h.qty.toPrecision(5)}</span><span>@ ${fmtPrice(h.px)}</span>` +
       `<span class="${h.pnl != null ? pctClass(h.pnl) : ''}">${h.pnl != null ? (h.pnl >= 0 ? '+' : '') + fmtNum(h.pnl) : ''}</span></div>`).join('');
   },
 };

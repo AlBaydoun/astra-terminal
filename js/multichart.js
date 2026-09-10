@@ -86,7 +86,7 @@ const Multi = {
       `<button class="miniSym"><b></b><span class="miniPx"></span><span class="miniPct"></span></button>` +
       `<button class="miniEma miniFx" title="Indicators on this chart">&fnof;x</button>` +
       `<select class="miniTf">${CFG.TFS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>` +
-      `</div><div class="miniLegend"></div><div class="miniChart"></div>`;
+      `<span class="chartTradeActions"><button class="buy miniBuy" title="Prepare manual buy">Buy</button><button class="sell miniSell" title="Prepare manual sell">Sell</button></span></div><div class="miniLegend"></div><div class="miniChart"></div>`;
     this.grid.appendChild(el);
 
     const chart = LightweightCharts.createChart(el.querySelector('.miniChart'), Chart.chartOpts());
@@ -101,6 +101,8 @@ const Multi = {
 
     el.querySelector('.miniSym').addEventListener('click', () =>
       SymbolSearch.open(sym => { cell.sym = sym; this.saveMinis(); this.loadCell(cell); }));
+    el.querySelector('.miniBuy').addEventListener('click',()=>WorkspaceUI.openManual(cell.sym,1,cell.tf));
+    el.querySelector('.miniSell').addEventListener('click',()=>WorkspaceUI.openManual(cell.sym,-1,cell.tf));
     el.querySelector('.miniFx').addEventListener('click', () => this.openPicker(cell));
     const tfSel = el.querySelector('.miniTf');
     tfSel.value = conf.tf;

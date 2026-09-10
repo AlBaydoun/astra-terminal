@@ -199,7 +199,7 @@ const ManualOrders = {
     let orders;
     try { orders = this.read(); } catch(e){ return '<div class="botNote warn">' + esc(e.message) + '</div>'; }
     const row = o => `<div class="prCard" data-pending-id="${esc(o.id)}">
-      <div class="prTop"><b>${esc(o.sym)} · ${o.dir > 0 ? 'BUY' : 'SELL'} ${o.type === 'limit' ? 'LIMIT' : 'STOP ENTRY'}</b>
+      <div class="prTop"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(o.sym):esc(o.sym)} · ${o.dir > 0 ? 'BUY' : 'SELL'} ${o.type === 'limit' ? 'LIMIT' : 'STOP ENTRY'}</b>
       <span class="prBadge">${esc(o.status)}</span></div>
       <div class="prWhy">Entry ${fmtPrice(o.entry)} · SL ${fmtPrice(o.sl)} · TP ${o.tp == null ? 'none' : fmtPrice(o.tp)}
       · ${+o.qty.toPrecision(8)} units · ${esc(o.tf)}</div>

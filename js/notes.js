@@ -50,7 +50,7 @@ const Notes = {
       const div = document.createElement('div');
       div.className = 'noteRow';
       div.innerHTML =
-        `<div class="noteHead"><b>${esc(baseAsset(n.sym))}</b>` +
+        `<div class="noteHead"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(n.sym):esc(baseAsset(n.sym))}</b>` +
         (n.price != null ? `<span class="dim2">@ ${fmtPrice(n.price)}</span>` : '') +
         `<span class="dim2">${new Date(n.t).toLocaleString()}</span>` +
         `<button class="noteDel" title="Delete">×</button></div>` +

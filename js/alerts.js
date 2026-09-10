@@ -74,7 +74,7 @@ const Alerts = {
       const div = document.createElement('div');
       div.className = 'alrow' + (a.active ? '' : ' done');
       div.innerHTML =
-        `<div class="altop"><b>${esc(a.symbol)}</b> <span class="${a.cond === 'above' ? 'up' : 'down'}">${a.cond === 'above' ? '≥' : '≤'} ${fmtPrice(a.price)}</span></div>` +
+        `<div class="altop"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(a.symbol,a.symbol):esc(a.symbol)}</b> <span class="${a.cond === 'above' ? 'up' : 'down'}">${a.cond === 'above' ? '≥' : '≤'} ${fmtPrice(a.price)}</span></div>` +
         `<div class="alsub">${a.active ? 'armed · now ' + (t ? fmtPrice(t.last) : '—') : 'fired ' + new Date(a.firedAt).toLocaleString()}</div>` +
         `<div class="alacts">${a.active ? '' : '<button data-act="rearm">Re-arm</button>'}<button data-act="del">Delete</button></div>`;
       div.addEventListener('click', e => {

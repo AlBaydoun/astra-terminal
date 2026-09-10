@@ -488,7 +488,7 @@ const BotDash = {
         return `
         <tr class="symRow${on ? ' open' : ''}" data-picksym="${esc(r.sym)}">
           <td class="symFold">${on ? '▾' : '▸'}</td>
-          <td class="c-sym">${esc(baseAsset(r.sym))}</td>
+          <td class="c-sym">${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.sym):esc(baseAsset(r.sym))}</td>
           <td class="num">${r.s.n}</td>
           <td class="num up">${r.s.won || '—'}</td>
           <td class="num down">${r.s.lost || '—'}</td>
@@ -599,7 +599,7 @@ const BotDash = {
     const cls = v.state === 'blocked' ? 'bad' : v.state === 'watch' ? 'warn' : (m && m.net > 0 ? 'good' : '');
     return `<div class="prCard ${cls}">
       <div class="prTop">
-        <b>${esc(v.sym)}</b>
+        <b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(v.sym):esc(baseAsset(v.sym))}</b>
         <span class="prBadge ${badge}">${badge === 'yours' ? 'your choice' : badge === 'watch' ? 'watching' : badge === 'new' ? 'no record' : 'automatic'}</span>
         ${net ? `<i class="${pctClass(m.net)}">${net}</i>` : ''}
       </div>
@@ -666,7 +666,7 @@ const BotDash = {
                   ['winRate', 'Win %', 1], ['net', 'Net', 1]];
     return `<table class="dashMini"><thead>${Bots.sortHead(id, cols, 'net')}</thead><tbody>${
       g.slice(0, 12).map(r => `<tr>
-        <td>${esc(fmt ? fmt(r.key) : (r.key || '—'))}</td>
+        <td>${key==='sym'&&r.key&&typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.key,fmt?fmt(r.key):r.key):esc(fmt ? fmt(r.key) : (r.key || '—'))}</td>
         <td class="num">${r.n}</td>
         <td class="num"><b class="up">${r.won}</b>/<b class="down">${r.lost}</b></td>
         <td class="num">${Math.round(r.winRate)}%</td>
@@ -759,7 +759,7 @@ const BotDash = {
       <thead>${Bots.sortHead('dashOpen', ocols, 'entryTime')}</thead>
       <tbody>${open.map(p => `<tr>
         <td class="c-sym">${esc(p.botName)}</td>
-        <td>${esc(baseAsset(p.sym))}</td>
+        <td>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</td>
         <td>${esc(p.tf || '—')}</td>
         <td class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'}</td>
         <td>${this.clock(p.entryTime)}</td>
@@ -807,7 +807,7 @@ const BotDash = {
     return `<div class="dashScroll"><table class="dashTable log">
       <thead><tr>${head}</tr></thead><tbody>${rows.map(t => `<tr class="${t.pnl > 0 ? 'w' : 'l'}">
         <td class="c-sym">${esc(t.botName)}</td>
-        <td>${esc(baseAsset(t.sym))}</td>
+        <td>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(t.sym):esc(baseAsset(t.sym))}</td>
         <td>${esc(t.tf || '—')}</td>
         <td class="${t.dir > 0 ? 'up' : 'down'}">${t.dir > 0 ? 'BUY' : 'SELL'}</td>
         <td>${this.clock(t.entryTime)}</td>
@@ -1106,7 +1106,7 @@ const BotDash = {
     }));
     host.querySelectorAll('[data-chartsym]').forEach(el => el.addEventListener('click', e => {
       e.stopPropagation();
-      App.setSymbol(el.dataset.chartsym);
+      (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(el.dataset.chartsym):App.setSymbol(el.dataset.chartsym));
     }));
 
     /* ---- permitted / prohibited ---- */

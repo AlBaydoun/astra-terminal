@@ -45,13 +45,13 @@ const Watch = {
       row.className = 'wrow' + (sym === STORE.symbol ? ' sel' : '');
       row.innerHTML =
         `<div class="wico" style="--hue:${this.hue(sym)}">${esc(baseAsset(sym).slice(0, 4))}</div>` +
-        `<div class="wname"><b>${esc(baseAsset(sym))}</b><span>${esc(typeof MK !== 'undefined' ? MK.sub(sym) : 'USDT')}</span></div>` +
+        `<div class="wname"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(sym):esc(baseAsset(sym))}</b><span>${esc(typeof MK !== 'undefined' ? MK.sub(sym) : 'USDT')}</span></div>` +
         `<canvas class="wspark" width="70" height="26"></canvas>` +
         `<div class="wpx"><b class="wlast"></b><span class="wpct"></span></div>` +
         `<button class="wdel" title="Remove">×</button>`;
       row.addEventListener('click', e => {
         if (e.target.classList.contains('wdel')){ this.remove(sym); return; }
-        App.setSymbol(sym);
+        (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(sym):App.setSymbol(sym));
       });
       this.el.appendChild(row);
       this.rows[sym] = row;

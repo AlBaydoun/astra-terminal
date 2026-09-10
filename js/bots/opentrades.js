@@ -91,8 +91,8 @@ const OpenTrades = {
   },
 
   /* ---------- the page ---------- */
-  view(){
-    const rows = this.all();
+  view(bot=null,summaryOnly=false){
+    const rows = this.all().filter(r => !bot || r.bot === bot);
     const tot = rows.reduce((a, r) => {
       const l = this.live(r);
       a.unreal += l.unreal; a.value += l.value;
@@ -108,8 +108,7 @@ const OpenTrades = {
     if (!rows.length) return `<div class="botStats">
         ${Bots.stat('OPEN NOW', 0)}
       </div>
-      <div class="empty">Nothing is open. When any bot takes a position it appears here immediately,
-        with every control you need to manage it.</div>`;
+      <div class="otList"></div><div class="empty otEmpty">Nothing is open. New positions appear here automatically.</div>`;
 
     const sorted = rows.slice().sort((a, b) => {
       if (this.sortKey === 'unreal') return this.live(b).unreal - this.live(a).unreal;
@@ -135,7 +134,7 @@ const OpenTrades = {
         ${sortBtn('sym', 'Instrument')}${sortBtn('bot', 'Bot')}
         <span class="otHint">Live figures refresh every second. Anything you type is left alone.</span>
       </div>
-      <div class="otList">${sorted.map(r => this.card(r)).join('')}</div>
+      <div class="otList">${summaryOnly?'':sorted.map(r => this.card(r)).join('')}</div>
       <div class="botNote">Adjusting a bot's trade is allowed — it is your money. The trade is marked
         <b>adjusted</b> and stays marked when it closes, so a bot's record never quietly counts a trade
         the strategy did not run on its own. The original risk is never rewritten, so its R still measures
@@ -152,17 +151,17 @@ const OpenTrades = {
     return `<div class="otCard ${l.unreal >= 0 ? 'up' : 'down'}" data-ot="${esc(k)}">
 
       <div class="otHead">
-        <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))}</b>
+        <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</b>
         <span class="otTag">${esc(row.botName)}</span>
         <span class="otTag dim">${esc(p.tf || '')}${p.model ? ' · ' + esc(p.model) : ''}</span>
-        ${p.touched ? '<span class="otTag warn" title="stop, target or size was changed by hand">adjusted</span>' : ''}
-        ${trailOn ? '<span class="otTag on">trailing</span>' : ''}
-        ${l.stale ? '<span class="otTag warn" title="no fresh quote for this instrument">no quote</span>' : ''}
+        <span class="otTag warn" data-f="adjusted" ${p.touched?'':'hidden'} title="stop, target or size was changed by hand">adjusted</span>
+        <span class="otTag on" data-f="trailing" ${trailOn?'':'hidden'}>trailing</span>
+        <span class="otTag warn" data-f="stale" ${l.stale?'':'hidden'} title="no fresh quote for this instrument">no quote</span>
         <span class="otPnl ${pctClass(l.unreal)}" data-f="unreal">${(l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal)}</span>
       </div>
 
       <div class="otFacts">
-        <span><label>Size</label><b>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)}</b></span>
+        <span><label>Size</label><b data-f="size">${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)}</b></span>
         <span><label>Entry</label><b>${fmtPrice(p.entry)}</b></span>
         <span><label>Now</label><b data-f="px">${fmtPrice(l.px)}</b></span>
         <span><label>R so far</label><b class="${pctClass(l.rNow)}" data-f="r">${l.rNow.toFixed(2)}</b></span>
@@ -178,12 +177,12 @@ const OpenTrades = {
 
       <section class="wsTradeSection"><h3>${icon('shield')} Stop loss &amp; take profit</h3>
       <div class="otCtl">
-        <label class="otIn">Stop<input type="number" step="any" data-otsl="${esc(k)}" value="${p.sl}"></label>
+        <label class="otIn">Stop<input type="number" step="any" data-otsl="${esc(k)}" data-saved="${p.sl}" value="${p.sl}"></label>
         <span class="pctRow">${Bots.PCT_STEPS.map(pc =>
           `<button class="pctBtn" data-otpct="${esc(k)}:sl:${pc}" title="put the stop ${pc}% from the price now">${pc}%</button>`).join('')}</span>
       </div>
       <div class="otCtl">
-        <label class="otIn">Target<input type="number" step="any" data-ottp="${esc(k)}" value="${p.tp == null ? '' : p.tp}" placeholder="none"></label>
+        <label class="otIn">Target<input type="number" step="any" data-ottp="${esc(k)}" data-saved="${p.tp == null ? '' : p.tp}" value="${p.tp == null ? '' : p.tp}" placeholder="none"></label>
         <span class="pctRow">${Bots.PCT_STEPS.map(pc =>
           `<button class="pctBtn" data-otpct="${esc(k)}:tp:${pc}" title="put the target ${pc}% from the price now">${pc}%</button>`).join('')}</span>
       </div>
@@ -201,7 +200,7 @@ const OpenTrades = {
         <label class="otIn">and holds<input type="number" step="0.1" min="0.1" data-ottg="${esc(k)}"
           value="${trailOn && trail.gap != null ? trail.gap : 0.5}"><i>R back</i></label>
         <button class="bMini${trailOn ? ' on' : ''}" data-ottrail="${esc(k)}">${trailOn ? 'Update trail' : 'Start trailing'}</button>
-        ${trailOn ? `<button class="bMini" data-ottrailoff="${esc(k)}">Stop trailing</button>` : ''}
+        <button class="bMini" data-ottrailoff="${esc(k)}" ${trailOn?'':'hidden'}>Stop trailing</button>
       </div>
       </section>
 
@@ -223,17 +222,15 @@ const OpenTrades = {
      Only the figures inside [data-f] are touched, so a number being typed into
      a stop box is never yanked away mid-edit. */
   refresh(){
-    const host = document.getElementById('botBody');
-    if (!host || Bots.active !== 'open') return this.stop();
-    const rows = this.all();
-    if (!rows.length) return;
+    const host = document.getElementById(Bots.active === 'manual' ? 'manualPositions' : 'botBody');
+    if (!host || !['open','manual'].includes(Bots.active)) return this.stop();
+    const rows = this.all().filter(r => Bots.active !== 'manual' || r.bot === 'manual');
     const byKey = {};
     for (const r of rows) byKey[r.bot + ':' + r.p.id] = r;
 
-    let anyGone = false;
     host.querySelectorAll('[data-ot]').forEach(card => {
       const row = byKey[card.dataset.ot];
-      if (!row){ anyGone = true; return; }          // it closed while we were looking
+      if (!row){ card.remove(); return; }
       const l = this.live(row), p = row.p;
       const set = (f, text, cls) => {
         const el = card.querySelector('[data-f="' + f + '"]');
@@ -248,14 +245,39 @@ const OpenTrades = {
       set('totp', l.toTp == null ? 'none' : this.gap(l.pctToTp, l.cashToTp));
       set('mfe', '+' + fmtNum(p.mfe || 0) + ' / -' + fmtNum(p.mae || 0));
       set('held', l.held);
+      set('size',p.lots?p.lots+' lot':String(+p.qty.toPrecision(4)));
+      const trail=p.trail!==undefined?p.trail:(Bots.cfg(row.bot)||{}).trail;
+      for(const [field,on] of [['adjusted',p.touched],['trailing',trail],['stale',l.stale]])card.querySelector('[data-f="'+field+'"]').hidden=!on;
+      const trailing=card.querySelector('[data-ottrail]');
+      trailing.textContent=trail?'Update trail':'Start trailing';trailing.classList.toggle('on',!!trail);
+      card.querySelector('[data-ottrailoff]').hidden=!trail;
+      for(const [field,value] of [['otsl',p.sl],['ottp',p.tp??'']]){
+        const input=card.querySelector('[data-'+field+']');
+        if(input.value===input.dataset.saved&&document.activeElement!==input)input.value=value;
+        input.dataset.saved=String(value);
+      }
+      this.recalc(card,row.bot+':'+p.id);
       const map = card.querySelector('.wsPriceMap');
       if (map && typeof WorkspaceUI !== 'undefined') map.innerHTML = WorkspaceUI.priceMap(p,l);
       const cb = card.querySelector('[data-f="closebtn"]');
       if (cb) cb.textContent = 'Close at market · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal);
       card.className = 'otCard ' + (l.unreal >= 0 ? 'up' : 'down');
     });
-    /* a position closing changes the whole board, so that does need a redraw */
-    if (anyGone || host.querySelectorAll('[data-ot]').length !== rows.length) Bots.render();
+    // Preserve surviving cards and drafts even when another position opens or closes.
+    const present = new Set([...host.querySelectorAll('[data-ot]')].map(el=>el.dataset.ot));
+    for (const row of rows) if (!present.has(row.bot+':'+row.p.id)){
+      const list=host.querySelector('.otList');
+      list.insertAdjacentHTML('afterbegin',this.card(row));
+      this.bind(list.firstElementChild);
+    }
+    const template=document.createElement('div');
+    template.innerHTML=this.view(Bots.active==='manual'?'manual':null,true);
+    host.querySelector('.botStats')?.replaceWith(template.querySelector('.botStats'));
+    host.querySelector('.otEmpty')?.remove();
+    if(!rows.length)host.querySelector('.otList').insertAdjacentHTML('afterend','<div class="empty otEmpty">No open positions.</div>');
+    if(rows.length&&!host.querySelector('.otBar')){
+      const bar=template.querySelector('.otBar');host.querySelector('.otList').before(bar);this.bind(bar);
+    }
   },
 
   start(){
@@ -284,7 +306,14 @@ const OpenTrades = {
   bind(host){
     host.querySelectorAll('[data-otsort]').forEach(el => el.addEventListener('click', () => {
       this.sortKey = el.dataset.otsort;
-      Bots.render();
+      const list=host.closest('#manualPositions, #botBody').querySelector('.otList');
+      const lookup=new Map(this.all().map(r=>[r.bot+':'+r.p.id,r]));
+      [...list.children].sort((a,b)=>{
+        const x=lookup.get(a.dataset.ot),y=lookup.get(b.dataset.ot);
+        if(!x||!y)return 0;
+        return this.sortKey==='unreal'?this.live(y).unreal-this.live(x).unreal:this.sortKey==='sym'?x.p.sym.localeCompare(y.p.sym):this.sortKey==='bot'?x.botName.localeCompare(y.botName):y.p.entryTime-x.p.entryTime;
+      }).forEach(node=>list.append(node));
+      el.parentElement.querySelectorAll('[data-otsort]').forEach(b=>b.classList.toggle('on',b===el));
     }));
     host.querySelectorAll('[data-otset]').forEach(el => el.addEventListener('click', () => {
       const { bot, id } = this.split(el.dataset.otset);

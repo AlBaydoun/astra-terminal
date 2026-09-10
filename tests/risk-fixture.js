@@ -13,7 +13,7 @@ const esc = x => String(x);
 const fmtPct = x => String(x) + '%';
 const pctClass = x => x > 0 ? 'up' : x < 0 ? 'down' : 'flat';
 // A property fallback lets ticket checks load the real lexical OpenTrades too.
-globalThis.OpenTrades = { stop(){} };
+globalThis.OpenTrades = { stop(){}, refresh(){}, bind(){}, view(){return '';} };
 const BUS = { emit(){} };
 const STORE = { tickers: new Map(), universe: [], symbol: 'BTCUSDT', tf: '1h' };
 const Watch = { list: [] };

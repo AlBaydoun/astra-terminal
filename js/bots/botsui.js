@@ -69,6 +69,7 @@ Object.assign(Bots, {
         this.bindPositionControls(manualLedger);
       }
       this.manualCalc();
+      OpenTrades.refresh();
       if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
       return;
     }
@@ -296,7 +297,7 @@ Object.assign(Bots, {
       const d = r.dir > 0 ? 'up' : r.dir < 0 ? 'down' : 'flat';
       const why = (r.active ? r.reasons : r.failed).slice(0, 2).join(' · ');
       return `<tr data-sym="${esc(r.sym)}">
-        <td class="c-sym">${esc(baseAsset(r.sym))}</td>
+        <td class="c-sym">${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.sym):esc(baseAsset(r.sym))}</td>
         <td class="${d}">${r.dir > 0 ? '▲ BUY' : r.dir < 0 ? '▼ SELL' : '—'}</td>
         <td class="num">${Math.round(r.score)}</td>
         <td class="num">${fmtPrice(r.price)}</td>
@@ -413,7 +414,7 @@ Object.assign(Bots, {
       const ev = r.evidence || {};
       const pf = ev.pf === Infinity ? '∞' : (ev.pf || 0).toFixed(2);
       const per = (ev.per || []).map(x =>
-        `<span class="labIns ${x.net > 0 ? 'good' : 'bad'}">${esc(baseAsset(x.sym))} ${x.net > 0 ? '+' : ''}${fmtNum(x.net)}</span>`).join('');
+        `<span class="labIns ${x.net > 0 ? 'good' : 'bad'}">${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(x.sym):esc(baseAsset(x.sym))} ${x.net > 0 ? '+' : ''}${fmtNum(x.net)}</span>`).join('');
       return `<div class="labCard">
         <div class="labTop"><b>${esc(r.name)}</b>
           <button class="bMini danger" data-labretire="${esc(r.id)}">Retire</button></div>
@@ -565,7 +566,7 @@ Object.assign(Bots, {
       Both levels can be changed at any time on the open position below, or on the Open Trades page.
       Saved stops and targets return after a restart. Paper execution pauses while the PC or browser is off
       and resumes on fresh prices when ASTRA reopens.</div>` +
-      '<div id="manualPending"></div><div id="manualLedger">' + this.ledgerView('manual', L, st) + '</div>';
+      (typeof ManualAuto!=='undefined'?ManualAuto.view():'') + '<div id="manualPending"></div><section id="manualPositions"><h2 class="botH">Open manual trades</h2>' + OpenTrades.view('manual') + '</section><div id="manualLedger">' + this.ledgerView('manual', L, st) + '</div>';
   },
 
   /* ---------- what this trade would win or lose ----------
@@ -708,7 +709,7 @@ Object.assign(Bots, {
       </div>
       ${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.equity(L) : ''}
       <div class="botGrid">
-        <div class="botCol"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length}</div>${this.openView(id, L)}</div>
+        ${id==='manual'?'':`<div class="botCol"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length}</div>${this.openView(id, L)}</div>`}
         <div class="botCol"><div class="botH">${icon('clock')} CLOSED HISTORY</div>${this.closedView(L)}</div>
         <div class="botCol"><div class="botH">${icon('scanner')} DECISIONS</div>${this.decisionView(L)}</div>
         <div class="botCol"><div class="botH">${icon('report')} LESSONS FROM LOSSES</div>${this.lessonView(L)}
@@ -737,7 +738,7 @@ Object.assign(Bots, {
            </span>`
         : `<span class="dim2">SL ${fmtPrice(p.sl)} · TP ${p.tp == null ? 'none' : fmtPrice(p.tp)}${p.tp1Done ? ' · half banked, stop at breakeven' : ''}</span>`;
       return `<div class="botRow">
-        <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))}</b>
+        <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</b>
         <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}</span>
         <span>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
         ${levels}
@@ -750,7 +751,7 @@ Object.assign(Bots, {
   closedView(L){
     if (!L.closed.length) return '<div class="empty">No closed trades yet</div>';
     return L.closed.slice(0, 30).map(t => `<div class="botRow">
-      <b class="${t.dir > 0 ? 'up' : 'down'}">${t.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(t.sym))}</b>
+      <b class="${t.dir > 0 ? 'up' : 'down'}">${t.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(t.sym):esc(baseAsset(t.sym))}</b>
       <span class="dim2">${esc(t.tf)} · ${esc(t.model || '')}</span>
       <span>${fmtPrice(t.entry)} → ${fmtPrice(t.exit)}</span>
       <span class="${pctClass(t.pnl)}">${(t.pnl >= 0 ? '+' : '') + fmtNum(t.pnl)} · ${t.r}R</span>
@@ -788,7 +789,7 @@ Object.assign(Bots, {
     const s = r.stats;
     const pf = s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2);
     return `<div id="botBt" class="botBt">
-      <div class="botH">BACKTEST · ${esc(baseAsset(r.sym))} ${esc(r.tf)} · ${r.bars} candles
+      <div class="botH">BACKTEST · ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.sym):esc(baseAsset(r.sym))} ${esc(r.tf)} · ${r.bars} candles
         (${new Date(r.from * 1000).toLocaleDateString()} → ${new Date(r.to * 1000).toLocaleDateString()})</div>
       <div class="botStats">
         ${this.stat('NET', (s.pnl >= 0 ? '+' : '') + fmtNum(s.pnl) + ' (' + fmtPct(s.pnlPct) + ')', s.pnl)}
@@ -817,7 +818,8 @@ Object.assign(Bots, {
     }));
     /* the Open Trades page runs a one-second refresh; leaving it must stop
        that timer, or every page after it keeps ticking in the background */
-    if (b.trades) OpenTrades.bind(host); else OpenTrades.stop();
+    if (b.trades) OpenTrades.bind(host); else if (b.manual) OpenTrades.bind(host.querySelector('#manualPositions')); else OpenTrades.stop();
+    if(b.manual&&typeof ManualAuto!=='undefined')ManualAuto.bind(host);
     if (b.dash) BotDash.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
@@ -1039,9 +1041,9 @@ Object.assign(Bots, {
       this.wire(); this.render();
     }));
     host.querySelectorAll('[data-open]').forEach(el =>
-      el.addEventListener('click', () => App.setSymbol(el.dataset.open)));
+      el.addEventListener('click', () => (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(el.dataset.open):App.setSymbol(el.dataset.open))));
     host.querySelectorAll('.scTable tbody tr[data-sym]').forEach(tr =>
-      tr.addEventListener('dblclick', () => App.setSymbol(tr.dataset.sym)));
+      tr.addEventListener('dblclick', () => (typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(tr.dataset.sym):App.setSymbol(tr.dataset.sym))));
   },
 
   bindPositionControls(host){

@@ -441,7 +441,7 @@ Object.assign(Bots, {
       const winner = mine.find(c => c.split && c.split.holds);
       return `<div class="fitCard ${winner ? 'good' : best && best.avgR > 0 ? 'warn' : 'bad'}">
         <b>${esc(g.label)}</b>
-        <span>${esc(g.syms.map(baseAsset).join(' · '))}</span>
+        <span>${g.syms.map(sym=>typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(sym):esc(baseAsset(sym))).join(' · ')}</span>
         ${winner
           ? `<i class="ok">${esc(winner.botName)} on ${esc(winner.tf)} held out of sample</i>`
           : best
@@ -563,7 +563,7 @@ Object.assign(Bots, {
         ${keep.map(p => `<div class="fitPlanCard good">
             <b>${esc(p.botName)}</b>
             <span>${esc(p.tf)} · ${esc(p.groups.join(' + '))} · ${p.avgR}R over ${p.trades} trades</span>
-            <i>${esc(p.instruments.map(baseAsset).join(' · '))}</i>
+            <i>${p.instruments.map(sym=>typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(sym):esc(baseAsset(sym))).join(' · ')}</i>
             ${p.changes.length ? `<u>changes: ${esc(p.changes.join(', '))}</u>` : '<u>already set this way</u>'}
           </div>`).join('')}
         ${stop.length ? `<div class="fitPlanCard bad">

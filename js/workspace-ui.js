@@ -3,6 +3,7 @@
 const WorkspaceUI = {
   query: '',
   opened: false,
+  pendingWindows:new Map(),
   paths: {
     dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     bot: '<rect x="4" y="7" width="16" height="13" rx="4"/><path d="M12 3v4M1 12h3m16 0h3M8 16h8M8 11v1m8-1v1"/>',
@@ -78,9 +79,63 @@ const WorkspaceUI = {
     const btn = document.getElementById('wsExpand');
     if (btn){ btn.setAttribute('aria-pressed', String(on)); btn.innerHTML = this.icon('expand') + (on ? 'Restore' : 'Expand'); }
   },
+  pair(sym,label){
+    return `<button type="button" class="pairLink" data-pair-chart="${esc(sym)}" title="Open ${esc(sym)} chart">${esc(label ?? baseAsset(sym))} ↗</button>`;
+  },
+  openChart(sym){
+    if(sym) App.setSymbol(sym);
+    if(document.documentElement.dataset.panel && document.documentElement.dataset.panel!=='chart'){
+      const w=Popout.open('chart');
+      if(w){const message={type:'astra-chart',sym:STORE.symbol};this.pendingWindows.set(w,message);w.postMessage(message,location.origin);}
+      return;
+    }
+    this.expand(false);
+    document.getElementById('bottomPanel')?.classList.add('collapsed');
+    document.getElementById('chartGrid')?.scrollIntoView({block:'nearest'});
+  },
+  openManual(sym,dir,tf=STORE.tf){
+    if(!sym)return toast('Choose a chart instrument first.','info');
+    if(document.documentElement.dataset.panel && document.documentElement.dataset.panel!=='bots'){
+      const w=Popout.open('bots');
+      const message={type:'astra-ticket',sym,dir,tf};
+      if(w){this.pendingWindows.set(w,message);w.postMessage(message,location.origin);}
+      return;
+    }
+    this.openBot('manual');this.expand(true);
+    document.getElementById('bottomPanel')?.classList.remove('collapsed');
+    const picker=document.getElementById('mbSym');
+    // Prices and lot sizes from another contract must never carry into this ticket.
+    if(picker.dataset.val!==sym){
+      for(const id of ['mbAmt','mbQty','mbSl','mbTp','mbEntry','mbNote'])document.getElementById(id).value='';
+      document.getElementById('mbPct').value=0;
+    }
+    picker.dataset.val=sym;picker.innerHTML=esc(baseAsset(sym))+' <i>▾</i>';
+    document.getElementById('mbTf').value=tf;
+    document.getElementById('mbOrderType').value='market';
+    document.querySelector('[data-mbside="'+dir+'"]').click();
+    Bots.manualCalc();document.getElementById('mbSl').focus();
+  },
   init(){
     const wrap = document.querySelector('.botsWrap');
     if (!wrap || document.getElementById('wsToolbar')) return;
+    document.getElementById('chartLabelBar')?.insertAdjacentHTML('beforeend',
+      '<span class="chartTradeActions"><button class="buy" data-chart-ticket="1" title="Prepare a buy in the manual paper ticket">BUY · Manual</button><button class="sell" data-chart-ticket="-1" title="Prepare a sell in the manual paper ticket">SELL · Manual</button></span>');
+    document.addEventListener('click',e=>{
+      const pair=e.target.closest('[data-pair-chart], [data-ws-chart]');
+      if(pair){e.preventDefault();e.stopPropagation();this.openChart(pair.dataset.pairChart ?? pair.dataset.wsChart);return;}
+      const ticket=e.target.closest('[data-chart-ticket]');
+      if(ticket){e.preventDefault();e.stopPropagation();this.openManual(ticket.dataset.ticketSym||STORE.symbol,+ticket.dataset.chartTicket,ticket.dataset.ticketTf||STORE.tf);}
+    },true);
+    window.addEventListener('message',e=>{
+      if(e.origin!==location.origin || !e.source || e.source===window)return;
+      const m=e.data;
+      if(m?.type==='astra-desk-ready' && this.pendingWindows.has(e.source)){
+        e.source.postMessage(this.pendingWindows.get(e.source),location.origin);this.pendingWindows.delete(e.source);return;
+      }
+      if(m?.type==='astra-ticket' && typeof m.sym==='string' && [1,-1].includes(m.dir) && document.documentElement.dataset.panel==='bots')this.openManual(m.sym,m.dir,m.tf);
+      if(m?.type==='astra-chart' && typeof m.sym==='string' && document.documentElement.dataset.panel==='chart')App.setSymbol(m.sym);
+    });
+    if(window.opener)window.opener.postMessage({type:'astra-desk-ready'},location.origin);
     const link = (id, label, icon) => `<button data-ws-bot="${id}">${this.icon(icon)}<span>${label}</span></button>`;
     wrap.insertAdjacentHTML('afterbegin', `<nav id="wsToolbar" aria-label="Trading workspace shortcuts">
       ${link('dash','Overview','dashboard')}${link('manual','Manual','manual')}${link('open','Open trades','positions')}${link('confluenceScanner','Scanner','scanner')}
@@ -111,10 +166,7 @@ const WorkspaceUI = {
       if (bot) return this.openBot(bot.dataset.wsBot);
       const chart = e.target.closest('[data-ws-chart]');
       if (chart){
-        if (chart.dataset.wsChart) App.setSymbol(chart.dataset.wsChart);
-        if (document.documentElement.dataset.panel){ Popout.open('chart'); return; }
-        this.expand(false);
-        document.getElementById('chartGrid')?.scrollIntoView({block:'nearest'});
+        this.openChart(chart.dataset.wsChart);
       }
       if (e.target.closest('[data-ws-news]')){
         if (document.documentElement.dataset.panel) Popout.open('news');

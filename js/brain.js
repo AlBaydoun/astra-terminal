@@ -500,7 +500,7 @@ const Brain = {
       const cls = { pending: 'flat', correct: 'up', wrong: 'down', flat: 'flat' }[x.status];
       return `<div class="aiNote"><span class="${cls}">${ic}</span>` +
         `<span class="${x.dir > 0 ? 'up' : 'down'}">${x.dir > 0 ? '▲' : '▼'}</span>` +
-        `<b>${esc(baseAsset(x.sym))}</b><span class="dim2">${esc(x.tf)}${x.source === 'radar' ? '·R' : ''}${x.trade ? '·$' : ''}</span>` +
+        `<b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(x.sym):esc(baseAsset(x.sym))}</b><span class="dim2">${esc(x.tf)}${x.source === 'radar' ? '·R' : ''}${x.trade ? '·$' : ''}</span>` +
         `<span>${fmtPrice(x.price)}</span>` +
         `<span class="${cls}">${x.move != null ? fmtPct(x.move) : x.conf + '%'}</span></div>`;
     }).join('') : '<div class="empty">No signal notes yet.</div>';
@@ -545,13 +545,13 @@ const Brain = {
       const t = STORE.tickers.get(s);
       const now = t ? t.last : p.entry;
       const up = (now - p.entry) * p.qty - p.feeIn;
-      return `<div class="obRow" data-sym="${esc(s)}"><b>${esc(baseAsset(s))}</b><span>${+p.qty.toPrecision(5)}</span>` +
+      return `<div class="obRow" data-sym="${esc(s)}"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(s):esc(baseAsset(s))}</b><span>${+p.qty.toPrecision(5)}</span>` +
         `<span>@ ${fmtPrice(p.entry)}</span><span class="${pctClass(up)}">${(up >= 0 ? '+' : '') + up.toFixed(2)}</span></div>`;
     }).join('') : '<div class="empty">No open positions</div>';
     document.querySelectorAll('#obPositions .obRow').forEach(r => r.addEventListener('click', () => App.setSymbol(r.dataset.sym)));
 
     document.getElementById('obTrades').innerHTML = closed.length ? closed.slice(0, 25).map(t =>
-      `<div class="obRow"><b>${esc(baseAsset(t.sym))}</b><span>${fmtPrice(t.entry)} → ${fmtPrice(t.exit)}</span>` +
+      `<div class="obRow"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(t.sym):esc(baseAsset(t.sym))}</b><span>${fmtPrice(t.entry)} → ${fmtPrice(t.exit)}</span>` +
       `<span class="dim2">fees ${t.fees}</span><span class="${pctClass(t.pnl)}">${(t.pnl >= 0 ? '+' : '') + t.pnl} (${fmtPct(t.pct)})</span>` +
       `<span class="dim2">${esc(t.reason)}</span></div>`).join('') : '<div class="empty">No closed trades yet</div>';
 
@@ -564,7 +564,7 @@ const Brain = {
     }).join('');
 
     document.getElementById('obRadar').innerHTML = this.radar.length ? this.radar.map(r =>
-      `<div class="obRow" data-sym="${esc(r.sym)}"><b>${esc(baseAsset(r.sym))}</b>` +
+      `<div class="obRow" data-sym="${esc(r.sym)}"><b>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(r.sym):esc(baseAsset(r.sym))}</b>` +
       `<span class="${r.dir > 0 ? 'up' : r.dir < 0 ? 'down' : 'flat'}">${r.dir > 0 ? '▲ UP' : r.dir < 0 ? '▼ DOWN' : '— quiet'}</span>` +
       `<span>${r.dir ? r.conf + '%' : ''}</span><span class="dim2">${r.voters} votes</span></div>`).join('')
       : '<div class="empty">No scan yet — press Scan.</div>';

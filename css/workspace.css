@@ -193,3 +193,14 @@ html[data-panel] .botsWrap { padding:0; }
 @media(prefers-reduced-motion:reduce) {
   #botNav *, #wsToolbar *, .bBtn, .bMini { transition:none!important; }
 }
+/* Pair names navigate; order buttons only prepare a paper ticket. */
+.pairLink{display:inline-flex;align-items:center;gap:4px;background:transparent;border:0;padding:2px 0;color:inherit;font:inherit;font-weight:700;cursor:pointer;text-align:left}
+.pairLink:hover{color:var(--accent,#58b6ff);text-decoration:underline}
+.pairLink:focus-visible{outline:2px solid #58b6ff;outline-offset:3px}
+.chartTradeActions{display:inline-flex;gap:6px;margin-left:auto}
+.chartTradeActions button{border:1px solid currentColor;border-radius:5px;padding:5px 9px;background:var(--bg2,#132137);font-size:11px;font-weight:700;cursor:pointer}
+.chartTradeActions .buy{color:#24bd96}.chartTradeActions .sell{color:#fa6d80}
+#manualPositions{margin:22px 0;padding:16px;border:1px solid var(--border,#344a66);border-radius:12px;background:var(--bg2,#132137)}
+#manualPositions>.botH{font-size:15px;margin-bottom:12px}
+.manualAuto [hidden],.otCard [hidden]{display:none!important}
+.manualAuto fieldset{min-width:0}.manualAuto input{width:95px}

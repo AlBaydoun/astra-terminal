@@ -8,7 +8,7 @@ const Strip = {
     this.el.addEventListener('click',e=>{
       const chip=e.target.closest('[data-sym]');
       if(chip && MarketSources.allowed(chip.dataset.sym)){
-        App.setTf('15m');App.setSymbol(chip.dataset.sym);return;
+        App.setTf('15m');(typeof WorkspaceUI!=='undefined'?WorkspaceUI.openChart(chip.dataset.sym):App.setSymbol(chip.dataset.sym));return;
       }
       if(e.target.closest('[data-strip="pause"]')){this.paused=!this.paused;this.build();}
       if(e.target.closest('[data-strip="board"]')){
