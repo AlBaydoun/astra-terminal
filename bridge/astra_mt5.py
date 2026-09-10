@@ -25,6 +25,9 @@ REAL ORDERS
 
     POST /order   {code, symbol, side, lots, sl, tp, comment}
     POST /close   {code, ticket}
+    GET /manual-preview   read-only valuation and a one-use reviewed request
+    POST /manual-order    {code, previewId} — explicit manual market orders
+    POST /manual-review   {code, acknowledgement} — operator review after an uncertain outcome
 """
 import json
 import os
@@ -35,6 +38,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+from manual_execution import ManualExecution
 
 try:
     import MetaTrader5 as mt5
@@ -77,6 +81,7 @@ _symbols_cache = {"t": 0.0, "list": []}
 TRADING_ENABLED = False
 SESSION_CODE = ""
 MAGIC = 20260902          # stamps every order ASTRA sends, so they are identifiable
+MANUAL_EXECUTION = ManualExecution(mt5, MAGIC)
 ORDER_LOG = os.path.join(os.path.expanduser("~"), "astra-data", "live-orders.log")
 
 
@@ -425,6 +430,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"error": "bad_code",
                                "message": "Wrong session code. Read the six digits in the bridge window."}, 403)
 
+        if u.path == "/manual-review":
+            if body.get('acknowledgement') != 'CHECKED MT5':
+                return self._send({'ok': False, 'message': 'Explicit MT5 review is required'}, 400)
+            MANUAL_EXECUTION.acknowledge()
+            log_order('MANUAL uncertain outcome reviewed by operator; all old previews cleared')
+            return self._send({'ok': True})
+        if u.path == "/manual-order":
+            try:
+                with _lock:
+                    result = MANUAL_EXECUTION.send(str(body.get('previewId', '')))
+                log_order('MANUAL RESULT ' + json.dumps(result))
+                return self._send(result)
+            except ValueError as e:
+                return self._send({'ok': False, 'message': str(e)}, 400)
         if u.path == "/order":
             return self._order(body)
         if u.path == "/close":
@@ -556,8 +575,16 @@ class Handler(BaseHTTPRequestHandler):
                     "symbols": all_symbols(),
                     "trading": TRADING_ENABLED,
                     "magic": MAGIC,
+                    "manualTickets": 1,
                 })
 
+            if u.path == "/manual-preview":
+                try:
+                    with _lock:
+                        result = MANUAL_EXECUTION.preview({k:v[0] for k,v in q.items()})
+                    return self._send(result)
+                except ValueError as e:
+                    return self._send({'ok': False, 'message': str(e)}, 400)
             if u.path == "/specs":
                 # contract sizes and lot limits — what the broker will actually accept
                 names = [s for s in (q.get("symbols", [""])[0]).split(",") if s and SAFE.match(s)][:60]

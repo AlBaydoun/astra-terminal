@@ -33,7 +33,7 @@ const BOTS = [
     warmup: 0, signal: () => null,
   },
   {
-    id: 'live', name: '● Live Trading', live: true,
+    id: 'live', name: '● Live connection & safety', live: true,
     blurb: 'The only part of ASTRA that can move real money, and the hardest to switch on. Four separate gates, limits you set beforehand, a kill switch, and results read straight back from MetaTrader. Bots start in shadow: every decision worked out and written down, nothing sent.',
     defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 0 },
     warmup: 0, signal: () => null,
@@ -67,6 +67,11 @@ const BOTS = [
     defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 20, maxPerSymbol: 10 },
     warmup: 60,
     signal: () => null,
+  },
+  {
+    id:'liveManual',name:'LIVE trading bot',live:true,liveManual:true,
+    blurb:'Your manual market ticket for real JustMarkets orders. Separate from paper trading; locked until you connect, arm and explicitly enable real orders.',
+    defaults:{tf:'15m',maxOpen:0},warmup:0,signal:()=>null,
   },
   {
     id: 'jdub', name: 'Jdub Traders',

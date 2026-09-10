@@ -1,4 +1,6 @@
-/* ASTRA Terminal — live trading.
+/* ASTRA Terminal — shared live connection, arming and automated order submission.
+   The separate live-manual.js ticket uses these arming gates and submits its
+   reviewed market requests through the bridge's dedicated manual endpoint.
 
    This is the only part of ASTRA that can move real money, and it is built to be
    difficult. Four independent things must all be true before a single order is
@@ -55,7 +57,7 @@ const Live = {
     const b = this.book;
     if (b.orders.length > 500) b.orders.length = 500;
     if (b.closed.length > 500) b.closed.length = 500;
-    lsSet('astra_livebook', b);
+    return lsSet('astra_livebook', b) !== false;
   },
 
   audit(kind, text, data){
@@ -133,7 +135,9 @@ const Live = {
     if (!bot) return { ok: false, why: 'Unknown bot' };
     if (String(typed || '').trim().toLowerCase() !== bot.name.trim().toLowerCase())
       return { ok: false, why: 'Type the bot’s name exactly to arm it.' };
-    const ready = this.readiness(botId);
+    // A discretionary manual ticket is armed by its operator's named consent,
+    // not by pretending it has an automated strategy's research record.
+    const ready = bot.liveManual ? {ok:true,met:0} : this.readiness(botId);
     if (!ready.ok) return { ok: false, why: ready.why };
 
     this.state.caps = Object.assign({}, this.state.caps, caps || {});
@@ -370,7 +374,7 @@ const Live = {
   record(o){
     this.loadBook();
     this.book.orders.unshift(o);
-    this.saveBook();
+    return this.saveBook();
   },
 
   /* ---------- the truth, read back from MetaTrader ---------- */

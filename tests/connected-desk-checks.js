@@ -68,7 +68,7 @@ test('A chart window hands the exact side and pair to a newly loaded manual wind
           const doc=child.document;
           if(doc.querySelector('#mbSym')?.dataset.val==='ETHUSD.m'&&doc.querySelector('.sideBtn.on')?.textContent==='SELL'&&doc.querySelector('#mbTf')?.value==='15m'){
             clearInterval(timer);resolve();
-          }else if(Date.now()>deadline){clearInterval(timer);reject(Error('New-window ticket was not populated'));}
+          }else if(Date.now()>deadline){clearInterval(timer);reject(Error('New-window ticket was not populated: '+doc.location.href+' · '+doc.readyState+' · '+doc.body?.innerText.slice(-350)));}
         }catch(e){clearInterval(timer);reject(e);}
       },50);
     });

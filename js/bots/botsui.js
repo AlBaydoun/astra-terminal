@@ -50,6 +50,9 @@ Object.assign(Bots, {
     const cfg = this.cfg(b.id) || Object.assign({}, b.defaults);
     const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
+    if (b.liveManual && host.dataset.bot === b.id && host.querySelector('#lmDesk')){
+      LiveManual.status(); return;
+    }
 
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults')){
       TradeAnalysis.refresh();
@@ -94,6 +97,7 @@ Object.assign(Bots, {
         : b.analysis ? TradeAnalysis.view()
         : b.trades ? OpenTrades.view()
         : b.fit ? this.fitView()
+        : b.liveManual ? LiveManual.view()
         : b.live ? this.liveView()
         : b.report ? BotReports.view()
         : b.brain ? this.brainView()
@@ -521,7 +525,7 @@ Object.assign(Bots, {
     const ladder = which => Bots.PCT_STEPS.map(pc =>
       `<button class="pctBtn" data-mbpct="${which}:${pc}" title="${pc}% away from the price">${pc}%</button>`).join('');
 
-    return `<div class="mbForm">
+    return `<div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · separate real account</button></div><div class="mbForm">
       <label class="bc">Instrument
         <button id="mbSym" class="mbPick" data-val="${esc(STORE.symbol)}" title="Search every instrument">${esc(baseAsset(STORE.symbol))} <i>▾</i></button></label>
       <div class="mbPrice"><label>Price now</label><b id="mbPx">${px == null ? '—' : fmtPrice(px)}</b></div>
@@ -831,7 +835,8 @@ Object.assign(Bots, {
     if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
-    if (b.live) this.bindLive(host);
+    if (b.liveManual) LiveManual.bind(host);
+    else if (b.live) this.bindLive(host);
     host.querySelectorAll('[data-cfg]').forEach(el => {
       el.addEventListener('change', () => {
         const cfg = this.cfg(b.id);

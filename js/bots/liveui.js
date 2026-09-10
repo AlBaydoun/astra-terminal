@@ -13,6 +13,7 @@ Object.assign(Bots, {
     const armed = Live.armedList();
 
     return `<div class="lvWrap">
+      <div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · manual orders</button></div>
       ${this.lvBanner(st, B, armed)}
       ${this.lvStep1(S, B)}
       ${this.lvStep2(S)}
@@ -139,7 +140,7 @@ Object.assign(Bots, {
       </div>` : '';
 
     return `<div class="lvStep">
-      <div class="lvHead"><i>3</i> Arm a bot</div>
+      <div class="lvHead"><i>3</i> Arm an automated bot</div>
       <div class="lvBody">
         <p>A bot must meet at least four of the six live-readiness conditions before it can be armed —
           the same conditions on the Performance Report. <b>${eligible}</b> of ${candidates.length} qualify today.</p>

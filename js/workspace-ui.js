@@ -28,7 +28,7 @@ const WorkspaceUI = {
   name(b){ return b.name.replace(/^[▦★◎●◈]\s*/, ''); },
   group(b){
     if (b.dash || b.trades || b.report || b.analysis) return 'Overview';
-    if (b.manual || b.id === 'confluence') return 'Trading desk';
+    if (b.manual || b.liveManual || b.id === 'confluence') return 'Trading desk';
     if (b.scan || b.confluenceScanner || b.fit || b.brain) return 'Scanners & research';
     if (b.live || b.id === 'permissions') return 'Settings & safety';
     return 'Strategy bots'; // Every future registry entry remains reachable.
