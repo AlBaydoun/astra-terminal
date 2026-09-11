@@ -1842,3 +1842,5 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 .indSearchBox{display:grid;gap:6px;color:var(--text);font-size:13px}
 .indSearchBox input{width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px}
 .indFolders{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.indFolders button{padding:9px 13px;border:1px solid var(--border);border-radius:7px;background:var(--field);color:var(--text);cursor:pointer}.indFolders button.active{border-color:#00b8cc;background:rgba(0,184,204,.13);color:#00b8cc}#indRsiMacd{margin-bottom:10px}
+/* Keep the price chart visible when several oscillator windows share a short chart area. Saved pane heights remain preferred sizes and may shrink to fit. */
+#chartArea #mainWrap{flex:1 0 40%;min-height:80px}#chartArea .pane.open{flex-shrink:1;min-height:36px}
