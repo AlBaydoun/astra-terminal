@@ -148,7 +148,7 @@ const Multi = {
       srcOf: cfg => IND.src(v, cfg.src || 'close'),
     };
     const defs = this.activeDefs(cell);
-    const oscs = defs.filter(d => d.kind === 'osc' && d.id !== 'vol');
+    const oscs = defs.filter(d => d.kind === 'osc' && d.id !== 'vol' && cell.inds[d.id].visible !== false);
     const band = oscs.length ? Math.min(0.5, 0.17 * oscs.length) : 0;
     try {
       cell.chart.priceScale('right').applyOptions({
@@ -170,6 +170,7 @@ const Multi = {
         if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
       }
       cell.specs[def.id] = { def, cfg, specs };
+      if (cfg.visible === false) continue;      /* hidden with the eye — listed, not drawn */
       Chart.applyUserLevels(def, cfg, specs);
 
       /* which strip of the chart this indicator lives in */
@@ -239,11 +240,13 @@ const Multi = {
     for (const def of INDS){
       const c = cell.specs[def.id];
       if (!c) continue;
-      const vals = c.specs.map(sp =>
+      const hidden = c.cfg.visible === false;
+      const vals = hidden ? '<b class="dim2">hidden</b>' : c.specs.map(sp =>
         `<b style="color:${sp.color}">${esc(Chart.fmtInd(Chart.valueAt(sp.data, time)))}</b>`).join(' ');
-      out.push(`<span class="ilg" data-mind="${def.id}" data-mcell="${cell.i}" title="Click to edit ${esc(def.label)}">` +
+      out.push(`<span class="ilg${hidden ? ' ilgHidden' : ''}" data-mind="${def.id}" data-mcell="${cell.i}" title="Click to edit ${esc(def.label)}">` +
         `<i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
         `${esc(def.label)}${esc(Chart.paramText(def, c.cfg))}</i> ${vals}` +
+        `<b class="ilgEye" data-mindeye="${def.id}" data-mcell="${cell.i}" title="${hidden ? 'Show again' : 'Hide for now'}">${hidden ? '◌' : '◉'}</b>` +
         `<b class="ilgX" data-mindoff="${def.id}" data-mcell="${cell.i}" title="Remove from this chart">×</b></span>`);
     }
     host.innerHTML = out.join('');
@@ -255,6 +258,14 @@ const Multi = {
     if (this._legendBound) return;
     this._legendBound = true;
     document.addEventListener('click', e => {
+      const eye = e.target.closest && e.target.closest('[data-mindeye]');
+      if (eye){
+        e.stopPropagation();
+        const cell = this.cellByIndex(eye.dataset.mcell);
+        const c = cell && cell.inds[eye.dataset.mindeye];
+        if (c){ c.visible = c.visible === false; this.saveMinis(); this.renderInds(cell); }
+        return;
+      }
       const off = e.target.closest && e.target.closest('[data-mindoff]');
       if (off){
         e.stopPropagation();

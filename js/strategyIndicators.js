@@ -19,6 +19,38 @@ const StratInd = {
     return this.cache[key];
   },
 
+  /* The REAL higher-timeframe candles, fetched once per symbol and kept, so a
+     bot's chart indicator confirms against exactly what the bot itself sees.
+     Until they arrive the grouped approximation below is used, and the chart
+     is redrawn the moment the real ones land. */
+  htf: {},
+  higherFor(bot, win){
+    const tf = bot.defaults.higherTf || '1h';
+    const key = STORE.symbol + '|' + tf;
+    const rec = this.htf[key];
+    /* fetch once, then refresh every few minutes so the newest higher bar is
+       not stale — the previous candles stay in use while the refresh runs */
+    const stale = !rec || (rec.candles && Date.now() - rec.at > 5 * 60 * 1000);
+    if (stale && typeof API !== 'undefined'){
+      this.htf[key] = { candles: rec && rec.candles || null, at: Date.now() };
+      API.klines(STORE.symbol, tf, 500).then(c => {
+        this.htf[key] = { candles: c || [], at: Date.now() };
+        /* the cached scores were made with older data — drop them */
+        for (const k of Object.keys(this.cache)) if (k.includes('|' + STORE.symbol + '|')) delete this.cache[k];
+        if (typeof Chart !== 'undefined' && Chart.main) try { Chart.renderAll(); } catch(e){}
+      }).catch(() => { if (!(rec && rec.candles)) delete this.htf[key]; });
+    }
+    if (rec && rec.candles){
+      const end = win[win.length - 1].rawTime;
+      /* only what the bot could have known at this candle: the higher bar that
+         is still forming at that moment is shown at its open, as the backtest does */
+      const rows = rec.candles.filter(h => h.rawTime <= end);
+      if (rows.length >= 110)
+        return rows.map((h, j) => j === rows.length - 1 ? { ...h, high: h.open, low: h.open, close: h.open, volume: 0 } : h);
+    }
+    return this.higher(win, 3);
+  },
+
   /* Group the chart's own candles into a coarser series, so a bot that wants a
      higher timeframe for confirmation gets something honest to look at.
      It is built from what is on screen, so it is close to — but not identical
@@ -60,16 +92,102 @@ const StratInd = {
         let sig = null;
         try {
           sig = bot.needsHigher
-            ? bot.signal(win, Object.assign({}, bcfg, { higherTf: bot.defaults.higherTf }), null, this.higher(win, 3))
+            ? bot.signal(win, Object.assign({}, bcfg, { higherTf: bot.defaults.higherTf }), null, this.higherFor(bot, win))
             : bot.signal(win, bcfg, null);
         } catch(e){ sig = null; }
         r = store[t] = sig
-          ? { dir: sig.dir || sig.near || 0, score: Math.max(0, Math.min(100, +sig.score || 0)), fire: !!sig.dir }
+          ? { dir: sig.dir || sig.near || 0, score: Math.max(0, Math.min(100, +sig.score || 0)), fire: !!sig.dir,
+              entry: sig.dir ? sig.entry : null, sl: sig.dir ? sig.sl : null, tp: sig.dir ? sig.tp : null,
+              mult: sig.dir && sig.riskMult > 1 ? +sig.riskMult.toFixed(2) : null,
+              votes: sig.dir && sig.meta && sig.meta.votes != null ? sig.meta.votes : null,
+              why: sig.dir ? (sig.reasons || []).slice(0, 3).join(' · ') : (sig.failed && sig.failed[0]) || '' }
           : null;
       }
-      if (r) out.push({ time: t, dir: r.dir, score: r.score, fire: r.fire });
+      if (r) out.push(Object.assign({ time: t }, r));
     }
     return out;
+  },
+
+  /* ---- BUY / SELL arrows on the price chart ----
+     For the bots you watch most (Triple Confirmation, Max Assurance) there is a
+     second indicator that lives ON the candles: an arrow on every candle the bot
+     would have acted on, and the stop and target of its latest call drawn as
+     lines from that candle to now. Same scoring code, same cache — a marker is
+     never something the bot itself would not have taken. */
+  SIGNAL_BOTS: ['triple', 'conviction'],
+  signalRows(botId, cfg){
+    const bot = BOT_BY_ID[botId];
+    if (!bot || typeof Chart === 'undefined') return [];
+    const ctx = { v: Chart.view() };
+    const min = cfg.minScore != null ? cfg.minScore : (bot.defaults.minScore || 0);
+    return this.run(bot, ctx, Object.assign({}, cfg, { minScore: min })).filter(r => r.fire && r.score >= min);
+  },
+  /* chart.js asks for these when it lays out the pattern markers */
+  markers(v){
+    const out = [];
+    if (typeof Chart === 'undefined' || !Chart.settings) return out;
+    for (const botId of this.SIGNAL_BOTS){
+      const id = 'sig_' + botId, cfg = Chart.settings[id];
+      if (!cfg || !cfg.on) continue;
+      const bot = BOT_BY_ID[botId];
+      const tag = cfg.tag || (bot ? bot.name.split(' ')[0].replace(/[^A-Za-z]/g, '').toUpperCase() : botId.toUpperCase());
+      const col = cfg.colors || {};
+      const buy = col.long || '#2ebd85', sell = col.short || '#f6465d';
+      for (const r of this.signalRows(botId, cfg)){
+        const up = r.dir > 0;
+        out.push({ time: r.time, position: up ? 'belowBar' : 'aboveBar', color: up ? buy : sell,
+          shape: up ? 'arrowUp' : 'arrowDown',
+          text: tag + ' ' + (up ? 'BUY' : 'SELL') + ' ' + Math.round(r.score) + (r.mult ? ' ×' + r.mult : '') });
+      }
+    }
+    return out;
+  },
+  latest(botId, cfg){
+    const rows = this.signalRows(botId, cfg);
+    return rows.length ? rows[rows.length - 1] : null;
+  },
+};
+
+/* the on-chart signal indicators, one per watched bot */
+const SigIndReg = {
+  add(botId){
+    const bot = BOT_BY_ID[botId];
+    if (!bot) return null;
+    const id = 'sig_' + botId;
+    if (IND_BY_ID[id]) return IND_BY_ID[id];
+    const short = bot.name.replace(/\s*\(.*\)\s*$/, '');
+    const def = {
+      id, label: short + ' · BUY / SELL', kind: 'price', mainOnly: true, cat: 'bots',
+      def: { on: false, target: 'main', bars: 300, minScore: bot.defaults.minScore || 0, tag: short.split(' ')[0].toUpperCase() },
+      params: [
+        { k: 'bars', kind: 'num', label: 'Candles to scan', min: 20, max: 400, step: 10 },
+        { k: 'minScore', kind: 'num', label: 'Minimum to signal', min: 0, max: 100, step: 1 },
+        { k: 'tag', kind: 'text', label: 'Arrow label', placeholder: short.split(' ')[0].toUpperCase() },
+      ],
+      parts: [
+        { key: 'long',  label: 'Buy arrows',  color: '#2ebd85', noHide: true },
+        { key: 'short', label: 'Sell arrows', color: '#f6465d', noHide: true },
+        { key: 'sl',    label: 'Latest stop',   color: '#ff8799' },
+        { key: 'tp',    label: 'Latest target', color: '#50edbc' },
+        { key: 'entry', label: 'Latest entry',  color: '#8fa3c8' },
+      ],
+      note: bot.blurb + '  Arrows sit on the candle the bot would have acted on (closed candles only), with its score and, for Max Assurance, the size multiplier it earned. The dotted lines are the stop, target and entry of its most recent call, drawn from that candle to now. Display only — the paper bot decides its own trades.',
+      build(ctx, cfg){
+        const r = StratInd.latest(botId, cfg);
+        if (!r || !ctx.v.length) return [];
+        const last = ctx.v[ctx.v.length - 1].time;
+        const line = (key, val, style) => (val > 0 ? { key, type: 'line', lineStyle: style, width: 1,
+          data: [{ time: r.time, value: val }, { time: last, value: val }] } : null);
+        return [line('sl', r.sl, 2), line('tp', r.tp, 2), line('entry', r.entry, 3)].filter(Boolean);
+      },
+    };
+    INDS.push(def);
+    IND_BY_ID[id] = def;
+    if (typeof Chart !== 'undefined' && Chart.settings){
+      const saved = (typeof lsGet === 'function') ? lsGet('astra_ind', {}) : {};
+      Chart.settings[id] = Object.assign({}, def.def, saved[id] || {});
+    }
+    return def;
   },
 };
 
@@ -146,3 +264,4 @@ const StratIndReg = {
 };
 
 if (typeof BOTS !== 'undefined') for (const bot of BOTS) StratIndReg.add(bot);
+for (const id of StratInd.SIGNAL_BOTS) SigIndReg.add(id);
