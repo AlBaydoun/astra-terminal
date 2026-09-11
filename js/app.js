@@ -412,7 +412,7 @@ const App = {
       const def=IND_BY_ID[control?.dataset.id || control?.dataset.mid];
       /* the bot-strategy overlays register after the catalogue and carry no
          category of their own; they get a tab rather than swelling "More" */
-      row.dataset.category=def?.category||(def&&/^bot_/.test(def.id)?'bots':'other');
+      row.dataset.category=def?.category||(def&&/^(bot|sig)_/.test(def.id)?'bots':'other');
       row.dataset.search=[def?.id,def?.label,def?.note,def?.category,row.querySelector('.main')?.textContent,
         row.querySelector('#i_pat')?'candlestick bullish bearish engulfing hammer doji shooting star patterns':''].filter(Boolean).join(' ').toLowerCase();
     }
@@ -452,8 +452,7 @@ const App = {
         ? `<select class="tsel" data-id="${def.id}" data-k="src" title="Apply to — which price this reads">` +
           IND.SOURCES.map(([v, l]) => `<option value="${v}"${v === (c.src || 'close') ? ' selected' : ''}>${l}</option>`).join('') +
           '</select>' : '';
-      const target = `<select class="tsel indTarget" data-id="${def.id}" data-k="target" title="Which window to draw it in">` +
-        IND_TARGETS.map(([v, l]) => `<option value="${v}"${v === c.target ? ' selected' : ''}>${l}</option>`).join('') + '</select>';
+      const target = this.targetPicker(def.id, c);
 
       /* --- STYLE: colour, thickness, dash and per-line visibility --- */
       const hidden = c.hidden || {};
@@ -470,7 +469,8 @@ const App = {
 
       /* --- VISIBILITY: which timeframes it appears on --- */
       const tfs = c.tfs || CFG.TFS.map(t => t[0]);
-      const vis = CFG.TFS.map(([v, lbl]) =>
+      const vis = `<label class="stTf eyeTick" title="Untick to hide it for now — it keeps every setting and comes back when ticked"><input type="checkbox" data-id="${def.id}" data-k="visible"${c.visible === false ? '' : ' checked'}>Shown</label>` +
+        CFG.TFS.map(([v, lbl]) =>
         `<label class="stTf"><input type="checkbox" data-id="${def.id}" data-tf="${v}"${tfs.includes(v) ? ' checked' : ''}>${lbl}</label>`).join('') +
         `<button class="bMini" data-alltf="${def.id}">All</button>`;
 
@@ -495,6 +495,7 @@ const App = {
     host.querySelectorAll('[data-alltf]').forEach(b => b.addEventListener('click', () => {
       host.querySelectorAll(`[data-id="${b.dataset.alltf}"][data-tf]`).forEach(x => { x.checked = true; });
     }));
+    this.bindTargetPickers();
 
     const tabs = document.getElementById('indTabs');
     tabs.querySelectorAll('button').forEach(btn => {
@@ -509,7 +510,7 @@ const App = {
     document.getElementById('indRsiMacd').onclick=()=>{
       for(const [id,target] of [['rsi','p1'],['macd_mt5','p2']]){
         host.querySelector(`[data-id="${id}"][data-k="on"]`).checked=true;
-        host.querySelector(`[data-id="${id}"][data-k="target"]`).value=target;
+        host.querySelectorAll(`[data-id="${id}"][data-win]`).forEach(x=>{ x.checked=x.dataset.win===target; x.closest('.itChip').classList.toggle('on',x.checked); });
       }
       document.getElementById('indSearch').value='';
       document.querySelector('[data-ind-folder="oscillators"]').click();
@@ -525,7 +526,7 @@ const App = {
     document.getElementById('indTabs').querySelectorAll('button')
       .forEach(b => b.classList.toggle('active', b.dataset.itab === t));
     document.getElementById('indHint').textContent =
-      t === 'inputs' ? 'Settings and the price each indicator reads. “Show in” chooses the price chart or one of three windows — two indicators pointed at the same window are drawn together.'
+      t === 'inputs' ? 'Settings and the price each indicator reads. “Show in” — tick the price chart, any of the three windows, or all of them; the same study is then drawn in every window you ticked. Two indicators pointed at the same window are drawn together.'
       : t === 'style' ? 'Colour of every individual line, its thickness and whether it is solid or dashed. The tick beside a colour hides just that line while keeping the rest.'
       : 'Choose the timeframes each indicator appears on — for example show a 200-period average only from 15m upwards, so it does not clutter a 1-second chart.';
   },
@@ -569,8 +570,7 @@ const App = {
         IND.SOURCES.map(([v, l]) => `<option value="${v}"${v === (c.src || 'close') ? ' selected' : ''}>${l}</option>`).join('') +
         '</select></label>' : '';
 
-    const target = `<label class="ipRow"><span>Show in</span><select class="tsel" data-id="${id}" data-k="target">` +
-      IND_TARGETS.map(([v, l]) => `<option value="${v}"${v === (c.target || 'main') ? ' selected' : ''}>${l}</option>`).join('') + '</select></label>';
+    const target = `<label class="ipRow"><span>Show in</span>${this.targetPicker(id, c)}</label>`;
 
     const hidden = c.hidden || {};
     const lines = parts.map(pt =>
@@ -663,9 +663,21 @@ const App = {
 
   /* reads the controls of one card or of the whole list — both dialogs share the
      same data- attributes, so the writing side exists exactly once */
+  /* "Show in": one tick per window, so a study can sit on the price chart
+     AND in a window, or in every window at once. Untick everything and it
+     falls back to the price chart rather than vanishing. */
+  targetPicker(id, c){
+    const on = Chart.targetsOf(c);
+    return `<span class="indTargets" title="Tick every window this should be drawn in">` +
+      IND_TARGETS.map(([v, l]) =>
+        `<label class="itChip${on.includes(v) ? ' on' : ''}"><input type="checkbox" data-id="${id}" data-win="${v}"${on.includes(v) ? ' checked' : ''}>${l}</label>`).join('') +
+      `<button type="button" class="bMini" data-allwin="${id}">All</button></span>`;
+  },
+
   readIndControls(sel){
     const S = Chart.settings;
     const tfSeen = {};
+    const winSeen = {};
     document.querySelectorAll(sel + ' [data-id]').forEach(el => {
       const cfg = S[el.dataset.id];
       if (!cfg) return;
@@ -685,6 +697,11 @@ const App = {
         if (el.checked) list.push(el.dataset.tf);
         return;
       }
+      if (el.dataset.win){                      /* which windows it is drawn in */
+        const list = winSeen[el.dataset.id] = winSeen[el.dataset.id] || [];
+        if (el.checked) list.push(el.dataset.win);
+        return;
+      }
       const k = el.dataset.k;
       if (el.type === 'checkbox') cfg[k] = el.checked;
       else if (el.type === 'number'){
@@ -701,6 +718,34 @@ const App = {
       else cfg[k] = el.value;
     });
     for (const [id, list] of Object.entries(tfSeen)) if (S[id]) S[id].tfs = list;
+    for (const [id, list] of Object.entries(winSeen)){
+      if (!S[id]) continue;
+      const def = IND_BY_ID[id];
+      const targets = list.length ? list : [(def && def.def && def.def.target) || 'main'];
+      S[id].targets = targets;
+      S[id].target = targets[0];
+    }
+  },
+
+  /* the All button and the highlighted chip for the "Show in" ticks — a
+     document-level handler, so it serves the list dialog and the properties
+     card alike, however often they are re-rendered */
+  bindTargetPickers(){
+    if (this._winBound) return;
+    this._winBound = true;
+    document.addEventListener('click', e => {
+      const all = e.target.closest && e.target.closest('[data-allwin]');
+      if (all){
+        e.preventDefault();
+        document.querySelectorAll(`[data-id="${all.dataset.allwin}"][data-win]`).forEach(x => {
+          x.checked = true; x.closest('.itChip').classList.add('on');
+        });
+      }
+    });
+    document.addEventListener('change', e => {
+      const cb = e.target;
+      if (cb && cb.dataset && cb.dataset.win) cb.closest('.itChip').classList.toggle('on', cb.checked);
+    });
   },
 
   applyIndicators(){

@@ -956,6 +956,15 @@ select#chartType {
 .indHint { color: var(--dim); font-size: 11.5px; line-height: 1.5; margin: 2px 0 10px; }
 .indParams { display: flex; gap: 4px; align-items: center; }
 .indTarget { min-width: 96px; }
+/* "Show in" — one tick per window */
+.indTargets{ display:inline-flex; flex-wrap:nowrap; gap:4px; align-items:center; }
+.itChip{
+  display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border:1px solid var(--border-soft);
+  border-radius:10px; font-size:11px; color:var(--dim); cursor:pointer; user-select:none; white-space:nowrap;
+}
+.itChip input{ margin:0; width:12px; height:12px; }
+.itChip.on{ color:var(--accent); border-color:rgba(0,229,255,.45); background:rgba(0,229,255,.08); }
+.ipRow .indTargets{ margin-left:auto; }
 #indList .indRow label.main { flex: 1; min-width: 120px; }
 
 /* ============ DROPDOWN READABILITY ============
@@ -1169,6 +1178,12 @@ body.resizing iframe, body.resizing canvas { pointer-events: none; }
 .ilg:hover{ background:rgba(120,150,220,.14); }
 .ilgX{ opacity:0; margin-left:5px; color:var(--dim); font-weight:700; cursor:pointer; }
 .ilg:hover .ilgX{ opacity:1; }
+/* the eye: hide for now / show again, without losing the indicator */
+.ilgEye{ opacity:0; margin-left:6px; color:var(--dim); font-weight:400; cursor:pointer; font-size:11px; }
+.ilg:hover .ilgEye, .ilgHidden .ilgEye{ opacity:1; }
+.ilgEye:hover{ color:var(--accent); }
+.ilgHidden i{ opacity:.45; text-decoration:line-through; }
+.eyeTick{ margin-right:6px; padding-right:6px; border-right:1px solid var(--border-soft); }
 .ilgX:hover{ color:var(--red,#f6465d); }
 
 

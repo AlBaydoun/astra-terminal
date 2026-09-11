@@ -43,18 +43,29 @@ const WorkspaceUI = {
     return `<div class="wsNavTop"><span class="wsEyebrow">YOUR WORKSPACE</span>
       <label class="wsSearch">${this.icon('search')}<input id="wsBotSearch" type="search" aria-label="Search bots and pages" placeholder="Find a bot or page…" value="${esc(this.query)}" autocomplete="off"></label></div>
       <div class="wsNavGroups">` + ['Overview','Trading desk','Scanners & research','Strategy bots','Settings & safety'].map(group =>
-      `<section class="wsNavGroup"><h3>${esc(group)}</h3>` + entries.filter(b => this.group(b) === group).map(b =>
-        `<button data-bot="${esc(b.id)}" data-ws-search="${esc((this.name(b)+' '+group).toLowerCase())}" class="${b.id === active ? 'active' : ''}"${b.id === active ? ' aria-current="page"' : ''}>
-        ${this.icon(this.botIcon(b))}<span>${esc(this.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</button>`).join('') + '</section>').join('') +
+      `<section class="wsNavGroup" data-ws-group="${esc(group)}"><h3>${esc(group)}</h3>` + (() => {
+        const members = Bots.ordered(entries.filter(b => this.group(b) === group));
+        const ids = members.map(b => b.id).join(',');
+        return members.map((b, i) =>
+        `<div class="wsNavItem"><button data-bot="${esc(b.id)}" data-ws-search="${esc((this.name(b)+' '+group).toLowerCase())}" class="${b.id === active ? 'active' : ''}"${b.id === active ? ' aria-current="page"' : ''}>
+        ${this.icon(this.botIcon(b))}<span>${esc(this.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</button>` +
+        `<span class="wsMove"><button type="button" data-mv="-1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>` +
+        `<button type="button" data-mv="1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move down"${i === members.length - 1 ? ' disabled' : ''}>▼</button></span></div>`).join('');
+      })() + '</section>').join('') +
       '<p class="wsNoResults" hidden>No matching bot or page. Clear the search to see everything.</p></div>';
   },
   bindNav(nav){
     nav.querySelector('#wsBotSearch').addEventListener('input', e => { this.query = e.target.value; this.filterNav(nav); });
+    nav.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      Bots.moveBot(b.dataset.mvid, +b.dataset.mv, b.dataset.mvgroup.split(','));
+    }));
     this.filterNav(nav);
   },
   filterNav(nav){
     const q = this.query.trim().toLowerCase();
     nav.querySelectorAll('[data-bot]').forEach(b => { b.hidden = !b.dataset.wsSearch.includes(q); });
+    nav.querySelectorAll('.wsNavItem').forEach(it => { it.hidden = !!it.querySelector('[data-bot][hidden]'); });
     nav.querySelectorAll('.wsNavGroup').forEach(g => { g.hidden = !g.querySelector('[data-bot]:not([hidden])'); });
     nav.querySelector('.wsNoResults').hidden = !!nav.querySelector('[data-bot]:not([hidden])');
   },

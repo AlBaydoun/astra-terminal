@@ -6,16 +6,51 @@ Object.assign(Bots, {
     if (!this.manualTimer) this.manualTimer = setInterval(() => {
       if (this.active === 'manual') this.manualCalc();
     }, 5000);
+    this.renderNav();
+  },
+
+  /* the list on the left — re-run whenever its order changes */
+  renderNav(){
     const nav = document.getElementById('botNav');
-    nav.innerHTML = typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.nav(this.active) : `<button data-bot="permissions"${this.active === 'permissions' ? ' class="active"' : ''}>Instrument permissions</button>` + BOTS.map(b =>
+    if (!nav) return;
+    nav.innerHTML = typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.nav(this.active) : `<button data-bot="permissions"${this.active === 'permissions' ? ' class="active"' : ''}>Instrument permissions</button>` + this.ordered(BOTS).map(b =>
       `<button data-bot="${b.id}"${b.id === this.active ? ' class="active"' : ''}>${esc(b.name)}</button>`).join('');
     nav.querySelectorAll('[data-bot]').forEach(btn => btn.addEventListener('click', () => {
       this.active = btn.dataset.bot;
-      nav.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === btn));
+      nav.querySelectorAll('button[data-bot]').forEach(x => x.classList.toggle('active', x === btn));
       this.render();
       document.getElementById('botBody').scrollTop = 0;
     }));
     if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.bindNav(nav);
+  },
+
+  /* ---- your own order for the bot lists ----
+     Saved as a list of ids. Bots you have never moved keep the registry order
+     after the ones you have. New storage key; ledgers and settings untouched. */
+  ORDER_KEY: 'astra_botorder',
+  botOrder(){ return lsGet(this.ORDER_KEY, []) || []; },
+  ordered(list){
+    const rank = {}; this.botOrder().forEach((id, i) => { rank[id] = i; });
+    const base = {}; list.forEach((b, i) => { base[b.id] = i; });
+    return list.slice().sort((a, b) => {
+      const ra = rank[a.id], rb = rank[b.id];
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return base[a.id] - base[b.id];
+    });
+  },
+  /* move one entry up or down inside its own group of the sidebar */
+  moveBot(id, dir, groupIds){
+    const list = this.ordered(groupIds.map(g => ({ id: g }))).map(b => b.id);
+    const i = list.indexOf(id), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return false;
+    list.splice(i, 1); list.splice(j, 0, id);
+    /* keep the saved order complete for this group, leave other groups as saved */
+    const saved = this.botOrder().filter(x => !list.includes(x));
+    lsSet(this.ORDER_KEY, saved.concat(list));
+    this.renderNav();
+    return true;
   },
 
   h(v, d){ return v == null || isNaN(v) ? '—' : (d != null ? v.toFixed(d) : fmtNum(v)); },

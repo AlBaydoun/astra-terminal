@@ -221,6 +221,7 @@ const Chart = {
     if (markers.length > 4000) markers.splice(0, markers.length - 4000);
     const patternCount=markers.length;
     if (typeof ConfluenceOverlay !== 'undefined') markers.push(...ConfluenceOverlay.markers(v));
+    if (typeof StratInd !== 'undefined' && StratInd.markers) markers.push(...StratInd.markers(v));
     markers.sort((a,b)=>a.time-b.time);
     /* the whole set, not a tail slice — this line was the real limit */
     try { this.priceSeries.setMarkers(markers); } catch(e){}
@@ -288,12 +289,24 @@ const Chart = {
     return out;
   },
 
+  /* Every window an indicator is drawn in. `targets` (a list) is the new
+     form; `target` (one window) is what older layouts saved, and is kept in
+     step as the first entry so nothing that still reads it breaks. */
+  targetsOf(cfg){
+    if (!cfg) return ['main'];
+    const known = IND_TARGETS.map(t => t[0]);
+    let list = Array.isArray(cfg.targets) ? cfg.targets.filter(t => known.includes(t)) : [];
+    if (!list.length) list = [known.includes(cfg.target) ? cfg.target : 'main'];
+    return list.filter((t, i) => list.indexOf(t) === i);
+  },
+
   /* which extra windows are needed right now, in fixed order */
   neededPanes(){
     const want = [];
     for (const d of INDS){
       const c = this.settings[d.id];
-      if (c && c.on && c.target && c.target !== 'main' && want.indexOf(c.target) === -1) want.push(c.target);
+      if (!c || !c.on) continue;
+      for (const t of this.targetsOf(c)) if (t !== 'main' && want.indexOf(t) === -1) want.push(t);
     }
     return IND_TARGETS.map(t => t[0]).filter(t => t !== 'main' && want.indexOf(t) !== -1);
   },
@@ -324,7 +337,7 @@ const Chart = {
     /* name each window after what it holds, and give it the overlay / split
        switch once it is holding more than one thing */
     for (const key of Object.keys(this.panes)){
-      const names = INDS.filter(d => this.settings[d.id] && this.settings[d.id].on && this.settings[d.id].target === key)
+      const names = INDS.filter(d => this.settings[d.id] && this.settings[d.id].on && this.targetsOf(this.settings[d.id]).includes(key))
         .map(d => d.label);
       const tag = this.panes[key].el.querySelector('.paneTag');
       if (tag) tag.textContent = names.join('  ·  ');
@@ -400,13 +413,15 @@ const Chart = {
       const cfg = this.settings[def.id];
       if (!cfg || !cfg.on) continue;
       if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
-      const t = cfg.target || 'main';
-      if (t === 'main') continue;
-      const m = map[t] = map[t] || {};
-      const key = this.scaleKey(def);
-      if (!m[key]){
-        const slot = Object.keys(m).length;
-        m[key] = { id: slot === 0 ? 'right' : 'ov_' + key, slot, total: 0 };
+      if (cfg.visible === false) continue;      /* hidden with the eye takes no band */
+      for (const t of this.targetsOf(cfg)){
+        if (t === 'main') continue;
+        const m = map[t] = map[t] || {};
+        const key = this.scaleKey(def);
+        if (!m[key]){
+          const slot = Object.keys(m).length;
+          m[key] = { id: slot === 0 ? 'right' : 'ov_' + key, slot, total: 0 };
+        }
       }
     }
     for (const [target, groups] of Object.entries(map)){
@@ -541,11 +556,6 @@ const Chart = {
       /* an indicator can be restricted to certain timeframes, so a 200-period
          average need not clutter a 1-second chart */
       if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
-      const target = this.chartFor(cfg.target) ? cfg.target : 'main';
-      const chart = this.chartFor(target);
-      if (!chart) continue;
-      const band = (scales[target] || {})[this.scaleKey(def)] || null;
-      const scaleId = (band && band.id) || 'right';
       let specs;
       try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
       /* apply the look chosen in the dialog: colour per line, thickness, dash */
@@ -557,12 +567,23 @@ const Chart = {
         if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
       }
       this.specCache[def.id] = { def, cfg, specs };
+      /* hidden with the eye: it stays in the list and the legend, keeps every
+         setting, and simply is not drawn until the eye is clicked again */
+      if (cfg.visible === false) continue;
       /* MetaTrader's Levels and Scale tabs, for every indicator: the user's
          level list rides on the indicator's first line, and the scale choice
          travels with every line so the window obeys it */
       this.applyUserLevels(def, cfg, specs);
+      /* the same study can sit in several windows at once — one series per
+         window, each keyed by where it lives */
+      for (const want of this.targetsOf(cfg)){
+      const target = this.chartFor(want) ? want : 'main';
+      const chart = this.chartFor(target);
+      if (!chart) continue;
+      const band = (scales[target] || {})[this.scaleKey(def)] || null;
+      const scaleId = (band && band.id) || 'right';
       for (const spec of specs){
-        const id = def.id + '|' + spec.key;
+        const id = def.id + '|' + spec.key + '@' + target;
         /* individual lines can be switched off (Bollinger middle band, say) */
         if (cfg.hidden && cfg.hidden[spec.key]) continue;
         /* an indicator with nothing to show (e.g. daily pivots on a one-day range)
@@ -601,6 +622,7 @@ const Chart = {
         } else {
           try { entry.s.setData(spec.data); } catch(e){}
         }
+      }
       }
     }
     /* remove what is no longer switched on */
@@ -651,15 +673,17 @@ const Chart = {
     for (const def of INDS){
       const c = this.specCache[def.id];
       if (!c) continue;
-      if ((c.cfg.target || 'main') !== target) continue;
+      if (!this.targetsOf(c.cfg).includes(target)) continue;
       if (c.cfg.tfs && c.cfg.tfs.length && !c.cfg.tfs.includes(STORE.tf)) continue;
       if (target === 'main' && def.id === 'vol') continue;   // volume already in the main legend
-      const vals = c.specs.map(sp =>
+      const hidden = c.cfg.visible === false;
+      const vals = hidden ? '<b class="dim2">hidden</b>' : c.specs.map(sp =>
         `<b style="color:${sp.color}">${esc(this.fmtInd(this.valueAt(sp.data, time)))}</b>`).join(' ');
-      out.push(`<span class="ilg" data-ind="${def.id}" title="Click to edit ${esc(def.label)}">` +
+      out.push(`<span class="ilg${hidden ? ' ilgHidden' : ''}" data-ind="${def.id}" title="Click to edit ${esc(def.label)}">` +
         `<i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
         `${esc(def.label)}${esc(this.paramText(def, c.cfg))}</i> ${vals}` +
-        `<b class="ilgX" data-indoff="${def.id}" title="Remove from the chart">×</b></span>`);
+        `<b class="ilgEye" data-indeye="${def.id}" title="${hidden ? 'Show again' : 'Hide for now (keeps its settings)'}">${hidden ? '◌' : '◉'}</b>` +
+        `<b class="ilgX" data-indoff="${def.id}" data-indwin="${target}" title="Remove from this window">×</b></span>`);
     }
     return out.join('');
   },
@@ -670,11 +694,24 @@ const Chart = {
     if (this._legendBound) return;
     this._legendBound = true;
     document.addEventListener('click', e => {
+      const eye = e.target.closest && e.target.closest('[data-indeye]');
+      if (eye){
+        e.stopPropagation();
+        const cfg = this.settings[eye.dataset.indeye];
+        if (cfg){ cfg.visible = cfg.visible === false; lsSet('astra_ind', this.settings); this.renderAll(); }
+        return;
+      }
       const off = e.target.closest && e.target.closest('[data-indoff]');
       if (off){
         e.stopPropagation();
         const cfg = this.settings[off.dataset.indoff];
-        if (cfg){ cfg.on = false; lsSet('astra_ind', this.settings); this.renderAll(); }
+        if (cfg){
+          /* drawn in several windows: the × takes it out of this one only */
+          const rest = this.targetsOf(cfg).filter(t => t !== off.dataset.indwin);
+          if (off.dataset.indwin && rest.length){ cfg.targets = rest; cfg.target = rest[0]; }
+          else cfg.on = false;
+          lsSet('astra_ind', this.settings); this.renderAll();
+        }
         return;
       }
       const tag = e.target.closest && e.target.closest('.ilg[data-ind]');

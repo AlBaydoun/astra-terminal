@@ -172,7 +172,8 @@ const BOTS = [
   {
     id: 'conviction', name: 'Max Assurance (conviction)',
     blurb: 'The risky one — and risk done the only way it can pay: by concentrating, not by trading more. It polls five independent engines on the same candle (Triple Confirmation, Pattern Pro, Regime Pullback, Mean Reversion and ASTRA Confluence) plus the higher-timeframe trend, and stays out unless at least three agree with nobody strongly against. Every vote above the minimum puts more on the table, up to 3× the base risk — and never past the ceiling you set here. Its chart indicator shows every candle it would have called a very good trade.',
-    /* Starts PAUSED, base risk 1% and a ceiling of 3% per trade — six times the
+    /* Runs on paper from the start (the owner asked for it to trade by itself);
+       base risk 1% and a ceiling of 3% per trade — six times the
        0.5% the other bots use. The daily-loss lock is raised to match, or the
        second trade of a day would be refused by the shared 2% rule. The
        position-value budget is 300% of equity (3:1) instead of the shared
@@ -182,7 +183,7 @@ const BOTS = [
        votes said. Raising maxRiskPct is the one knob that makes this bot more
        dangerous; the engine will not let a signal pass it whatever the vote
        count says. */
-    defaults: { tf: '15m', tfAuto: false, higherTf: '1h', minScore: 75, maxOpen: 2, paused: true,
+    defaults: { tf: '15m', tfAuto: false, higherTf: '1h', minScore: 75, maxOpen: 2, paused: false,
                 minVotes: 3, minFull: 2, leanScore: 50, maxMult: 3,
                 risk: { riskPct: 1, maxRiskPct: 3, maxDailyLossPct: 6, maxNotionalPct: 300 } },
     warmup: 250, needsHigher: true, conviction: true,
@@ -285,6 +286,11 @@ const Bots = {
     for (const b of BOTS){
       this.ledgers[b.id] = BotEngine.load(b.id);
       this.cfgs[b.id] = Object.assign({}, b.defaults, lsGet('astra_botcfg_' + b.id, {}));
+      /* Max Assurance first shipped paused; the owner then asked for it to run
+         by itself. A setting saved under the old default is lifted once. */
+      if (b.id === 'conviction' && this.cfgs[b.id].paused && !lsGet('astra_conviction_auto_v1', false)){
+        this.cfgs[b.id].paused = false; lsSet('astra_botcfg_' + b.id, this.cfgs[b.id]); lsSet('astra_conviction_auto_v1', true);
+      }
     }
     this.wire();
     this.render();
