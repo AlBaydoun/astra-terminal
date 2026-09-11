@@ -170,6 +170,7 @@ const Multi = {
         if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
       }
       cell.specs[def.id] = { def, cfg, specs };
+      Chart.applyUserLevels(def, cfg, specs);
 
       /* which strip of the chart this indicator lives in */
       let scale;
@@ -186,7 +187,8 @@ const Multi = {
         if (!spec.data || !spec.data.length) continue;
         alive[id] = true;
         let entry = cell.series[id];
-        if (entry && entry.scaleId !== scale.id){
+        const lvKey = JSON.stringify([spec.levels || [], spec._scale || null]);
+        if (entry && (entry.scaleId !== scale.id || entry.lvKey !== lvKey)){
           try { cell.chart.removeSeries(entry.s); } catch(e){}
           entry = null;
         }
@@ -194,7 +196,7 @@ const Multi = {
         if (!entry){
           try {
             entry = cell.series[id] =
-              { s: Chart.makeSeries(cell.chart, spec, 'mini', def, scale), scaleId: scale.id, look };
+              { s: Chart.makeSeries(cell.chart, spec, 'mini', def, scale), scaleId: scale.id, look, lvKey };
             entry.s.setData(spec.data);
           } catch(e){ delete cell.series[id]; }
           continue;
@@ -279,6 +281,10 @@ const Multi = {
       { k: 'inds', label: 'Indicators…', icon: 'ƒ' },
       { k: 'same', label: 'Same indicators as the main chart' },
     ];
+    if (this.cells.length > 1){
+      items.push({ k: 'toall', label: 'Put this chart’s indicators on every split chart' });
+      items.push({ k: 'mainall', label: 'Main chart’s indicators on every split chart' });
+    }
     if (on.length) items.push({ k: 'clear', label: 'Remove all indicators (' + on.length + ')', danger: true });
     items.push({ sep: true });
     for (const id of this.QUICK){
@@ -335,6 +341,15 @@ const Multi = {
       this.saveMinis();
       return this.renderInds(cell);
     }
+    if (k === 'toall'){
+      const n = this.copyInds(cell, this.cells);
+      this.saveMinis();
+      return toast('Copied to ' + n + ' other split chart' + (n === 1 ? '' : 's'), 'ok');
+    }
+    if (k === 'mainall'){
+      const n = this.allFromMain();
+      return toast('Main chart’s indicators are now on all ' + n + ' split charts', 'ok');
+    }
     if (k === 'sym')
       return SymbolSearch.open(sym => { cell.sym = sym; this.saveMinis(); this.loadCell(cell); });
     if (k === 'main') return App.setSymbol(cell.sym);
@@ -354,12 +369,16 @@ const Multi = {
     if (!host) return;
     document.getElementById('miniIndTitle').textContent =
       'CHART ' + (cell.i + 2) + ' · ' + this.symLabel(cell.sym);
+    this.renderTargets(cell);
 
     host.innerHTML = INDS.filter(def => !def.mainOnly).map(def => {
       const c = this.cfgOf(cell, def);
       const parts = def.parts || [];
       const params = (def.params || []).map(p => {
         const label = p.label || App.PARAM_NAMES[p.k] || p.k;
+        if (p.kind === 'text')
+          return `<span class="stLine"><input type="text" data-mid="${def.id}" data-mk="${p.k}" value="${esc(c[p.k] == null ? '' : c[p.k])}" ` +
+            `placeholder="${esc(p.placeholder || '')}" style="width:80px" spellcheck="false"><i>${esc(label)}</i></span>`;
         return p.kind === 'sel'
           ? `<span class="stLine"><select class="tsel" data-mid="${def.id}" data-mk="${p.k}">` +
             p.opts.map(([v, l]) => `<option value="${v}"${v === c[p.k] ? ' selected' : ''}>${l}</option>`).join('') +
@@ -385,6 +404,51 @@ const Multi = {
     App.showModal('miniIndModal');
   },
 
+  /* ---- which split charts the dialog writes to ----
+     One chip per split chart; the chart the dialog was opened from is always
+     ticked. "All" and "Only this" are shortcuts, nothing more. */
+  renderTargets(cell){
+    const host = document.getElementById('miniIndTargets');
+    if (!host) return;
+    const chips = this.cells.map(c =>
+      `<label class="mtChip${c === cell ? ' me' : ''}"><input type="checkbox" data-mtarget="${c.i}"` +
+      `${c === cell ? ' checked disabled' : ''}> ${c.i + 2} · ${esc(this.symLabel(c.sym))} <small>${esc(c.tf)}</small></label>`).join('');
+    host.innerHTML = `<span class="mtLabel">Apply to</span>${chips}` +
+      `<button class="bMini" data-mtall="1">All</button><button class="bMini" data-mtall="0">Only this</button>`;
+    host.querySelectorAll('[data-mtall]').forEach(b => b.addEventListener('click', () => {
+      const all = b.dataset.mtall === '1';
+      host.querySelectorAll('[data-mtarget]').forEach(cb => { if (!cb.disabled) cb.checked = all; });
+    }));
+  },
+
+  targets(cell){
+    const picked = [...document.querySelectorAll('#miniIndTargets [data-mtarget]:checked')]
+      .map(cb => this.cellByIndex(cb.dataset.mtarget)).filter(Boolean);
+    return picked.length ? picked : [cell];
+  },
+
+  /* copy one chart's indicator set onto others — a deep copy, so a later
+     edit on one chart never leaks into the rest */
+  copyInds(from, toCells){
+    const src = JSON.parse(JSON.stringify(from.inds || {}));
+    let n = 0;
+    for (const c of toCells){
+      if (c === from) continue;
+      c.inds = JSON.parse(JSON.stringify(src));
+      this.renderInds(c); n++;
+    }
+    return n;
+  },
+
+  /* the main chart's indicators onto every split chart */
+  allFromMain(){
+    if (!this.cells.length) return 0;
+    const src = this.fromMain();
+    for (const c of this.cells){ c.inds = JSON.parse(JSON.stringify(src)); this.renderInds(c); }
+    this.saveMinis();
+    return this.cells.length;
+  },
+
   bindPicker(){
     const apply = document.getElementById('miniIndApply');
     if (!apply) return;
@@ -392,9 +456,12 @@ const Multi = {
       const cell = this.pickCell;
       if (!cell) return;
       this.readPicker(cell);
+      const others = this.targets(cell).filter(c => c !== cell);
+      const n = this.copyInds(cell, others);
       this.saveMinis();
       App.hideModal('miniIndModal');
       this.renderInds(cell);
+      if (n) toast('Applied to ' + (n + 1) + ' split charts', 'ok');
     });
     const same = document.getElementById('miniIndSame');
     if (same) same.addEventListener('click', () => {

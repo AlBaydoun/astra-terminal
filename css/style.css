@@ -1844,3 +1844,52 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 .indFolders{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.indFolders button{padding:9px 13px;border:1px solid var(--border);border-radius:7px;background:var(--field);color:var(--text);cursor:pointer}.indFolders button.active{border-color:#00b8cc;background:rgba(0,184,204,.13);color:#00b8cc}#indRsiMacd{margin-bottom:10px}
 /* Keep the price chart visible when several oscillator windows share a short chart area. Saved pane heights remain preferred sizes and may shrink to fit. */
 #chartArea #mainWrap{flex:1 0 40%;min-height:80px}#chartArea .pane.open{flex-shrink:1;min-height:36px}
+
+/* ============ INDICATOR DIALOGS: wider, Apply always in reach ============ */
+#indModal .mBox, #indPropModal .mBox, #miniIndModal .mBox{ width:min(1080px, 94vw); max-height:88vh; }
+#indModal .mBody, #miniIndModal .mBody, #indPropModal .mBody{ display:flex; flex-direction:column; min-height:0; }
+#indList, #miniIndList{ flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; }
+/* the APPLY button sits on a shelf that never scrolls away */
+#miniIndModal .ipBtns, #indPropModal .ipBtns{
+  position:sticky; bottom:0; z-index:3; margin-top:10px;
+  padding:10px 0 2px; background:linear-gradient(180deg, rgba(8,13,28,0), #080d1c 40%);
+}
+/* the button keeps its own bright face; the shelf under it is a shadow, not a
+   background — painting a dark gradient ON the button made it near-invisible */
+#indApplyRow{
+  position:sticky; bottom:0; z-index:3; margin-top:10px;
+  padding:10px 0 2px; background:linear-gradient(180deg, rgba(8,13,28,0), #080d1c 40%);
+}
+#indApply{ box-shadow:0 -16px 18px -4px #080d1c; }
+#indApplyAll{ white-space:nowrap; }
+
+/* which split charts an indicator dialog writes to */
+.mtRow{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:4px 0 10px; }
+.mtRow:empty{ display:none; }
+.mtLabel{ font-family:var(--font-head); font-size:11px; letter-spacing:.6px; color:var(--dim); margin-right:2px; }
+.mtChip{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--border-soft);
+  border-radius:12px; font-size:12px; cursor:pointer; user-select:none;
+}
+.mtChip small{ color:var(--dim); }
+.mtChip.me{ border-color:rgba(0,229,255,.45); color:var(--accent); }
+.mtChip:has(input:checked){ background:rgba(0,229,255,.08); }
+.mtChip input{ margin:0; }
+
+/* a ⚙ on every row of the list opens the full properties card */
+.indProps{
+  margin-left:6px; background:transparent; border:1px solid var(--border-soft); border-radius:5px;
+  color:var(--dim); cursor:pointer; font-size:12px; line-height:1; padding:2px 6px;
+}
+.indProps:hover{ color:var(--accent); border-color:rgba(0,229,255,.45); }
+
+/* the properties card's tabs, in MetaTrader's order */
+.ipTabs{ display:flex; gap:2px; margin:6px 0 10px; border-bottom:1px solid var(--line); }
+.ipTabs button{
+  background:transparent; border:0; border-bottom:2px solid transparent; color:var(--dim);
+  font-family:var(--font-head); font-size:13px; font-weight:600; letter-spacing:.4px;
+  padding:7px 12px; cursor:pointer; margin-bottom:-1px;
+}
+.ipTabs button:hover{ color:var(--text); }
+.ipTabs button.on{ color:var(--accent); border-bottom-color:var(--accent); }
+.ipPage[hidden]{ display:none; }

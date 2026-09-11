@@ -252,6 +252,13 @@ const App = {
 
     document.getElementById('indBtn').addEventListener('click', () => this.openIndicators());
     document.getElementById('indApply').addEventListener('click', () => this.applyIndicators());
+    const applyAll = document.getElementById('indApplyAll');
+    if (applyAll) applyAll.addEventListener('click', () => {
+      this.applyIndicators();
+      const n = typeof Multi !== 'undefined' && Multi.allFromMain ? Multi.allFromMain() : 0;
+      toast(n ? 'Applied to the main chart and ' + n + ' split chart' + (n === 1 ? '' : 's')
+              : 'Applied — open a split layout to put the same indicators on more charts', n ? 'ok' : 'info');
+    });
     document.getElementById('alertBtn').addEventListener('click', () => Alerts.openModal());
 
     /* compare overlay */
@@ -403,7 +410,9 @@ const App = {
     for(const row of rows){
       const control=row.querySelector('[data-id],[data-mid]');
       const def=IND_BY_ID[control?.dataset.id || control?.dataset.mid];
-      row.dataset.category=def?.category||'other';
+      /* the bot-strategy overlays register after the catalogue and carry no
+         category of their own; they get a tab rather than swelling "More" */
+      row.dataset.category=def?.category||(def&&/^bot_/.test(def.id)?'bots':'other');
       row.dataset.search=[def?.id,def?.label,def?.note,def?.category,row.querySelector('.main')?.textContent,
         row.querySelector('#i_pat')?'candlestick bullish bearish engulfing hammer doji shooting star patterns':''].filter(Boolean).join(' ').toLowerCase();
     }
@@ -433,6 +442,9 @@ const App = {
         if (p.kind === 'sel')
           return `<select class="tsel" data-id="${def.id}" data-k="${p.k}">` +
             p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>';
+        if (p.kind === 'text')
+          return `<input type="text" data-id="${def.id}" data-k="${p.k}" value="${esc(val == null ? '' : val)}" ` +
+            `placeholder="${esc(p.placeholder || '')}" style="width:84px" title="${esc(p.label || p.k)}" spellcheck="false">`;
         return `<input type="number" data-id="${def.id}" data-k="${p.k}" value="${val}" ` +
           `min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''} style="width:52px" title="${p.k}">`;
       }).join('');
@@ -465,13 +477,21 @@ const App = {
       return `<div class="indRow">` +
         `<label class="main"><input type="checkbox" data-id="${def.id}" data-k="on"${on}>` +
         `<span class="chip" style="background:${this.toHex(parts[0] ? parts[0].color : '#3d5a80')}"></span>${esc(def.label)}` +
-        (def.note ? `<i class="indNote" title="${esc(def.note)}">?</i>` : '') + `</label>` +
+        (def.note ? `<i class="indNote" title="${esc(def.note)}">?</i>` : '') +
+        `<button class="indProps" data-props="${def.id}" title="All properties — parameters, levels, scale, timeframes">\u2699</button></label>` +
         `<span class="indPane inputs"><span class="indParams">${params}${applyTo}</span>${target}</span>` +
         `<span class="indPane style">${style}</span>` +
         `<span class="indPane vis">${vis}</span>` +
         `</div>`;
     }).join('');
 
+    /* the ⚙ opens the full MetaTrader-style card for that one indicator; the
+       list's own pending edits are read first so nothing typed here is lost */
+    host.querySelectorAll('[data-props]').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      this.readIndControls('#indList');
+      this.openIndProps(b.dataset.props);
+    }));
     host.querySelectorAll('[data-alltf]').forEach(b => b.addEventListener('click', () => {
       host.querySelectorAll(`[data-id="${b.dataset.alltf}"][data-tf]`).forEach(x => { x.checked = true; });
     }));
@@ -521,7 +541,9 @@ const App = {
     k: '%K length', d: '%D length', smooth: 'Smoothing', mult: 'Multiplier',
     b: 'Bands (deviations)', pct: 'Percent', step: 'Step', max: 'Maximum step',
     t: 'Trigger length', type: 'Type', bars: 'Candles to score', minScore: 'Minimum to trade',
-    width: 'Thickness',
+    width: 'Thickness', levels: 'Levels', fast: 'Fast EMA', slow: 'Slow EMA', cmo: 'CMO period',
+    levelColor: 'Level colour', levelStyle: 'Level style', levelWidth: 'Level width',
+    scaleFixed: 'Fixed scale', scaleMin: 'Minimum', scaleMax: 'Maximum',
   },
 
   openIndProps(id){
@@ -536,6 +558,8 @@ const App = {
       const field = p.kind === 'sel'
         ? `<select class="tsel" data-id="${id}" data-k="${p.k}">` +
           p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>'
+        : p.kind === 'text'
+        ? `<input type="text" data-id="${id}" data-k="${p.k}" value="${esc(val == null ? '' : val)}" placeholder="${esc(p.placeholder || '')}" spellcheck="false">`
         : `<input type="number" data-id="${id}" data-k="${p.k}" value="${val}" min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''}>`;
       return `<label class="ipRow"><span>${esc(label)}</span>${field}</label>`;
     }).join('');
@@ -566,12 +590,58 @@ const App = {
       `<button class="bMini" id="ipAllTf">All</button>`;
 
     document.getElementById('indPropTitle').textContent = def.label;
+    /* ---- Levels, as MetaTrader's Levels tab: any number of lines, one
+       colour / style / width for the set, and the value printed on the axis ---- */
+    const levels = `<label class="ipRow"><span>Levels</span>
+        <input type="text" data-id="${id}" data-k="levels" value="${esc(c.levels == null ? '' : c.levels)}"
+          placeholder="e.g. 30,70 or 10,15,30,70,85,90" spellcheck="false"></label>
+      <label class="ipRow"><span>Level colour</span>
+        <input type="color" data-id="${id}" data-k="levelColor" value="${this.toHex(c.levelColor || '#40e0d0')}"></label>
+      <label class="ipRow"><span>Level style</span><select class="tsel" data-id="${id}" data-k="levelStyle">` +
+        IND_STYLES.map(([v, l]) => `<option value="${v}"${v === (c.levelStyle != null ? +c.levelStyle : 1) ? ' selected' : ''}>${l}</option>`).join('') +
+      `</select></label>
+      <label class="ipRow"><span>Level width</span>
+        <input type="number" data-id="${id}" data-k="levelWidth" data-any="1" value="${c.levelWidth || 1}" min="1" max="5"></label>
+      <label class="ipRow"><span>Value on the axis</span>
+        <input type="checkbox" data-id="${id}" data-k="levelLabels"${c.levelLabels !== false ? ' checked' : ''}></label>`;
+
+    /* ---- Scale, as MetaTrader's Scale tab ---- */
+    const rangeDef = Array.isArray(def.range) ? def.range : null;
+    const fixedNow = c.scaleFixed === true || (c.scaleFixed == null && !!def.fixed);
+    const scale = `<label class="ipRow"><span>Fixed scale</span>
+        <input type="checkbox" data-id="${id}" data-k="scaleFixed"${fixedNow ? ' checked' : ''}></label>
+      <label class="ipRow"><span>Minimum</span>
+        <input type="number" step="any" data-id="${id}" data-k="scaleMin" data-any="1"
+          value="${c.scaleMin != null ? c.scaleMin : (rangeDef ? rangeDef[0] : 0)}"></label>
+      <label class="ipRow"><span>Maximum</span>
+        <input type="number" step="any" data-id="${id}" data-k="scaleMax" data-any="1"
+          value="${c.scaleMax != null ? c.scaleMax : (rangeDef ? rangeDef[1] : 100)}"></label>
+      <div class="indHint">Unticked, the window fits itself to the line. Ticked, it is pinned between
+        the two values whatever the line does — MetaTrader pins RSI at 0–100 this way.</div>`;
+
     document.getElementById('indPropBody').innerHTML =
       (def.note ? `<div class="indHint">${esc(def.note)}</div>` : '') +
-      (params || applyTo ? `<div class="ipSec"><h4>Inputs</h4>${params}${applyTo}</div>` : '') +
-      `<div class="ipSec"><h4>Window</h4>${target}</div>` +
-      `<div class="ipSec"><h4>Style</h4>${lines}${look}</div>` +
-      `<div class="ipSec"><h4>Timeframes</h4><div class="ipTfs">${vis}</div></div>`;
+      `<div class="ipTabs">
+         <button class="on" data-iptab="params">Parameters</button>
+         <button data-iptab="levels">Levels</button>
+         <button data-iptab="scale">Scale</button>
+         <button data-iptab="vis">Visualization</button>
+       </div>
+       <div class="ipPage" data-ippage="params">
+         ${params || applyTo ? `<div class="ipSec"><h4>Inputs</h4>${params}${applyTo}</div>` : ''}
+         <div class="ipSec"><h4>Window</h4>${target}</div>
+         <div class="ipSec"><h4>Style</h4>${lines}${look}</div>
+       </div>
+       <div class="ipPage" data-ippage="levels" hidden><div class="ipSec"><h4>Levels</h4>${levels}</div></div>
+       <div class="ipPage" data-ippage="scale" hidden><div class="ipSec"><h4>Scale</h4>${scale}</div></div>
+       <div class="ipPage" data-ippage="vis" hidden><div class="ipSec"><h4>Timeframes</h4><div class="ipTfs">${vis}</div></div></div>`;
+
+    /* the tabs */
+    const body = document.getElementById('indPropBody');
+    body.querySelectorAll('[data-iptab]').forEach(btn => btn.addEventListener('click', () => {
+      body.querySelectorAll('[data-iptab]').forEach(b => b.classList.toggle('on', b === btn));
+      body.querySelectorAll('[data-ippage]').forEach(pg => { pg.hidden = pg.dataset.ippage !== btn.dataset.iptab; });
+    }));
 
     const all = document.getElementById('ipAllTf');
     if (all) all.onclick = () => document.querySelectorAll('#indPropBody [data-tf]').forEach(x => { x.checked = true; });
@@ -619,8 +689,15 @@ const App = {
       if (el.type === 'checkbox') cfg[k] = el.checked;
       else if (el.type === 'number'){
         const v = parseFloat(el.value);
-        if (!isNaN(v) && v > 0) cfg[k] = v;
-      } else if (k === 'style') cfg[k] = parseInt(el.value, 10) || 0;
+        /* a period must be positive; a scale minimum or a level may be 0 or
+           negative, and those inputs say so with data-any */
+        if (!isNaN(v) && (v > 0 || el.dataset.any)){
+          /* and never below the catalogue's minimum for that parameter */
+          const lo = el.min !== '' ? parseFloat(el.min) : -Infinity;
+          const hi = el.max !== '' ? parseFloat(el.max) : Infinity;
+          cfg[k] = Math.min(hi, Math.max(lo, v));
+        }
+      } else if (k === 'style' || k === 'levelStyle') cfg[k] = parseInt(el.value, 10) || 0;
       else cfg[k] = el.value;
     });
     for (const [id, list] of Object.entries(tfSeen)) if (S[id]) S[id].tfs = list;

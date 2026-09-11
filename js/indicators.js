@@ -85,6 +85,240 @@ const IND = {
     return out;
   },
 
+  /* =====================================================================
+     The MetaTrader 5 indicators that were still missing, so the catalogue
+     matches every page of the MT5 help: Trend, Oscillators, Volumes and
+     Bill Williams. Each follows the MT5 formula and MT5 default periods.
+     ===================================================================== */
+
+  /* Kaufman's Adaptive Moving Average — MT5 defaults: period 9, fast 2, slow 30.
+     The efficiency ratio (net move over the sum of moves) decides how fast the
+     average follows price: it speeds up in a trend and slows down in chop. */
+  ama(src, n, fast, slow){
+    const out = new Array(src.length).fill(null);
+    if (src.length <= n) return out;
+    const fastSC = 2 / (fast + 1), slowSC = 2 / (slow + 1);
+    let prev = src[n - 1];
+    out[n - 1] = prev;
+    for (let i = n; i < src.length; i++){
+      const change = Math.abs(src[i] - src[i - n]);
+      let vol = 0;
+      for (let k = i - n + 1; k <= i; k++) vol += Math.abs(src[k] - src[k - 1]);
+      const er = vol > 0 ? change / vol : 0;
+      const sc = Math.pow(er * (fastSC - slowSC) + slowSC, 2);
+      prev = prev + sc * (src[i] - prev);
+      out[i] = prev;
+    }
+    return out;
+  },
+
+  /* MT5's "Average Directional Movement Index" — the NON-Wilder one. It
+     smooths +DM, −DM and the true range with an ordinary EMA, then the DX with
+     another EMA. The existing adx() is the Wilder variant (MT5 calls that
+     "ADX Wilder"). Both are offered, as in MetaTrader. */
+  adxClassic(candles, n){
+    const len = candles.length;
+    const out = { adx: new Array(len).fill(null), pdi: new Array(len).fill(null), mdi: new Array(len).fill(null) };
+    if (len <= n + 1) return out;
+    const tr = new Array(len).fill(null), pdm = new Array(len).fill(null), mdm = new Array(len).fill(null);
+    for (let i = 1; i < len; i++){
+      const c = candles[i], p = candles[i - 1];
+      tr[i] = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+      const up = c.high - p.high, dn = p.low - c.low;
+      pdm[i] = (up > dn && up > 0) ? up : 0;
+      mdm[i] = (dn > up && dn > 0) ? dn : 0;
+    }
+    const eTr = IND.emaOver(tr, n), eP = IND.emaOver(pdm, n), eM = IND.emaOver(mdm, n);
+    const dx = new Array(len).fill(null);
+    for (let i = 0; i < len; i++){
+      if (eTr[i] == null || !(eTr[i] > 0)) continue;
+      const pdi = 100 * eP[i] / eTr[i], mdi = 100 * eM[i] / eTr[i];
+      out.pdi[i] = pdi; out.mdi[i] = mdi;
+      dx[i] = (pdi + mdi) > 0 ? 100 * Math.abs(pdi - mdi) / (pdi + mdi) : 0;
+    }
+    out.adx = IND.emaOver(dx, n);
+    return out;
+  },
+
+  /* Double and Triple EMA — MT5 default period 14. Each subtracts the lag that
+     stacking EMAs introduces, so the line hugs price more closely than a
+     single EMA of the same period. */
+  dema(src, n){
+    const e1 = IND.ema(src, n), e2 = IND.emaOver(e1, n);
+    return src.map((_, i) => (e1[i] == null || e2[i] == null) ? null : 2 * e1[i] - e2[i]);
+  },
+  tema(src, n){
+    const e1 = IND.ema(src, n), e2 = IND.emaOver(e1, n), e3 = IND.emaOver(e2, n);
+    return src.map((_, i) => (e1[i] == null || e2[i] == null || e3[i] == null) ? null : 3 * e1[i] - 3 * e2[i] + e3[i]);
+  },
+
+  /* Fractal Adaptive Moving Average (Ehlers) — MT5 default period 14, which
+     must be even because the window is split in two halves. The fractal
+     dimension of the recent range sets the smoothing: a jagged range (D near
+     2) slows the average right down, a clean trend (D near 1) lets it run. */
+  frama(candles, n){
+    const len = candles.length;
+    const out = new Array(len).fill(null);
+    const N = Math.max(2, n % 2 === 0 ? n : n + 1), half = N / 2;
+    if (len < N) return out;
+    const hi = candles.map(c => c.high), lo = candles.map(c => c.low), cl = candles.map(c => c.close);
+    let prev = cl[N - 1];
+    out[N - 1] = prev;
+    const rng = (a, b) => { let h = -Infinity, l = Infinity; for (let k = a; k <= b; k++){ if (hi[k] > h) h = hi[k]; if (lo[k] < l) l = lo[k]; } return h - l; };
+    for (let i = N; i < len; i++){
+      const n1 = rng(i - N + 1, i - half) / half;
+      const n2 = rng(i - half + 1, i) / half;
+      const n3 = rng(i - N + 1, i) / N;
+      let d = 1;
+      if (n1 + n2 > 0 && n3 > 0) d = (Math.log(n1 + n2) - Math.log(n3)) / Math.log(2);
+      let alpha = Math.exp(-4.6 * (d - 1));
+      alpha = Math.min(1, Math.max(0.01, alpha));
+      prev = alpha * cl[i] + (1 - alpha) * prev;
+      out[i] = prev;
+    }
+    return out;
+  },
+
+  /* Variable Index Dynamic Average (Chande) — MT5 defaults: CMO period 9,
+     EMA period 12. The Chande Momentum Oscillator scales the EMA's smoothing
+     factor, so the average adapts to how one-directional recent movement is. */
+  vidya(src, cmoLen, emaLen){
+    const out = new Array(src.length).fill(null);
+    if (src.length <= cmoLen) return out;
+    const alpha = 2 / (emaLen + 1);
+    let prev = src[cmoLen];
+    out[cmoLen] = prev;
+    for (let i = cmoLen + 1; i < src.length; i++){
+      let up = 0, dn = 0;
+      for (let k = i - cmoLen + 1; k <= i; k++){
+        const d = src[k] - src[k - 1];
+        if (d > 0) up += d; else dn -= d;
+      }
+      const cmo = (up + dn) > 0 ? Math.abs((up - dn) / (up + dn)) : 0;
+      prev = alpha * cmo * src[i] + (1 - alpha * cmo) * prev;
+      out[i] = prev;
+    }
+    return out;
+  },
+
+  /* Accumulation/Distribution — a running total of volume weighted by where
+     the close sat inside the bar's range. No parameters, as in MT5. */
+  ad(candles){
+    const out = new Array(candles.length).fill(null);
+    let acc = 0;
+    for (let i = 0; i < candles.length; i++){
+      const c = candles[i];
+      const range = c.high - c.low;
+      const clv = range > 0 ? ((c.close - c.low) - (c.high - c.close)) / range : 0;
+      acc += clv * (c.volume || 0);
+      out[i] = acc;
+    }
+    return out;
+  },
+
+  /* Accelerator Oscillator (Bill Williams) — AO minus a 5-period SMA of AO. */
+  ac(candles){
+    const ao = IND.ao(candles);
+    const s = IND.smaOver(ao, 5);
+    return ao.map((v, i) => (v == null || s[i] == null) ? null : v - s[i]);
+  },
+
+  /* Gator Oscillator (Bill Williams) — how far apart the Alligator's lines are:
+     the upper histogram is jaw minus teeth, the lower one is teeth minus lips
+     drawn downwards. A bar is "growing" when the gap widened since the last
+     bar, and MT5 colours it green then, red when it narrowed. */
+  gator(candles){
+    const a = IND.alligator(candles);
+    const up = candles.map((_, i) => (a.jaw[i] == null || a.teeth[i] == null) ? null : Math.abs(a.jaw[i] - a.teeth[i]));
+    const dn = candles.map((_, i) => (a.teeth[i] == null || a.lips[i] == null) ? null : -Math.abs(a.teeth[i] - a.lips[i]));
+    return { up, dn };
+  },
+
+  /* Market Facilitation Index (Bill Williams) — bar range per unit of volume,
+     with MT5's four colours: both MFI and volume up (green: the move is being
+     backed), both down (brown: fading), MFI up on falling volume (blue: fake),
+     MFI down on rising volume (pink: squat). */
+  bwmfi(candles){
+    const out = new Array(candles.length).fill(null), state = new Array(candles.length).fill(null);
+    for (let i = 0; i < candles.length; i++){
+      const c = candles[i];
+      const v = c.volume || 0;
+      out[i] = v > 0 ? (c.high - c.low) / v : null;
+      if (i > 0 && out[i] != null && out[i - 1] != null){
+        const mUp = out[i] > out[i - 1], vUp = v > (candles[i - 1].volume || 0);
+        state[i] = mUp && vUp ? 'green' : (!mUp && !vUp) ? 'brown' : (mUp && !vUp) ? 'blue' : 'pink';
+      }
+    }
+    return { mfi: out, state };
+  },
+
+  /* ---------- support and resistance ----------
+     A level is a price the market has turned at more than once. Swing highs
+     and lows (a bar higher / lower than `wing` bars either side) are collected,
+     then any that sit within `tol` of one another are merged into one level
+     whose strength is how many times it was touched, weighted towards the
+     recent ones. A level touched from both sides counts as both.
+
+     Returned newest-strongest first: [{ price, touches, kind, last, score }],
+     kind being 'support' (price turned up there), 'resistance' (turned down)
+     or 'both'. */
+  srLevels(candles, opts){
+    const o = Object.assign({ wing: 3, lookback: 300, tolAtr: 0.35, max: 8 }, opts || {});
+    const n = candles.length;
+    if (n < o.wing * 2 + 5) return [];
+    const from = Math.max(o.wing, n - o.lookback);
+    const atrArr = IND.atr(candles, 14);
+    const A = atrArr[n - 1] || (candles[n - 1].high - candles[n - 1].low) || 1e-9;
+    const tol = A * o.tolAtr;
+
+    const pts = [];
+    for (let i = from; i < n - o.wing; i++){
+      let hi = true, lo = true;
+      for (let k = 1; k <= o.wing; k++){
+        if (candles[i].high <= candles[i - k].high || candles[i].high <= candles[i + k].high) hi = false;
+        if (candles[i].low >= candles[i - k].low || candles[i].low >= candles[i + k].low) lo = false;
+        if (!hi && !lo) break;
+      }
+      if (hi) pts.push({ price: candles[i].high, i, kind: 'resistance' });
+      if (lo) pts.push({ price: candles[i].low, i, kind: 'support' });
+    }
+    if (!pts.length) return [];
+
+    /* merge into levels */
+    pts.sort((a, b) => a.price - b.price);
+    const levels = [];
+    for (const p of pts){
+      const L = levels[levels.length - 1];
+      if (L && Math.abs(p.price - L.sum / L.count) <= tol){
+        L.sum += p.price; L.count++;
+        L.last = Math.max(L.last, p.i);
+        L.kinds[p.kind] = (L.kinds[p.kind] || 0) + 1;
+        L.recency += 1 - (n - 1 - p.i) / o.lookback;
+      } else {
+        levels.push({ sum: p.price, count: 1, last: p.i, kinds: { [p.kind]: 1 },
+                      recency: 1 - (n - 1 - p.i) / o.lookback });
+      }
+    }
+    return levels.map(L => ({
+      price: L.sum / L.count,
+      touches: L.count,
+      last: L.last,
+      kind: L.kinds.support && L.kinds.resistance ? 'both' : (L.kinds.support ? 'support' : 'resistance'),
+      /* touches matter most; a recent level matters more than an old one */
+      score: L.count + L.recency,
+    })).sort((a, b) => b.score - a.score).slice(0, o.max);
+  },
+
+  /* the nearest level on each side of a price, from a srLevels() result */
+  srNear(levels, price){
+    let below = null, above = null;
+    for (const L of levels){
+      if (L.price <= price && (!below || L.price > below.price)) below = L;
+      if (L.price >= price && (!above || L.price < above.price)) above = L;
+    }
+    return { below, above };
+  },
+
   /* SMA over an array that may have leading nulls */
   smaOver(vals, n){
     const out = new Array(vals.length).fill(null);

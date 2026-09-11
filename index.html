@@ -437,7 +437,7 @@
     <div class="mHead">INDICATORS <span>ƒx</span><button class="mClose">×</button></div>
     <div class="mBody">
       <label class="indSearchBox">Search indicators<input id="indSearch" type="search" placeholder="Name or keyword: RSI, Confluence, hammer…" autocomplete="off"></label>
-      <div class="indFolders" aria-label="Indicator folders"><button data-ind-folder="all" class="active">All indicators</button><button data-ind-folder="oscillators">∿ Oscillators</button><button data-ind-folder="trend">↗ Trend</button><button data-ind-folder="other">Other &amp; custom</button></div>
+      <div class="indFolders" aria-label="Indicator folders"><button data-ind-folder="all" class="active">All</button><button data-ind-folder="trend">↗ Trend</button><button data-ind-folder="oscillators">∿ Oscillators</button><button data-ind-folder="vol">▮ Volumes</button><button data-ind-folder="bw">◉ Bill Williams</button><button data-ind-folder="other">＋ More</button><button data-ind-folder="bots">⚙ Bots</button></div>
       <button class="bBtn" id="indRsiMacd">Prepare RSI + MetaTrader MACD</button>
       <div id="indSearchCount" class="indHint" role="status"></div>
       <div id="indTabs">
@@ -449,7 +449,10 @@
       <div id="indList"></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_vp"><span class="chip" style="background:linear-gradient(90deg,#00e5ff,#ffd166)"></span>Volume Profile <small style="color:var(--dim)">(visible range)</small></label></div>
       <div class="indRow"><label class="main"><input type="checkbox" id="i_pat"><span class="chip" style="background:linear-gradient(90deg,#2ebd85,#f6465d)"></span>Candle patterns <small style="color:var(--dim)">(markers on chart)</small></label></div>
-      <button class="mPrimary" id="indApply">APPLY</button>
+      <div class="ipBtns" id="indApplyRow">
+        <button class="mPrimary" id="indApply">APPLY</button>
+        <button class="bMini" id="indApplyAll" title="Apply here and put the same indicators on every split chart">APPLY TO ALL CHARTS</button>
+      </div>
     </div>
   </div>
 </div>
@@ -461,6 +464,7 @@
       <div class="indHint">Indicators for this split chart only — the main chart keeps its own. Right-click the chart for the same list, plus the quick switches.</div>
       <label class="indSearchBox">Search split-chart indicators<input id="miniIndSearch" type="search" placeholder="Name or keyword…" autocomplete="off"></label>
       <div id="miniIndSearchCount" class="indHint" role="status"></div>
+      <div id="miniIndTargets" class="mtRow"></div>
       <div id="miniIndList"></div>
       <div class="ipBtns">
         <button class="mPrimary" id="miniIndApply">APPLY</button>

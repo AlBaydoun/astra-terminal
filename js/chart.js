@@ -17,6 +17,32 @@ const Chart = {
       patterns: Object.assign({ on: true }, saved.patterns || {}),
     };
     for (const d of INDS) out[d.id] = Object.assign({}, d.def, saved[d.id] || {});
+    /* A saved parameter outside the range the catalogue allows is put back to
+       the default. The owner's browser had RSI(1), TRIX(1) and MACD(6,1,5) in
+       storage — a period of 1 turns the RSI into a 0/100 zigzag — and nothing
+       in the app could clear it. Clamping here catches it however it got in. */
+    let repaired = false;
+    for (const d of INDS){
+      for (const prm of (d.params || [])){
+        if (prm.kind !== 'num') continue;
+        const v = out[d.id][prm.k];
+        if (v == null) continue;
+        const lo = prm.min != null ? prm.min : -Infinity, hi = prm.max != null ? prm.max : Infinity;
+        if (!(typeof v === 'number') || v < lo || v > hi){
+          out[d.id][prm.k] = d.def[prm.k];
+          repaired = true;
+        }
+      }
+    }
+    if (repaired) lsSet('astra_ind', out);
+    /* The RSI used to default to purple, and pressing APPLY once wrote that
+       colour into the saved settings — so the switch to MetaTrader's DodgerBlue
+       never showed. Swap it only where the saved colour IS the old default;
+       a colour you picked yourself is left alone. */
+    if (out.rsi && out.rsi.colors && out.rsi.colors.l === '#c084fc'){
+      out.rsi.colors.l = '#1e90ff';
+      lsSet('astra_ind', out);
+    }
     return out;
   })(),
 
@@ -421,6 +447,17 @@ const Chart = {
       lastValueVisible: false,
       crosshairMarkerVisible: false,
     };
+    /* A FIXED scale, as MetaTrader draws a bounded oscillator: the RSI window is
+       always 0 to 100, so its 30 and 70 lines stay put while the line moves.
+       Autoscaling zoomed the window to the RSI's recent wander and sent the
+       levels drifting up and down — which is what looked wrong. */
+    const sc = spec._scale || null;           /* the user's Scale tab, if set */
+    if (sc && sc.fixed && isFinite(sc.min) && isFinite(sc.max) && sc.max > sc.min){
+      base.autoscaleInfoProvider = () => ({ priceRange: { minValue: sc.min, maxValue: sc.max } });
+    } else if ((!sc || sc.fixed !== false) && def && def.fixed && Array.isArray(def.range) && def.range.length === 2){
+      const [lo, hi] = def.range;
+      base.autoscaleInfoProvider = () => ({ priceRange: { minValue: lo, maxValue: hi } });
+    }
     if (priceFormat) base.priceFormat = priceFormat;
     const s = spec.type === 'hist'
       ? chart.addHistogramSeries(Object.assign(base, spec.color ? { color: spec.color } : {}))
@@ -439,12 +476,48 @@ const Chart = {
       const margins = spec.margins || { top: 0.72, bottom: 0 };
       try { chart.priceScale(scaleId).applyOptions({ scaleMargins: margins }); } catch(e){}
     }
-    for (const [price, color] of spec.levels || [])
-      try { s.createPriceLine({ price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' }); } catch(e){}
+    /* a level is [price, colour, lineStyle, lineWidth, axisLabel]. MetaTrader's
+       levels are dotted (style 1) and print their value on the axis; ASTRA's own
+       structural lines (a zero line under a histogram) stay dashed and silent. */
+    for (const [price, color, style, width, label] of spec.levels || [])
+      try { s.createPriceLine({ price, color, lineWidth: width || 1, lineStyle: style != null ? style : 2,
+        axisLabelVisible: !!label, title: '' }); } catch(e){}
     return s;
   },
 
   ma(closes, cfg){ return (cfg.type === 'sma' ? IND.sma : IND.ema)(closes, cfg.len); },
+
+  /* ---------- Levels and Scale, as in MetaTrader's properties ----------
+     cfg.levels      "30,70"  — a comma list, any number of them, any values
+     cfg.levelColor  colour for all of them (MT5 lets you set one per level; one
+                     colour for the set is what nearly everyone uses)
+     cfg.levelStyle  0 solid · 1 dotted · 2 dashed · 3 large dash
+     cfg.levelWidth  1–5
+     cfg.levelLabels the value printed on the axis, as MT5 does
+     cfg.scaleFixed  true = the window is pinned to scaleMin..scaleMax;
+                     false = autoscale even for a bounded oscillator;
+                     undefined = the catalogue's own default */
+  parseLevels(text){
+    return String(text == null ? '' : text).split(/[,;\s]+/)
+      .map(x => parseFloat(x)).filter(x => isFinite(x));
+  },
+  applyUserLevels(def, cfg, specs){
+    if (!specs || !specs.length) return;
+    const lv = this.parseLevels(cfg.levels);
+    const color = cfg.levelColor || '#40e0d0';
+    const style = cfg.levelStyle != null ? +cfg.levelStyle : 1;
+    const width = cfg.levelWidth > 0 ? +cfg.levelWidth : 1;
+    const label = cfg.levelLabels !== false;
+    if (lv.length){
+      const first = specs[0];
+      first.levels = (first.levels || []).concat(lv.map(v => [v, color, style, width, label]));
+    }
+    let sc = null;
+    if (cfg.scaleFixed === true)
+      sc = { fixed: true, min: parseFloat(cfg.scaleMin), max: parseFloat(cfg.scaleMax) };
+    else if (cfg.scaleFixed === false) sc = { fixed: false };
+    if (sc) for (const spec of specs) spec._scale = sc;
+  },
 
   /* tickOnly = keep the drawn history, just move the newest point along */
   renderIndicators(tickOnly){
@@ -484,6 +557,10 @@ const Chart = {
         if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
       }
       this.specCache[def.id] = { def, cfg, specs };
+      /* MetaTrader's Levels and Scale tabs, for every indicator: the user's
+         level list rides on the indicator's first line, and the scale choice
+         travels with every line so the window obeys it */
+      this.applyUserLevels(def, cfg, specs);
       for (const spec of specs){
         const id = def.id + '|' + spec.key;
         /* individual lines can be switched off (Bollinger middle band, say) */
@@ -493,14 +570,18 @@ const Chart = {
         if (!spec.data || !spec.data.length) continue;
         alive[id] = true;
         let entry = this.series[id];
-        if (entry && (entry.target !== target || entry.scaleId !== scaleId)){
-          try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}   /* moved window or axis */
+        /* the level lines (RSI 30/70 and friends) are attached when the series
+           is created, so an edited level list has to rebuild the series — it
+           cannot be patched on afterwards */
+        const lvKey = JSON.stringify([spec.levels || [], spec._scale || null]);
+        if (entry && (entry.target !== target || entry.scaleId !== scaleId || entry.lvKey !== lvKey)){
+          try { this.chartFor(entry.target).removeSeries(entry.s); } catch(e){}   /* moved window, axis or levels */
           entry = null;
         }
         const look = [spec.color, spec.width || 1, spec.lineStyle || 0, spec.dots ? 1 : 0].join('|');
         if (!entry){
           try {
-            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def, band || scaleId), target, look, scaleId };
+            entry = this.series[id] = { s: this.makeSeries(chart, spec, target, def, band || scaleId), target, look, scaleId, lvKey };
             entry.s.setData(spec.data);
           } catch(e){ delete this.series[id]; }
           continue;

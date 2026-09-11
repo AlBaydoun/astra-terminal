@@ -215,10 +215,24 @@ Object.assign(Bots, {
       <label class="bc">Min score <input type="number" data-cfg="minScore" value="${cfg.minScore}" min="0" max="100"></label>
       <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen}" min="0" max="10"></label>
       <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause</label>
+      ${b.conviction ? this.convictionCtl(cfg) : ''}
       <button class="bBtn" data-act="run">Run now</button>
       <button class="bBtn" data-act="bt">Backtest</button>
       <button class="bBtn danger" data-act="reset">Reset</button>
     </div>` + this.instrumentBar(b, cfg);
+  },
+
+  /* The Max Assurance bot's own knobs. Risk lives under cfg.risk, so the
+     inputs use dotted keys the change handler knows how to write. */
+  convictionCtl(cfg){
+    const R = cfg.risk || {};
+    const base = R.riskPct != null ? R.riskPct : 1, cap = R.maxRiskPct != null ? R.maxRiskPct : 3;
+    return `
+      <label class="bc" title="Full votes needed before it trades (the higher-timeframe trend counts as one when it agrees)">Votes needed <input type="number" data-cfg="minVotes" value="${cfg.minVotes != null ? cfg.minVotes : 3}" min="2" max="6" step="0.5"></label>
+      <label class="bc" title="How far the size may grow with extra votes">Max size × <input type="number" data-cfg="maxMult" value="${cfg.maxMult != null ? cfg.maxMult : 3}" min="1" max="4" step="0.5"></label>
+      <label class="bc" title="Risk per trade at the minimum vote count">Base risk % <input type="number" data-cfg="risk.riskPct" value="${base}" min="0.1" max="5" step="0.1"></label>
+      <label class="bc" title="The most this bot may ever risk on one trade, whatever the votes say">Risk ceiling % <input type="number" data-cfg="risk.maxRiskPct" value="${cap}" min="0.1" max="10" step="0.1"></label>
+      <span class="bcNote">at ${cfg.minVotes != null ? cfg.minVotes : 3} votes it risks ${base}%, each extra vote adds half again, never above ${cap}%</span>`;
   },
 
   /* one chip per instrument: click to allow or forbid, with its real record */
@@ -755,7 +769,7 @@ Object.assign(Bots, {
         : `<span class="dim2">SL ${fmtPrice(p.sl)} · TP ${p.tp == null ? 'none' : fmtPrice(p.tp)}${p.tp1Done ? ' · half banked, stop at breakeven' : ''}</span>`;
       return `<div class="botRow">
         <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</b>
-        <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}</span>
+        <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}${p.riskMult > 1 ? ' · <b class="ok">size ×' + p.riskMult.toFixed(1) + '</b>' : ''}</span>
         <span>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
         ${levels}
         <span class="${pctClass(u)}">${(u >= 0 ? '+' : '') + fmtNum(u)}</span>
@@ -768,7 +782,7 @@ Object.assign(Bots, {
     if (!L.closed.length) return '<div class="empty">No closed trades yet</div>';
     return L.closed.slice(0, 30).map(t => `<div class="botRow">
       <b class="${t.dir > 0 ? 'up' : 'down'}">${t.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(t.sym):esc(baseAsset(t.sym))}</b>
-      <span class="dim2">${esc(t.tf)} · ${esc(t.model || '')}</span>
+      <span class="dim2">${esc(t.tf)} · ${esc(t.model || '')}${t.riskMult > 1 ? ' · size ×' + t.riskMult.toFixed(1) : ''}</span>
       <span>${fmtPrice(t.entry)} → ${fmtPrice(t.exit)}</span>
       <span class="${pctClass(t.pnl)}">${(t.pnl >= 0 ? '+' : '') + fmtNum(t.pnl)} · ${t.r}R</span>
       <span class="dim2">fees ${fmtNum(t.fees)} · MFE ${fmtNum(t.mfe)} · MAE ${fmtNum(t.mae)}</span>
@@ -846,7 +860,13 @@ Object.assign(Bots, {
       el.addEventListener('change', () => {
         const cfg = this.cfg(b.id);
         const k = el.dataset.cfg;
-        cfg[k] = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? parseFloat(el.value) : el.value);
+        const val = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? parseFloat(el.value) : el.value);
+        if (el.type === 'number' && !Number.isFinite(val)) return;
+        if (k.includes('.')){
+          /* dotted key → nested object, e.g. risk.maxRiskPct */
+          const [g, kk] = k.split('.');
+          cfg[g] = Object.assign({}, cfg[g] || {}); cfg[g][kk] = val;
+        } else cfg[k] = val;
         this.saveCfg(b.id);
         this.render();
       });

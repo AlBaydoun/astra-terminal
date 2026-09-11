@@ -161,6 +161,34 @@ const BOTS = [
     })),
   },
   {
+    id: 'triple', name: 'Triple Confirmation',
+    blurb: 'Three kinds of evidence have to agree: a candlestick pattern with a measured edge, formed ON a support or resistance level the market has already turned at, with the ASTRA Confluence reading (EMA20/EMA100 trend, ADX, RSI, tick activity) scored on top. The stop sits beyond the level, so the trade is wrong exactly when the level breaks. Its chart indicator marks every place it would have acted.',
+    defaults: { tf: '15m', tfAuto: false, minScore: 60, maxOpen: 2,
+                nearAtr: 0.6, padAtr: 0.35, rr: 2, minR: 1.2, minEdge: 0.05, minTouch: 2,
+                wing: 3, lookback: 300, tolAtr: 0.35 },
+    warmup: 120,
+    signal: (w, cfg) => STRAT.triple(w, cfg),
+  },
+  {
+    id: 'conviction', name: 'Max Assurance (conviction)',
+    blurb: 'The risky one — and risk done the only way it can pay: by concentrating, not by trading more. It polls five independent engines on the same candle (Triple Confirmation, Pattern Pro, Regime Pullback, Mean Reversion and ASTRA Confluence) plus the higher-timeframe trend, and stays out unless at least three agree with nobody strongly against. Every vote above the minimum puts more on the table, up to 3× the base risk — and never past the ceiling you set here. Its chart indicator shows every candle it would have called a very good trade.',
+    /* Starts PAUSED, base risk 1% and a ceiling of 3% per trade — six times the
+       0.5% the other bots use. The daily-loss lock is raised to match, or the
+       second trade of a day would be refused by the shared 2% rule. The
+       position-value budget is 300% of equity (3:1) instead of the shared
+       100%: at 1:1 a gold or bitcoin position is capped by its VALUE long
+       before it reaches even the base risk, so the vote count would change
+       nothing — measured: every gold trade came out at 0.02 lots whatever the
+       votes said. Raising maxRiskPct is the one knob that makes this bot more
+       dangerous; the engine will not let a signal pass it whatever the vote
+       count says. */
+    defaults: { tf: '15m', tfAuto: false, higherTf: '1h', minScore: 75, maxOpen: 2, paused: true,
+                minVotes: 3, minFull: 2, leanScore: 50, maxMult: 3,
+                risk: { riskPct: 1, maxRiskPct: 3, maxDailyLossPct: 6, maxNotionalPct: 300 } },
+    warmup: 250, needsHigher: true, conviction: true,
+    signal: (w, cfg, ledger, higher) => STRAT.conviction(w, cfg, ledger, higher),
+  },
+  {
     id: 'patPro', name: 'Pattern Pro (all patterns)',
     blurb: 'Trades the same detector the chart draws with, so every marker you see is something it can act on. Patterns are weighted by MEASURED edge rather than reputation: hammer and morning star score highest, engulfing barely registers, and Three Soldiers is refused outright because following it lost money across 154 occurrences.',
     defaults: { tf: '15m', tfAuto: true, minScore: 55, maxOpen: 3,

@@ -724,6 +724,149 @@ const STRAT = {
     return best;
   },
 
+  /* ================= TRIPLE CONFIRMATION =================
+     Three different kinds of evidence have to agree before it acts:
+
+       1. A CANDLESTICK PATTERN on the last closed candle, and only one with a
+          measured positive edge (the PATTERN_EDGE table). Three Soldiers
+          measured negative, so it is refused here as everywhere else.
+       2. LOCATION — the pattern has to form AT a support or resistance level
+          the market has already turned at: a bullish pattern within reach of
+          support, a bearish one within reach of resistance. A hammer in the
+          middle of nowhere is a candle; a hammer on a level touched three
+          times is a setup.
+       3. THE ASTRA CONFLUENCE READING — the same checks the Confluence
+          indicator makes (EMA20/EMA100 trend, ADX strength, RSI in its zone,
+          tick activity), scored rather than demanded, so the bot can trade a
+          strong pattern at a strong level on a day the trend check is mixed.
+
+     The stop sits on the far side of the level, so the trade is wrong when the
+     level breaks — which is a reason, not a guess. The target is the next
+     level the other way if that pays enough, otherwise a fixed multiple of the
+     risk. */
+  TRIPLE_W: { pattern: 30, level: 30, trend: 14, adx: 10, rsi: 8, tick: 8 },
+
+  triple(candles, cfg){
+    cfg = cfg || {};
+    const c = this.closed(candles, cfg.allowLive);
+    if (c.length < 120) return this.wait(['Not enough candles (need 120, have ' + c.length + ')']);
+    const i = c.length - 1;
+    const W = this.TRIPLE_W;
+    const nearAtr  = cfg.nearAtr  != null ? cfg.nearAtr  : 0.6;   /* how close to a level counts as "at" it */
+    const padAtr   = cfg.padAtr   != null ? cfg.padAtr   : 0.35;  /* stop this far beyond the level */
+    const rr       = cfg.rr       != null ? cfg.rr       : 2;
+    const minR     = cfg.minR     != null ? cfg.minR     : 1.2;
+    const minEdge  = cfg.minEdge  != null ? cfg.minEdge  : 0.05;
+    const minTouch = cfg.minTouch != null ? cfg.minTouch : 2;
+    const minScore = cfg.minScore != null ? cfg.minScore : 60;
+
+    /* ---- 1. a pattern with a measured edge ---- */
+    const found = PAT.at(c, i).filter(p => p.dir !== 0);
+    if (!found.length) return this.wait(['No pattern on the last closed candle'], { model: 'Triple' });
+    const usable = found
+      .map(p => ({ p, e: (this.PATTERN_EDGE[p.name] || { edge: 0 }).edge }))
+      .filter(x => x.e >= minEdge)
+      .sort((a, b) => b.e - a.e);
+    if (!usable.length){
+      const names = found.map(p => p.name).join(', ');
+      return this.wait([names + ' — ' + (found.some(p => (this.PATTERN_EDGE[p.name] || {}).edge < 0)
+        ? 'measured negative, so it is refused' : 'no measured edge')], { model: 'Triple' });
+    }
+    const pat = usable[0].p, edge = usable[0].e, dir = pat.dir, up = dir > 0;
+
+    /* ---- 2. at a level ---- */
+    const atr = IND.atr(c, 14), A = atr[i];
+    if (!(A > 0)) return this.wait(['ATR still warming up'], { model: 'Triple' });
+    const a = c[i], px = a.close;
+    const levels = IND.srLevels(c, { wing: cfg.wing || 3, lookback: cfg.lookback || 300,
+                                     tolAtr: cfg.tolAtr || 0.35, max: 10 });
+    const strong = levels.filter(L => L.touches >= minTouch);
+    /* the level the pattern formed on: for a buy, support under the candle's low
+       (or that the low pierced and closed back above); for a sell, the mirror */
+    const wantKind = up ? 'support' : 'resistance';
+    let at = null, dist = Infinity;
+    for (const L of strong){
+      if (L.kind !== wantKind && L.kind !== 'both') continue;
+      const d = up ? Math.abs(a.low - L.price) : Math.abs(a.high - L.price);
+      const closedRightSide = up ? a.close > L.price : a.close < L.price;
+      if (d <= nearAtr * A && closedRightSide && d < dist){ at = L; dist = d; }
+    }
+    if (!at){
+      const near = IND.srNear(strong, px);
+      const hint = up ? (near.below ? 'nearest support is ' + fmtPrice(near.below.price) + ', ' +
+                        ((px - near.below.price) / A).toFixed(1) + ' ATR below' : 'no support level nearby')
+                      : (near.above ? 'nearest resistance is ' + fmtPrice(near.above.price) + ', ' +
+                        ((near.above.price - px) / A).toFixed(1) + ' ATR above' : 'no resistance level nearby');
+      return this.wait([pat.name + ' formed away from any ' + wantKind + ' level — ' + hint],
+        { model: 'Triple', near: dir, meta: { pattern: pat.name, edge } });
+    }
+
+    /* ---- 3. the confluence reading, scored ---- */
+    const close = c.map(x => x.close);
+    const e20 = IND.ema(close, 20), e100 = IND.ema(close, 100);
+    const adx = IND.adx(c, 14).adx[i], rsi = IND.rsi(close, 14)[i];
+    const vols = c.slice(i - 20, i).map(b => b.volume || 0), vmean = vols.reduce((x, y) => x + y, 0) / 20;
+    const tick = vmean > 0 && a.volume > 0 ? a.volume / vmean : null;
+    const trend = (e20[i] > e100[i] && e100[i] > e100[i - 4]) ? 1
+                : (e20[i] < e100[i] && e100[i] < e100[i - 4]) ? -1 : 0;
+
+    const reasons = [], soft = [], factors = {};
+    let score = 0;
+
+    score += W.pattern * Math.min(1, 0.4 + edge * 1.6);
+    factors['pattern:' + pat.name] = true;
+    reasons.push(pat.name + ' — measured +' + edge.toFixed(2) + ' ATR edge (' +
+      (this.PATTERN_EDGE[pat.name] || {}).n + ' cases)');
+
+    score += W.level * Math.min(1, 0.5 + (at.touches - minTouch) * 0.2);
+    factors.atLevel = true;
+    reasons.push('Formed on ' + wantKind + ' at ' + fmtPrice(at.price) + ', touched ' + at.touches +
+      ' times, ' + (dist / A).toFixed(2) + ' ATR away');
+
+    if (trend === dir){ score += W.trend; factors.trend = true; reasons.push('EMA20/EMA100 trend agrees'); }
+    else if (trend === 0){ score += W.trend * 0.4; soft.push('Trend is mixed'); }
+    else soft.push('Trend is against this direction');
+
+    if (adx != null && adx >= 25){ score += W.adx; factors.adx = true; reasons.push('ADX ' + adx.toFixed(1) + ' — the move has strength'); }
+    else soft.push('ADX ' + (adx == null ? '—' : adx.toFixed(1)) + ' is under 25');
+
+    const rsiOk = rsi != null && (up ? rsi >= 40 && rsi <= 70 : rsi >= 30 && rsi <= 60);
+    if (rsiOk){ score += W.rsi; factors.rsi = true; reasons.push('RSI ' + rsi.toFixed(0) + ' has room'); }
+    else soft.push('RSI ' + (rsi == null ? '—' : rsi.toFixed(0)) + ' is outside its zone');
+
+    if (tick != null && tick >= 1){ score += W.tick; factors.tick = true; reasons.push('Activity ' + tick.toFixed(2) + '× the prior 20 bars'); }
+    else if (tick != null) soft.push('Activity ' + tick.toFixed(2) + '× — quieter than usual');
+
+    score = Math.round(score);
+    if (score < minScore)
+      return this.wait(['Scored ' + score + ' of 100, below the ' + minScore + ' this bot needs'].concat(soft),
+        { score, near: dir, model: 'Triple', reasons, meta: { pattern: pat.name, level: at.price } });
+
+    /* ---- levels: stop beyond the level, target at the next level or rr×risk ---- */
+    const sl = up ? at.price - padAtr * A : at.price + padAtr * A;
+    const risk = Math.abs(px - sl);
+    if (!(risk > 0)) return this.wait(['Stop would sit on the entry'], { model: 'Triple' });
+    const opp = IND.srNear(strong.filter(L => L.kind !== wantKind || L.kind === 'both'), px);
+    const nextLevel = up ? (opp.above && opp.above.price > px ? opp.above.price : null)
+                         : (opp.below && opp.below.price < px ? opp.below.price : null);
+    let tp = up ? px + rr * risk : px - rr * risk, tpWhy = rr + '× the risk';
+    if (nextLevel != null){
+      const rAtLevel = Math.abs(nextLevel - px) / risk;
+      if (rAtLevel >= minR && rAtLevel < rr * 1.5){ tp = nextLevel; tpWhy = 'the next ' + (up ? 'resistance' : 'support') + ' at ' + fmtPrice(nextLevel); }
+      else if (rAtLevel < minR)
+        return this.wait(['The next ' + (up ? 'resistance' : 'support') + ' is only ' + rAtLevel.toFixed(2) +
+          'R away — not enough room to pay for the risk'], { score, near: dir, model: 'Triple' });
+    }
+    const rMul = Math.abs(tp - px) / risk;
+    reasons.push('Stop ' + fmtPrice(sl) + ' beyond the level · target ' + fmtPrice(tp) + ' (' + tpWhy + ', ' + rMul.toFixed(2) + 'R)');
+
+    return { dir, score, reasons, failed: [], soft, factors,
+      entry: px, sl, tp, rMultiple: +rMul.toFixed(2), model: 'Triple',
+      meta: { pattern: pat.name, edge, level: +at.price.toFixed(6), touches: at.touches,
+              adx: adx == null ? null : +adx.toFixed(1), rsi: rsi == null ? null : +rsi.toFixed(0),
+              trend, tick: tick == null ? null : +tick.toFixed(2) } };
+  },
+
   meanFade(candles, cfg){
     cfg = cfg || {};
     const c = this.closed(candles, cfg.allowLive);
@@ -1071,6 +1214,154 @@ const STRAT = {
       reasons, failed: [], factors,
       meta: { pattern: pat.name, measuredEdge: best.e, atrPct: +atrPct.toFixed(3),
               alsoFound: found.map(x => x.name).join(', ') },
+    };
+  },
+
+  /* ================= 10. Max Assurance (conviction) =================
+     The "risky" bot, built the only way risk can honestly pay: it does NOT
+     trade more often — it trades LESS, and puts more on the table when several
+     independent engines agree on the same candle.
+
+     Five engines are polled on the same closed candle. Each looks at different
+     evidence, so agreement between them means something:
+       · Triple Confirmation — a measured pattern ON a support/resistance level
+       · Pattern Pro         — a pattern with a measured edge (level not needed)
+       · Regime Pullback     — trend + pullback, at the 0.92 setting that passed
+                               the split test
+       · Mean Reversion      — the one counter-trend engine (its NO is as useful
+                               as its YES: a fade signal against a trend entry
+                               is a warning, and refuses the trade)
+       · ASTRA Confluence    — the fixed 15-minute rule (trend, EMA20 reclaim,
+                               ADX, RSI, tick), when the timeframe is 15m
+     plus a structural check that is not a vote: the higher-timeframe trend
+     (EMA20/EMA100 on the higher chart). Against it → refused, with it → +1.
+
+     A full vote is an engine that would actually have opened a trade; a lean
+     (½) is one that is close. It takes at least `minVotes` (default 3) with
+     at least two engines actually firing, and ANY full vote the other way
+     refuses the trade outright. Every extra vote above the minimum raises the
+     size: riskMult = 1 + 0.5 × (votes − minVotes), +0.5 when the score passes
+     90, capped at `maxMult` — and the engine caps it again at the bot's own
+     maxRiskPct, so no configuration can risk more than that on one trade.
+
+     Geometry comes from Triple when it fired (a stop beyond a real level is
+     the most defensible stop here), otherwise from the strongest engine. */
+  CONVICTION_MEMBERS: {
+    'Triple':          (w, cfg) => STRAT.triple(w, Object.assign({}, cfg, { minScore: 0 })),
+    'Pattern Pro':     (w, cfg) => STRAT.patternPro(w, Object.assign({}, cfg, { minScore: 0, minEdge: 0.05 })),
+    'Regime Pullback': (w, cfg) => STRAT.regimePullback(w, Object.assign({}, cfg, { threshold: 0, minScore: 0 })),
+    'Mean Reversion':  (w, cfg) => STRAT.meanFade(w, Object.assign({}, cfg, { minScore: 0 })),
+    'ASTRA Confluence':(w, cfg) => (typeof Confluence !== 'undefined' && (cfg.tf || '15m') === '15m')
+                                     ? Confluence.inspect(w, w.length - 1, '15m') : null,
+  },
+  CONVICTION_FIRE: { 'Triple': 60, 'Pattern Pro': 55, 'Regime Pullback': 92, 'Mean Reversion': 62, 'ASTRA Confluence': 100 },
+
+  conviction(candles, cfg, ledger, higher){
+    cfg = cfg || {};
+    const minVotes  = cfg.minVotes  != null ? cfg.minVotes  : 3;
+    const minFull   = cfg.minFull   != null ? cfg.minFull   : 2;
+    const leanScore = cfg.leanScore != null ? cfg.leanScore : 50;
+    const minScore  = cfg.minScore  != null ? cfg.minScore  : 75;
+    const maxMult   = cfg.maxMult   != null ? cfg.maxMult   : 3;
+    const c = this.closed(candles, cfg.allowLive);
+    if (c.length < 120) return this.wait(['Not enough candles (need 120, have ' + c.length + ')'], { model: 'Max Assurance' });
+
+    /* ---- poll the engines ---- */
+    const votes = [], seen = [];
+    for (const [name, fn] of Object.entries(this.CONVICTION_MEMBERS)){
+      let sig = null;
+      try { sig = fn(candles, cfg, ledger, higher); } catch(e){ sig = null; }
+      if (!sig) continue;
+      const fireAt = this.CONVICTION_FIRE[name] || 0, sc = sig.score || 0;
+      const fired = !!sig.dir && sc >= fireAt;
+      const leanDir = sig.dir || sig.near || 0;
+      const lean = !fired && leanDir && sc >= leanScore ? leanDir : 0;
+      if (fired) votes.push({ name, dir: sig.dir, score: sc, weight: 1, sig });
+      else if (lean) votes.push({ name, dir: lean, score: sc, weight: 0.5, sig });
+      seen.push(name + ':' + (fired ? 'FIRE' : lean ? 'lean' : '—') + (leanDir ? (leanDir > 0 ? '+' : '−') : '') + Math.round(sc));
+    }
+    const voted = seen.join(' ');
+    if (!votes.length)
+      return this.wait(['No engine sees anything on this candle'], { model: 'Max Assurance', meta: { voted } });
+
+    const side = d => votes.filter(v => v.dir === d);
+    const weigh = list => list.reduce((a, v) => a + v.weight, 0);
+    const wl = weigh(side(1)), ws = weigh(side(-1));
+    const dir = wl > ws ? 1 : ws > wl ? -1 : 0;
+    if (!dir)
+      return this.wait(['The engines are split — ' + voted], { model: 'Max Assurance', meta: { voted } });
+    const agree = side(dir), against = side(-dir);
+    const full = agree.filter(v => v.weight === 1).sort((a, b) => b.score - a.score);
+    const named = agree.map(v => v.name + (v.weight === 1 ? '' : ' (leaning)') + ' ' + Math.round(v.score)).join(', ');
+
+    /* any engine that would have traded the OTHER way is a veto */
+    const veto = against.filter(v => v.weight === 1);
+    if (veto.length)
+      return this.wait([veto.map(v => v.name).join(', ') + ' would trade the other way — refused'],
+        { model: 'Max Assurance', near: dir, score: 30, meta: { voted } });
+
+    /* ---- higher-timeframe structure: not a vote, a gate + bonus ---- */
+    let htf = 0, htfNote = 'No higher-timeframe data';
+    if (higher && higher.length >= 110){
+      const hc = this.closed(higher, false), k = hc.length - 1;
+      if (hc.length >= 105){
+        const close = hc.map(x => x.close), e20 = IND.ema(close, 20), e100 = IND.ema(close, 100);
+        htf = (e20[k] > e100[k] && e100[k] > e100[k - 3]) ? 1 : (e20[k] < e100[k] && e100[k] < e100[k - 3]) ? -1 : 0;
+        htfNote = 'Higher-timeframe trend is ' + (htf > 0 ? 'up' : htf < 0 ? 'down' : 'mixed');
+      }
+    }
+    if (htf && htf !== dir)
+      return this.wait([htfNote + ' — against this trade'], { model: 'Max Assurance', near: dir, score: 35, meta: { voted } });
+
+    const weight = weigh(agree) + (htf === dir ? 1 : 0);
+    if (full.length < minFull || weight < minVotes)
+      return this.wait(['Agreement ' + weight.toFixed(1) + ' of ' + minVotes + ' (' + full.length + ' fired, need ' + minFull + ') — ' + named],
+        { model: 'Max Assurance', near: dir, score: Math.round(Math.min(70, weight / minVotes * 60)),
+          reasons: agree.map(v => v.name + ' agrees'), meta: { voted } });
+
+    /* ---- context on this timeframe (bonus only) ---- */
+    const i = c.length - 1, close = c.map(x => x.close);
+    const adx = IND.adx(c, 14).adx[i], rsi = IND.rsi(close, 14)[i];
+    const up = dir > 0;
+    const rsiOk = rsi != null && (up ? rsi >= 40 && rsi <= 70 : rsi >= 30 && rsi <= 60);
+    const base = full.reduce((a, v) => a + v.score, 0) / full.length;
+    let score = base + 8 * (weight - minVotes) - 12 * weigh(against);
+    if (adx != null && adx >= 25) score += 4;
+    if (rsiOk) score += 3;
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    if (score < minScore)
+      return this.wait(['Scored ' + score + ' of 100, below the ' + minScore + ' this bot needs — ' + named],
+        { score, near: dir, model: 'Max Assurance', reasons: agree.map(v => v.name + ' agrees'), meta: { voted } });
+
+    /* ---- geometry: Triple's level stop if it fired, else the strongest ---- */
+    const lead = full.find(v => v.name === 'Triple') || full[0];
+    const g = lead.sig;
+    if (![g.entry, g.sl, g.tp].every(v => Number.isFinite(v) && v > 0))
+      return this.wait([lead.name + ' fired without usable levels'], { model: 'Max Assurance', near: dir, score, meta: { voted } });
+    const risk = Math.abs(g.entry - g.sl), rMul = risk > 0 ? Math.abs(g.tp - g.entry) / risk : 0;
+
+    /* ---- conviction → size ---- */
+    let riskMult = 1 + 0.5 * (weight - minVotes) + (score >= 90 ? 0.5 : 0);
+    riskMult = Math.max(1, Math.min(maxMult, +riskMult.toFixed(2)));
+
+    const reasons = ['Agreement ' + weight.toFixed(1) + ': ' + named]
+      .concat(htf === dir ? [htfNote + ' — with the trade'] : [htfNote])
+      .concat(against.length ? ['Leaning against: ' + against.map(v => v.name).join(', ')] : [])
+      .concat(adx != null && adx >= 25 ? ['ADX ' + adx.toFixed(1) + ' — the move has strength'] : [])
+      .concat(rsiOk ? ['RSI ' + rsi.toFixed(0) + ' has room'] : [])
+      .concat(['Levels from ' + lead.name + ' · ' + rMul.toFixed(2) + 'R'])
+      .concat(['Conviction size ×' + riskMult.toFixed(2) + (riskMult > 1 ? ' — capped by this bot’s maximum risk per trade' : '')]);
+
+    return {
+      dir, score, entry: g.entry, sl: g.sl, tp: g.tp, tp1: g.tp1 || null,
+      rMultiple: +rMul.toFixed(2), riskMult,
+      model: 'Max Assurance (' + full.length + ' fired, ' + weight.toFixed(1) + ' votes)',
+      reasons, failed: [],
+      factors: Object.assign({ conviction: true, htf: htf === dir },
+        agree.reduce((a, v) => { a['agrees:' + v.name] = true; return a; }, {})),
+      meta: { votes: +weight.toFixed(1), fired: full.length, riskMult, lead: lead.name, voted, htf,
+              adx: adx == null ? null : +adx.toFixed(1), rsi: rsi == null ? null : +rsi.toFixed(0),
+              leadMeta: g.meta || {} },
     };
   },
 };

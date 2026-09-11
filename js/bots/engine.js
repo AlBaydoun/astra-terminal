@@ -18,6 +18,11 @@ const BotEngine = {
        so anything tighter simply refuses every trade. This is the floor the
        contract sizes impose, not a preference. */
     riskPct: 0.5,             // % of virtual equity risked per trade
+    /* A strategy may ask for MORE than riskPct on one trade (sig.riskMult) when
+       it holds unusually strong evidence. This is the ceiling that request can
+       never pass. Equal to riskPct by default, so no bot is boosted unless its
+       own rules raise it deliberately. */
+    maxRiskPct: 0.5,
     maxNotionalPct: 100,      // position value cannot exceed one virtual account
     maxOpen: 3,               // open positions per bot
     maxPerSymbol: 1,          // positions in the same instrument
@@ -267,7 +272,13 @@ const BotEngine = {
     let lossPerUnit = (fill - exit) * sig.dir + (fill + exit) * fee;
     if (![fill, exit, stopDist, lossPerUnit].every(v => Number.isFinite(v) && v > 0))
       return { ok: false, reason: 'Position loss at the executable stop could not be calculated' };
-    const riskLimit = equity * R.riskPct / 100;
+    /* Conviction sizing: a signal carrying riskMult > 1 is allowed up to
+       R.maxRiskPct of equity, never beyond it, and never on a hand-placed trade
+       (a typed amount already IS the decision). */
+    const ceiling = Number.isFinite(R.maxRiskPct) && R.maxRiskPct > R.riskPct ? R.maxRiskPct / R.riskPct : 1;
+    const riskMult = (!sig.manual && Number.isFinite(sig.riskMult) && sig.riskMult > 1)
+      ? Math.min(sig.riskMult, ceiling) : 1;
+    const riskLimit = equity * R.riskPct * riskMult / 100;
     const funds = this.funds(ledger, R);
     const notionalLimit = funds.free;
     if (!Number.isFinite(notionalLimit) || notionalLimit <= 0)
@@ -299,7 +310,7 @@ const BotEngine = {
       if (!(Number.isFinite(sig.requestedQty) && sig.requestedQty > 0))
         return { ok: false, reason: 'Requested size must be finite and positive' };
       if (sig.requestedQty * lossPerUnit > riskLimit + 1e-8)
-        return { ok: false, reason: 'Requested size exceeds the ' + R.riskPct + '% risk limit' };
+        return { ok: false, reason: 'Requested size exceeds the ' + (R.riskPct * riskMult) + '% risk limit' };
       if (sig.requestedQty * fill * cashRate > notionalLimit + 1e-8)
         return { ok: false, reason: 'Requested size exceeds the remaining position-value budget of ' + fmtNum(notionalLimit) };
       qty = sig.requestedQty;
@@ -322,8 +333,13 @@ const BotEngine = {
       qty = lots * contract;
     }
     if (!(Number.isFinite(qty) && qty > 0)) return { ok: false, reason: 'Position size could not be calculated' };
+    /* the multiplier that was actually USED: the position-value budget or the
+       broker's lot step can leave a boosted trade smaller than its allowance,
+       and the record must not claim a size it never had */
+    const baseRisk = equity * R.riskPct / 100;
+    const usedMult = riskMult > 1 && baseRisk > 0 ? Math.min(riskMult, qty * lossPerUnit / baseRisk) : 1;
     return { ok: true, qty, lots, riskCash: qty * lossPerUnit, stopDist, spread, R, spec, fx,
-      fill, notional: qty * fill * cashRate, riskLimit, notionalLimit };
+      fill, notional: qty * fill * cashRate, riskLimit, notionalLimit, riskMult: usedMult, riskMultAsked: riskMult };
   },
 
   floorLots(lots, step){
@@ -403,6 +419,7 @@ const BotEngine = {
       score: sig.score, reasons: sig.reasons || [], model: sig.model || '',
       feeIn, fees: feeIn, slippage: Math.abs(fill - quote.price) * gate.qty * (gate.fx?.loss??1),
       riskCash: gate.riskCash, stopDist: gate.stopDist, slInit: sig.sl, peak: null, trailed: false,
+      riskMult: gate.riskMult > 1.05 ? +gate.riskMult.toFixed(2) : undefined,
       mfe: 0, mae: 0, note: sig.note || '',
       barsHeld: 0, timeLimitBars: cfg.timeLimitBars || R.timeLimitBars,
       factors: sig.factors || {}, meta: gate.fx?{...(sig.meta||{}),accountFx:{...gate.fx}}:sig.meta || {}, state: sig.state || null,
@@ -547,6 +564,7 @@ const BotEngine = {
       reason, reasons: pos.reasons, score: pos.score, note: pos.note,
       barsHeld: pos.barsHeld, factors: pos.factors, meta: pos.meta || {}, state: pos.state || null,
     };
+    if (pos.riskMult > 1) rec.riskMult = pos.riskMult;
     ledger.closed.unshift(rec);
 
     const dk = this.dayKey(this.now(ledger, cfg));

@@ -153,7 +153,7 @@ const OpenTrades = {
       <div class="otHead">
         <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</b>
         <span class="otTag">${esc(row.botName)}</span>
-        <span class="otTag dim">${esc(p.tf || '')}${p.model ? ' · ' + esc(p.model) : ''}</span>
+        <span class="otTag dim">${esc(p.tf || '')}${p.model ? ' · ' + esc(p.model) : ''}${p.riskMult > 1 ? ' · size ×' + p.riskMult.toFixed(1) : ''}</span>
         <span class="otTag warn" data-f="adjusted" ${p.touched?'':'hidden'} title="stop, target or size was changed by hand">adjusted</span>
         <span class="otTag on" data-f="trailing" ${trailOn?'':'hidden'}>trailing</span>
         <span class="otTag warn" data-f="stale" ${l.stale?'':'hidden'} title="no fresh quote for this instrument">no quote</span>

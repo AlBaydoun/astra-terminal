@@ -151,24 +151,33 @@ const INDS = [
 
   /* ============================ IN A WINDOW ============================ */
   {
-    id: 'rsi', label: 'Relative Strength Index (RSI)', kind: 'osc', applyTo: true, range: [0, 100],
-    def: { on: true, len: 14, src: 'close', target: 'p1' },
-    params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
-    parts: [{ key: 'l', label: 'Line', color: '#c084fc' }],
+    /* Exactly as MetaTrader 5 ships it (Insert → Indicators → Oscillators →
+       Relative Strength Index): Wilder smoothing, period 14, applied to Close,
+       drawn DodgerBlue on a scale FIXED at 0–100, with Silver dotted level
+       lines at 30 and 70 that you can edit or add to, as in MT5's Levels tab.
+       The old version autoscaled, so the 30/70 lines wandered up and down the
+       window as the RSI moved — that is what "shows differently" meant. */
+    id: 'rsi', label: 'Relative Strength Index', kind: 'osc', applyTo: true,
+    range: [0, 100], fixed: true,
+    note: 'MetaTrader 5 RSI: RSI = 100 − 100 / (1 + U/D), where U and D are the Wilder-smoothed average up and down closes over the period. Scale fixed 0–100. Levels are a comma list, exactly as in MT5\u2019s Levels tab.',
+    def: { on: true, len: 14, src: 'close', levels: '30,70', target: 'p1' },
+    params: [{ k: 'len', kind: 'num', min: 2, max: 500, label: 'Period' }],
+    parts: [{ key: 'l', label: 'RSI', color: '#1e90ff' }],
+    /* the 30/70 lines come from the generic Levels tab (cfg.levels), the same
+       machinery every other indicator now has */
     build(ctx, c){
-      return [{ key: 'l', precision: 2, levels: [[70, 'rgba(246,70,93,0.5)'], [30, 'rgba(46,189,133,0.5)']],
-        data: ctx.line(IND.rsi(ctx.srcOf(c), c.len)) }];
+      return [{ key: 'l', precision: 2, data: ctx.line(IND.rsi(ctx.srcOf(c), c.len)) }];
     },
   },
   {
-    id: 'stoch', label: 'Stochastic', kind: 'osc', range: [0, 100],
-    def: { on: false, k: 14, smooth: 3, d: 3, target: 'p1' },
+    id: 'stoch', label: 'Stochastic', kind: 'osc', fixed: true, range: [0, 100],
+    def: { on: false, k: 14, smooth: 3, d: 3, target: 'p1', levels: '20,80' },
     params: [{ k: 'k', kind: 'num', min: 2, max: 100 }, { k: 'smooth', kind: 'num', min: 1, max: 50 }, { k: 'd', kind: 'num', min: 1, max: 50 }],
     parts: [{ key: 'k', label: '%K', color: '#00e5ff' }, { key: 'd', label: '%D', color: '#ffb03a' }],
     build(ctx, c){
       const s = IND.stoch(ctx.v, c.k, c.smooth, c.d);
       return [
-        { key: 'k', precision: 2, levels: [[80, 'rgba(246,70,93,0.5)'], [20, 'rgba(46,189,133,0.5)']], data: ctx.line(s.k) },
+        { key: 'k', precision: 2, data: ctx.line(s.k) },
         { key: 'd', data: ctx.line(s.d) },
       ];
     },
@@ -191,31 +200,31 @@ const INDS = [
   },
   {
     id: 'cci', label: 'Commodity Channel Index (CCI)', kind: 'osc',
-    def: { on: false, len: 20, target: 'p2' },
+    def: { on: false, len: 20, target: 'p2', levels: '-100,100' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 200 }],
     parts: [{ key: 'l', label: 'Line', color: '#fb923c' }],
     build(ctx, c){
-      return [{ key: 'l', precision: 1, levels: [[100, 'rgba(246,70,93,0.45)'], [-100, 'rgba(46,189,133,0.45)']],
+      return [{ key: 'l', precision: 1, 
         data: ctx.line(IND.cci(ctx.v, c.len)) }];
     },
   },
   {
-    id: 'wpr', label: 'Williams %R', kind: 'osc', range: [-100, 0],
-    def: { on: false, len: 14, target: 'p2' },
+    id: 'wpr', label: 'Williams %R', kind: 'osc', fixed: true, range: [-100, 0],
+    def: { on: false, len: 14, target: 'p2', levels: '-80,-20' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#facc15' }],
     build(ctx, c){
-      return [{ key: 'l', precision: 1, levels: [[-20, 'rgba(246,70,93,0.45)'], [-80, 'rgba(46,189,133,0.45)']],
+      return [{ key: 'l', precision: 1, 
         data: ctx.line(IND.williamsR(ctx.v, c.len)) }];
     },
   },
   {
-    id: 'mfi', label: 'Money Flow Index', kind: 'osc', range: [0, 100],
-    def: { on: false, len: 14, target: 'p2' },
+    id: 'mfi', label: 'Money Flow Index', kind: 'osc', fixed: true, range: [0, 100],
+    def: { on: false, len: 14, target: 'p2', levels: '20,80' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#34d399' }],
     build(ctx, c){
-      return [{ key: 'l', precision: 1, levels: [[80, 'rgba(246,70,93,0.45)'], [20, 'rgba(46,189,133,0.45)']],
+      return [{ key: 'l', precision: 1, 
         data: ctx.line(IND.mfi(ctx.v, c.len)) }];
     },
   },
@@ -249,12 +258,12 @@ const INDS = [
     },
   },
   {
-    id: 'dem', label: 'DeMarker', kind: 'osc', range: [0, 1],
-    def: { on: false, len: 14, target: 'p3' },
+    id: 'dem', label: 'DeMarker', kind: 'osc', fixed: true, range: [0, 1],
+    def: { on: false, len: 14, target: 'p3', levels: '0.3,0.7' },
     params: [{ k: 'len', kind: 'num', min: 2, max: 100 }],
     parts: [{ key: 'l', label: 'Line', color: '#f0abfc' }],
     build(ctx, c){
-      return [{ key: 'l', precision: 3, levels: [[0.7, 'rgba(246,70,93,0.45)'], [0.3, 'rgba(46,189,133,0.45)']],
+      return [{ key: 'l', precision: 3, 
         data: ctx.line(IND.demarker(ctx.v, c.len)) }];
     },
   },
@@ -342,10 +351,176 @@ INDS.push(
   }
 );
 
-const MT5_OSCILLATORS = ['atr','bearpower','bullpower','chaikin','cci','dem','force','macd_mt5','mom','osma','rsi','rvi','stoch','trix','wpr'];
-for(const def of INDS){
-  def.category=MT5_OSCILLATORS.includes(def.id)?'oscillators':def.kind==='price'?'trend':'other';
+/* ---------- the MetaTrader indicators that were still missing ----------
+   Trend: AMA, ADX (EMA-smoothed), DEMA, TEMA, FRAMA, VIDYA.
+   Volumes: Accumulation/Distribution.
+   Bill Williams: Accelerator, Gator, Market Facilitation Index.
+   With these, every indicator on all four pages of the MT5 help is present. */
+INDS.push(
+  {
+    id: 'ama', label: 'Adaptive Moving Average', kind: 'price', applyTo: true, cat: 'trend',
+    note: 'Kaufman AMA. MT5 defaults: period 9, fast EMA 2, slow EMA 30. Follows price quickly in a trend and slows to a crawl in chop.',
+    def: { on: false, len: 9, fast: 2, slow: 30, src: 'close', target: 'main' },
+    params: [{ k: 'len', kind: 'num', min: 2, max: 200, label: 'Period' },
+             { k: 'fast', kind: 'num', min: 1, max: 50, label: 'Fast EMA' },
+             { k: 'slow', kind: 'num', min: 2, max: 200, label: 'Slow EMA' }],
+    parts: [{ key: 'l', label: 'AMA', color: '#ff4500' }],
+    build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.ama(ctx.srcOf(c), c.len, c.fast, c.slow)) }]; },
+  },
+  {
+    id: 'adxc', label: 'Average Directional Movement Index', kind: 'osc', cat: 'trend', range: [0, 100],
+    note: 'MT5\u2019s ADX with exponential smoothing. The Wilder variant (MT5 \u201cADX Wilder\u201d) is the separate entry below.',
+    def: { on: false, len: 14, target: 'p3' },
+    params: [{ k: 'len', kind: 'num', min: 2, max: 100, label: 'Period' }],
+    parts: [{ key: 'a', label: 'ADX', color: '#7dd3fc' }, { key: 'p', label: '+DI', color: '#2ebd85' }, { key: 'm', label: '\u2212DI', color: '#f6465d' }],
+    build(ctx, c){
+      const a = IND.adxClassic(ctx.v, c.len);
+      return [{ key: 'a', width: 2, precision: 2, data: ctx.line(a.adx) },
+              { key: 'p', lineStyle: 1, data: ctx.line(a.pdi) }, { key: 'm', lineStyle: 1, data: ctx.line(a.mdi) }];
+    },
+  },
+  {
+    id: 'dema', label: 'Double Exponential Moving Average', kind: 'price', applyTo: true, cat: 'trend',
+    note: 'MT5 default period 14. Two stacked EMAs with the lag subtracted out.',
+    def: { on: false, len: 14, src: 'close', target: 'main' },
+    params: [{ k: 'len', kind: 'num', min: 2, max: 500, label: 'Period' }],
+    parts: [{ key: 'l', label: 'DEMA', color: '#ff6bd6' }],
+    build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.dema(ctx.srcOf(c), c.len)) }]; },
+  },
+  {
+    id: 'tema', label: 'Triple Exponential Moving Average', kind: 'price', applyTo: true, cat: 'trend',
+    note: 'MT5 default period 14. Three stacked EMAs, lag removed twice.',
+    def: { on: false, len: 14, src: 'close', target: 'main' },
+    params: [{ k: 'len', kind: 'num', min: 2, max: 500, label: 'Period' }],
+    parts: [{ key: 'l', label: 'TEMA', color: '#f472b6' }],
+    build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.tema(ctx.srcOf(c), c.len)) }]; },
+  },
+  {
+    id: 'frama', label: 'Fractal Adaptive Moving Average', kind: 'price', cat: 'trend',
+    note: 'MT5 default period 14 (must be even). The fractal dimension of the recent range sets how fast it follows.',
+    def: { on: false, len: 14, target: 'main' },
+    params: [{ k: 'len', kind: 'num', min: 4, max: 200, step: 2, label: 'Period' }],
+    parts: [{ key: 'l', label: 'FRAMA', color: '#fbbf24' }],
+    build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.frama(ctx.v, c.len)) }]; },
+  },
+  {
+    id: 'vidya', label: 'Variable Index Dynamic Average', kind: 'price', applyTo: true, cat: 'trend',
+    note: 'MT5 defaults: CMO period 9, EMA period 12. The Chande Momentum Oscillator scales the smoothing.',
+    def: { on: false, cmo: 9, len: 12, src: 'close', target: 'main' },
+    params: [{ k: 'cmo', kind: 'num', min: 2, max: 100, label: 'CMO period' },
+             { k: 'len', kind: 'num', min: 2, max: 200, label: 'EMA period' }],
+    parts: [{ key: 'l', label: 'VIDYA', color: '#a3e635' }],
+    build(ctx, c){ return [{ key: 'l', data: ctx.line(IND.vidya(ctx.srcOf(c), c.cmo, c.len)) }]; },
+  },
+  {
+    id: 'ad', label: 'Accumulation/Distribution', kind: 'osc', cat: 'vol',
+    note: 'Running total of volume weighted by where each close sat in its bar. No parameters, as in MT5.',
+    def: { on: false, target: 'p3' }, params: [],
+    parts: [{ key: 'l', label: 'A/D', color: '#32cd32' }],
+    build(ctx){ return [{ key: 'l', precision: 0, data: ctx.line(IND.ad(ctx.v)) }]; },
+  },
+  {
+    id: 'ac', label: 'Accelerator Oscillator', kind: 'osc', cat: 'bw',
+    note: 'Bill Williams: Awesome Oscillator minus its 5-period average. Green bar when rising, red when falling, as in MT5.',
+    def: { on: false, target: 'p3' }, params: [],
+    parts: [{ key: 'h', label: 'AC', color: '#2ebd85', noHide: true }],
+    build(ctx){
+      const ac = IND.ac(ctx.v);
+      const data = [];
+      for (let i = 0; i < ac.length; i++){
+        if (ac[i] == null) continue;
+        const rising = ac[i - 1] != null ? ac[i] >= ac[i - 1] : true;
+        data.push({ time: ctx.v[i].time, value: ac[i], color: rising ? '#2ebd85' : '#f6465d' });
+      }
+      return [{ key: 'h', type: 'hist', precision: 5, levels: [[0, '#65748b']], data }];
+    },
+  },
+  {
+    id: 'gator', label: 'Gator Oscillator', kind: 'osc', cat: 'bw',
+    note: 'Bill Williams: how far apart the Alligator\u2019s lines are. Upper bars = jaw \u2212 teeth, lower bars = teeth \u2212 lips drawn downward. Green while the gap widens, red while it narrows.',
+    def: { on: false, target: 'p3' }, params: [],
+    parts: [{ key: 'u', label: 'Upper', color: '#2ebd85', noHide: true }, { key: 'd', label: 'Lower', color: '#f6465d', noHide: true }],
+    build(ctx){
+      const g = IND.gator(ctx.v);
+      const paint = (arr, sign) => {
+        const out = [];
+        for (let i = 0; i < arr.length; i++){
+          if (arr[i] == null) continue;
+          const grow = arr[i - 1] != null ? Math.abs(arr[i]) >= Math.abs(arr[i - 1]) : true;
+          out.push({ time: ctx.v[i].time, value: arr[i], color: grow ? '#2ebd85' : '#f6465d' });
+        }
+        return out;
+      };
+      return [{ key: 'u', type: 'hist', precision: 5, levels: [[0, '#65748b']], data: paint(g.up, 1) },
+              { key: 'd', type: 'hist', precision: 5, data: paint(g.dn, -1) }];
+    },
+  },
+  {
+    id: 'bwmfi', label: 'Market Facilitation Index', kind: 'osc', cat: 'bw',
+    note: 'Bill Williams: bar range per unit of volume, in MT5\u2019s four colours \u2014 green (MFI and volume both up), brown (both down), blue (MFI up, volume down: a fake), pink (MFI down, volume up: a squat).',
+    def: { on: false, target: 'p3' }, params: [],
+    parts: [{ key: 'h', label: 'MFI', color: '#2ebd85', noHide: true }],
+    build(ctx){
+      const m = IND.bwmfi(ctx.v);
+      const COL = { green: '#32cd32', brown: '#8b4513', blue: '#1e90ff', pink: '#ff69b4' };
+      const data = [];
+      for (let i = 0; i < m.mfi.length; i++){
+        if (m.mfi[i] == null) continue;
+        data.push({ time: ctx.v[i].time, value: m.mfi[i], color: COL[m.state[i]] || '#65748b' });
+      }
+      return [{ key: 'h', type: 'hist', precision: 8, data }];
+    },
+  }
+);
+
+/* ---------- support & resistance on the chart ----------
+   The strongest levels the market has turned at, drawn flat across the window.
+   Green = support (turned up there), red = resistance (turned down), amber =
+   both. Thicker = touched more often. These are the same levels the Triple
+   Confirmation bot reads, so what you see is what it trades against. */
+INDS.push({
+  id: 'srl', label: 'Support & Resistance', kind: 'price', cat: 'other',
+  note: 'Swing highs and lows within a lookback, merged when they sit within a fraction of ATR of each other. Strength is the number of touches, weighted to recent ones.',
+  def: { on: false, wing: 3, lookback: 300, tolAtr: 0.35, max: 6, target: 'main' },
+  params: [
+    { k: 'wing', kind: 'num', min: 1, max: 10, label: 'Swing width (bars each side)' },
+    { k: 'lookback', kind: 'num', min: 50, max: 1000, label: 'Lookback (bars)' },
+    { k: 'tolAtr', kind: 'num', min: 0.1, max: 2, step: 0.05, label: 'Merge within (× ATR)' },
+    { k: 'max', kind: 'num', min: 1, max: 12, label: 'Levels shown' },
+  ],
+  parts: [{ key: 'sup', label: 'Support', color: '#2ebd85' }, { key: 'res', label: 'Resistance', color: '#f6465d' },
+          { key: 'both', label: 'Both', color: '#ffb03a' }],
+  build(ctx, c){
+    const lv = IND.srLevels(ctx.v, { wing: c.wing, lookback: c.lookback, tolAtr: c.tolAtr, max: c.max });
+    const cols = Object.assign({ sup: '#2ebd85', res: '#f6465d', both: '#ffb03a' }, c.colors || {});
+    return lv.map((L, k) => {
+      const part = L.kind === 'support' ? 'sup' : L.kind === 'resistance' ? 'res' : 'both';
+      return { key: 'l' + k, color: cols[part], width: Math.min(4, 1 + Math.floor(L.touches / 2)),
+        lineStyle: L.touches >= 3 ? 0 : 2,
+        data: ctx.v.slice(Math.max(0, L.last - 1)).map(b => ({ time: b.time, value: L.price })) };
+    });
+  },
+});
+
+/* ---------- which tab each indicator lives in ----------
+   The four groups are MetaTrader's own (Trend, Oscillators, Volumes, Bill
+   Williams); "More" holds the ASTRA extras MT5 does not ship. Anything not
+   listed here is an ASTRA extra by definition, so a new indicator can never
+   vanish from the dialog by being unclassified. */
+const IND_CATS = {
+  trend: ['ema1', 'ema2', 'ema3', 'bb', 'env', 'psar', 'ichi', 'sdev', 'adx', 'adxc',
+          'ama', 'dema', 'tema', 'frama', 'vidya'],
+  oscillators: ['atr', 'bearpower', 'bullpower', 'chaikin', 'cci', 'dem', 'force', 'macd', 'macd_mt5',
+                'mom', 'osma', 'rsi', 'rvi', 'stoch', 'trix', 'wpr'],
+  vol: ['vol', 'mfi', 'obv', 'ad'],
+  bw: ['ao', 'alli', 'frac', 'ac', 'gator', 'bwmfi'],
+};
+for (const def of INDS){
+  def.category = 'other';
+  for (const [cat, ids] of Object.entries(IND_CATS)) if (ids.indexOf(def.id) !== -1) def.category = cat;
 }
+/* the existing Wilder ADX takes MetaTrader's name for it */
+if (INDS.find(d => d.id === 'adx')) INDS.find(d => d.id === 'adx').label = 'ADX Wilder (+DI / −DI)';
 
 const IND_BY_ID = {};
 for (const d of INDS) IND_BY_ID[d.id] = d;
