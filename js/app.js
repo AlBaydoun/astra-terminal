@@ -547,10 +547,15 @@ const App = {
     scaleFixed: 'Fixed scale', scaleMin: 'Minimum', scaleMax: 'Maximum',
   },
 
-  openIndProps(id){
+  openIndProps(id, win){
     const def = IND_BY_ID[id];
     if (!def) return;
-    const c = Chart.settings[id] || def.def;
+    const base = Chart.settings[id] || def.def;
+    /* opened from a window's legend while the study sits in more than one
+       window: the card edits THAT window only */
+    const scoped = !!win && Chart.targetsOf(base).length > 1 && Chart.targetsOf(base).includes(win);
+    const c = scoped ? Chart.cfgFor(base, win) : base;
+    const winName = (IND_TARGETS.find(t => t[0] === win) || [win, win])[1];
     const parts = def.parts || [];
 
     const params = (def.params || []).map(p => {
@@ -619,7 +624,12 @@ const App = {
       <div class="indHint">Unticked, the window fits itself to the line. Ticked, it is pinned between
         the two values whatever the line does — MetaTrader pins RSI at 0–100 this way.</div>`;
 
-    document.getElementById('indPropBody').innerHTML =
+    const scopeBar = scoped
+      ? `<div class="ipScope">Editing <b>${esc(winName)}</b> only — the other windows keep their settings.` +
+        (Chart.hasOwnSettings(base, win) ? ` <button type="button" class="bMini" id="ipUseShared">Use the shared settings here</button>` : '') + `</div>`
+      : (base.perWin && Object.keys(base.perWin).some(k => Chart.hasOwnSettings(base, k))
+        ? `<div class="ipScope">Shared settings. Windows marked * keep their own changes on top of these.</div>` : '');
+    document.getElementById('indPropBody').innerHTML = scopeBar +
       (def.note ? `<div class="indHint">${esc(def.note)}</div>` : '') +
       `<div class="ipTabs">
          <button class="on" data-iptab="params">Parameters</button>
@@ -645,8 +655,34 @@ const App = {
 
     const all = document.getElementById('ipAllTf');
     if (all) all.onclick = () => document.querySelectorAll('#indPropBody [data-tf]').forEach(x => { x.checked = true; });
+    const useShared = document.getElementById('ipUseShared');
+    if (useShared) useShared.onclick = () => {
+      if (base.perWin) delete base.perWin[win];
+      lsSet('astra_ind', Chart.settings);
+      this.hideModal('indPropModal');
+      Chart.renderAll();
+      toast(winName + ' now follows the shared settings', 'ok');
+    };
     document.getElementById('indPropApply').onclick = () => {
-      this.readIndControls('#indPropBody');
+      if (scoped){
+        /* read into the shared record, then keep only what differs from it as
+           this window's override and put the shared record back untouched */
+        const snap = JSON.parse(JSON.stringify(base));
+        this.readIndControls('#indPropBody');
+        const read = Chart.settings[id];
+        const diff = {};
+        for (const k of Object.keys(read)){
+          if (Chart.SHARED_KEYS.includes(k)) continue;
+          if (JSON.stringify(read[k]) !== JSON.stringify(snap[k])) diff[k] = read[k];
+        }
+        /* shared keys (which windows, timeframes) still apply everywhere */
+        for (const k of ['targets', 'target', 'tfs']) snap[k] = read[k];
+        snap.perWin = Object.assign({}, snap.perWin || {});
+        if (Object.keys(diff).length) snap.perWin[win] = diff; else delete snap.perWin[win];
+        Chart.settings[id] = snap;
+      } else {
+        this.readIndControls('#indPropBody');
+      }
       lsSet('astra_ind', Chart.settings);
       this.hideModal('indPropModal');
       Chart.renderAll();

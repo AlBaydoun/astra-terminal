@@ -300,6 +300,30 @@ const Chart = {
     return list.filter((t, i) => list.indexOf(t) === i);
   },
 
+  /* Per-window settings. `perWin[window]` holds only what was changed for
+     that window (a period, a colour, a level list…); everything else comes
+     from the shared settings. Keys that describe the indicator as a whole
+     — on/off, which windows, timeframes, the eye — are never per window. */
+  SHARED_KEYS: ['on', 'target', 'targets', 'tfs', 'visible', 'hiddenIn', 'perWin'],
+  cfgFor(cfg, target){
+    const o = cfg && cfg.perWin && cfg.perWin[target];
+    if (!o || !Object.keys(o).length) return cfg;
+    const out = Object.assign({}, cfg, o);
+    if (o.colors) out.colors = Object.assign({}, cfg.colors || {}, o.colors);
+    if (o.hidden) out.hidden = Object.assign({}, cfg.hidden || {}, o.hidden);
+    return out;
+  },
+  hasOwnSettings(cfg, target){
+    const o = cfg && cfg.perWin && cfg.perWin[target];
+    return !!(o && Object.keys(o).length);
+  },
+
+  /* hidden with the eye — everywhere (visible:false, the dialog tick) or in
+     one window only (hiddenIn[window], the eye in that window's legend) */
+  hiddenIn(cfg, target){
+    return !cfg || cfg.visible === false || !!(cfg.hiddenIn && cfg.hiddenIn[target]);
+  },
+
   /* which extra windows are needed right now, in fixed order */
   neededPanes(){
     const want = [];
@@ -413,9 +437,8 @@ const Chart = {
       const cfg = this.settings[def.id];
       if (!cfg || !cfg.on) continue;
       if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
-      if (cfg.visible === false) continue;      /* hidden with the eye takes no band */
       for (const t of this.targetsOf(cfg)){
-        if (t === 'main') continue;
+        if (t === 'main' || this.hiddenIn(cfg, t)) continue;   /* hidden takes no band */
         const m = map[t] = map[t] || {};
         const key = this.scaleKey(def);
         if (!m[key]){
@@ -556,30 +579,37 @@ const Chart = {
       /* an indicator can be restricted to certain timeframes, so a 200-period
          average need not clutter a 1-second chart */
       if (cfg.tfs && cfg.tfs.length && !cfg.tfs.includes(STORE.tf)) continue;
-      let specs;
-      try { specs = def.build(ctx, cfg) || []; } catch(e){ continue; }
-      /* apply the look chosen in the dialog: colour per line, thickness, dash */
-      const chosen = cfg.colors || {};
-      for (const spec of specs){
-        const part = (def.parts || []).find(p => p.key === spec.key);
-        spec.color = chosen[spec.key] || spec.color || (part && part.color) || def.color;
-        if (cfg.width) spec.width = cfg.width;
-        if (cfg.style != null && spec.lineStyle == null) spec.lineStyle = cfg.style;
-      }
-      this.specCache[def.id] = { def, cfg, specs };
-      /* hidden with the eye: it stays in the list and the legend, keeps every
-         setting, and simply is not drawn until the eye is clicked again */
-      if (cfg.visible === false) continue;
-      /* MetaTrader's Levels and Scale tabs, for every indicator: the user's
-         level list rides on the indicator's first line, and the scale choice
-         travels with every line so the window obeys it */
-      this.applyUserLevels(def, cfg, specs);
+      /* one build per distinct settings set: the shared one, plus one for every
+         window that has its own — so RSI(14) in window 1 and RSI(7) in window 2
+         are both exactly what their windows asked for */
+      const dress = (tcfg) => {
+        let specs;
+        try { specs = def.build(ctx, tcfg) || []; } catch(e){ return null; }
+        const chosen = tcfg.colors || {};
+        for (const spec of specs){
+          const part = (def.parts || []).find(p => p.key === spec.key);
+          spec.color = chosen[spec.key] || spec.color || (part && part.color) || def.color;
+          if (tcfg.width) spec.width = tcfg.width;
+          if (tcfg.style != null && spec.lineStyle == null) spec.lineStyle = tcfg.style;
+        }
+        /* MetaTrader's Levels and Scale tabs, for every indicator: the user's
+           level list rides on the indicator's first line, and the scale choice
+           travels with every line so the window obeys it */
+        this.applyUserLevels(def, tcfg, specs);
+        return specs;
+      };
+      const shared = dress(cfg);
+      if (!shared) continue;
+      this.specCache[def.id] = { def, cfg, specs: shared, byTarget: {} };
       /* the same study can sit in several windows at once — one series per
          window, each keyed by where it lives */
       for (const want of this.targetsOf(cfg)){
       const target = this.chartFor(want) ? want : 'main';
       const chart = this.chartFor(target);
-      if (!chart) continue;
+      if (!chart || this.hiddenIn(cfg, target)) continue;
+      const tcfg = this.cfgFor(cfg, target);
+      const specs = tcfg === cfg ? shared : (dress(tcfg) || []);
+      this.specCache[def.id].byTarget[target] = { cfg: tcfg, specs };
       const band = (scales[target] || {})[this.scaleKey(def)] || null;
       const scaleId = (band && band.id) || 'right';
       for (const spec of specs){
@@ -676,13 +706,15 @@ const Chart = {
       if (!this.targetsOf(c.cfg).includes(target)) continue;
       if (c.cfg.tfs && c.cfg.tfs.length && !c.cfg.tfs.includes(STORE.tf)) continue;
       if (target === 'main' && def.id === 'vol') continue;   // volume already in the main legend
-      const hidden = c.cfg.visible === false;
-      const vals = hidden ? '<b class="dim2">hidden</b>' : c.specs.map(sp =>
+      const hidden = this.hiddenIn(c.cfg, target);
+      const here = (c.byTarget && c.byTarget[target]) || { cfg: this.cfgFor(c.cfg, target), specs: c.specs };
+      const own = this.hasOwnSettings(c.cfg, target);
+      const vals = hidden ? '<b class="dim2">hidden</b>' : here.specs.map(sp =>
         `<b style="color:${sp.color}">${esc(this.fmtInd(this.valueAt(sp.data, time)))}</b>`).join(' ');
-      out.push(`<span class="ilg${hidden ? ' ilgHidden' : ''}" data-ind="${def.id}" title="Click to edit ${esc(def.label)}">` +
-        `<i style="color:${c.specs[0] ? c.specs[0].color : 'inherit'}">` +
-        `${esc(def.label)}${esc(this.paramText(def, c.cfg))}</i> ${vals}` +
-        `<b class="ilgEye" data-indeye="${def.id}" title="${hidden ? 'Show again' : 'Hide for now (keeps its settings)'}">${hidden ? '◌' : '◉'}</b>` +
+      out.push(`<span class="ilg${hidden ? ' ilgHidden' : ''}" data-ind="${def.id}" data-indwin="${target}" title="Click to edit ${esc(def.label)}${own ? ' — this window has its own settings' : ''}">` +
+        `<i style="color:${here.specs[0] ? here.specs[0].color : 'inherit'}">` +
+        `${esc(def.label)}${esc(this.paramText(def, here.cfg))}${own ? '<u class="ilgOwn" title="Own settings in this window">*</u>' : ''}</i> ${vals}` +
+        `<b class="ilgEye" data-indeye="${def.id}" data-indwin="${target}" title="${hidden ? 'Show again here' : 'Hide here for now (keeps its settings)'}">${hidden ? '◌' : '◉'}</b>` +
         `<b class="ilgX" data-indoff="${def.id}" data-indwin="${target}" title="Remove from this window">×</b></span>`);
     }
     return out.join('');
@@ -697,8 +729,19 @@ const Chart = {
       const eye = e.target.closest && e.target.closest('[data-indeye]');
       if (eye){
         e.stopPropagation();
-        const cfg = this.settings[eye.dataset.indeye];
-        if (cfg){ cfg.visible = cfg.visible === false; lsSet('astra_ind', this.settings); this.renderAll(); }
+        const cfg = this.settings[eye.dataset.indeye], win = eye.dataset.indwin || 'main';
+        if (cfg){
+          if (cfg.visible === false){
+            /* hidden everywhere by the dialog: showing it here shows it here only */
+            cfg.visible = true;
+            cfg.hiddenIn = {};
+            for (const t of this.targetsOf(cfg)) if (t !== win) cfg.hiddenIn[t] = true;
+          } else {
+            cfg.hiddenIn = Object.assign({}, cfg.hiddenIn || {});
+            if (cfg.hiddenIn[win]) delete cfg.hiddenIn[win]; else cfg.hiddenIn[win] = true;
+          }
+          lsSet('astra_ind', this.settings); this.renderAll();
+        }
         return;
       }
       const off = e.target.closest && e.target.closest('[data-indoff]');
@@ -715,7 +758,7 @@ const Chart = {
         return;
       }
       const tag = e.target.closest && e.target.closest('.ilg[data-ind]');
-      if (tag && typeof App !== 'undefined' && App.openIndProps) App.openIndProps(tag.dataset.ind);
+      if (tag && typeof App !== 'undefined' && App.openIndProps) App.openIndProps(tag.dataset.ind, tag.dataset.indwin || 'main');
     });
   },
 

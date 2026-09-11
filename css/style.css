@@ -1184,6 +1184,11 @@ body.resizing iframe, body.resizing canvas { pointer-events: none; }
 .ilgEye:hover{ color:var(--accent); }
 .ilgHidden i{ opacity:.45; text-decoration:line-through; }
 .eyeTick{ margin-right:6px; padding-right:6px; border-right:1px solid var(--border-soft); }
+.ilgOwn{ text-decoration:none; color:var(--accent); margin-left:2px; font-weight:700; }
+.ipScope{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px; padding:7px 10px;
+  border:1px solid rgba(0,229,255,.35); border-radius:7px; background:rgba(0,229,255,.06); font-size:12px;
+}
 .ilgX:hover{ color:var(--red,#f6465d); }
 
 
