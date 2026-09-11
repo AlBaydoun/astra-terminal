@@ -445,7 +445,7 @@ const App = {
         if (p.kind === 'text')
           return `<input type="text" data-id="${def.id}" data-k="${p.k}" value="${esc(val == null ? '' : val)}" ` +
             `placeholder="${esc(p.placeholder || '')}" style="width:84px" title="${esc(p.label || p.k)}" spellcheck="false">`;
-        return `<input type="number" data-id="${def.id}" data-k="${p.k}" value="${val}" ` +
+        return `<input type="number" data-id="${def.id}" data-k="${p.k}" value="${val}"${p.any ? ' data-any="1"' : ''} ` +
           `min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''} style="width:52px" title="${p.k}">`;
       }).join('');
       const applyTo = def.applyTo
@@ -566,7 +566,7 @@ const App = {
           p.opts.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('') + '</select>'
         : p.kind === 'text'
         ? `<input type="text" data-id="${id}" data-k="${p.k}" value="${esc(val == null ? '' : val)}" placeholder="${esc(p.placeholder || '')}" spellcheck="false">`
-        : `<input type="number" data-id="${id}" data-k="${p.k}" value="${val}" min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''}>`;
+        : `<input type="number" data-id="${id}" data-k="${p.k}" value="${val}" min="${p.min}" max="${p.max}"${p.step ? ` step="${p.step}"` : ''}${p.any ? ' data-any="1"' : ''}>`;
       return `<label class="ipRow"><span>${esc(label)}</span>${field}</label>`;
     }).join('');
 

@@ -76,7 +76,9 @@ const StratInd = {
   run(bot, ctx, cfg){
     const v = ctx.v;
     if (!v || v.length < 40) return [];
-    const bars = Math.max(10, Math.min(400, cfg.bars || 120));
+    /* the whole loaded history unless a limit is set — results are cached per
+       candle, so scrolling further back only costs the new candles */
+    const bars = cfg.bars > 0 ? Math.max(10, Math.min(cfg.bars, v.length)) : v.length;
     const look = Math.min(460, Math.max(140, (bot.warmup || 80) + 60));
     const min = cfg.minScore != null ? cfg.minScore : (bot.defaults.minScore || 0);
     const key = [bot.id, STORE.symbol, STORE.tf, look, min].join('|');
@@ -158,9 +160,9 @@ const SigIndReg = {
     const short = bot.name.replace(/\s*\(.*\)\s*$/, '');
     const def = {
       id, label: short + ' · BUY / SELL', kind: 'price', mainOnly: true, cat: 'bots',
-      def: { on: false, target: 'main', bars: 300, minScore: bot.defaults.minScore || 0, tag: short.split(' ')[0].toUpperCase() },
+      def: { on: false, target: 'main', bars: 0, minScore: bot.defaults.minScore || 0, tag: short.split(' ')[0].toUpperCase() },
       params: [
-        { k: 'bars', kind: 'num', label: 'Candles to scan', min: 20, max: 400, step: 10 },
+        { k: 'bars', kind: 'num', label: 'Candles to scan (0 = whole chart)', min: 0, max: 20000, step: 100, any: true },
         { k: 'minScore', kind: 'num', label: 'Minimum to signal', min: 0, max: 100, step: 1 },
         { k: 'tag', kind: 'text', label: 'Arrow label', placeholder: short.split(' ')[0].toUpperCase() },
       ],
@@ -186,6 +188,7 @@ const SigIndReg = {
     if (typeof Chart !== 'undefined' && Chart.settings){
       const saved = (typeof lsGet === 'function') ? lsGet('astra_ind', {}) : {};
       Chart.settings[id] = Object.assign({}, def.def, saved[id] || {});
+      if (Chart.settings[id].bars === 300) Chart.settings[id].bars = 0;   /* the old default: now the whole chart */
     }
     return def;
   },
@@ -208,9 +211,9 @@ const StratIndReg = {
       id,
       label: bot.name.replace('★ ', '') + ' (bot)',
       kind: 'osc',
-      def: { on: false, target: 'p1', bars: 120, minScore: bot.defaults.minScore || 0 },
+      def: { on: false, target: 'p1', bars: 0, minScore: bot.defaults.minScore || 0 },
       params: [
-        { k: 'bars', kind: 'num', label: 'Candles to score', min: 10, max: 400, step: 10 },
+        { k: 'bars', kind: 'num', label: 'Candles to score (0 = whole chart)', min: 0, max: 20000, step: 100, any: true },
         { k: 'minScore', kind: 'num', label: 'Minimum to trade', min: 0, max: 100, step: 1 },
       ],
       /* one bar per candle, coloured by what the bot would have done — so the
@@ -246,6 +249,7 @@ const StratIndReg = {
     if (typeof Chart !== 'undefined' && Chart.settings){
       const saved = (typeof lsGet === 'function') ? lsGet('astra_ind', {}) : {};
       Chart.settings[def.id] = Object.assign({}, def.def, saved[def.id] || {});
+      if (Chart.settings[def.id].bars === 120) Chart.settings[def.id].bars = 0;   /* the old default: now the whole chart */
     }
     return def;
   },
