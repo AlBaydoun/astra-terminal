@@ -224,10 +224,21 @@ const OpenTrades = {
   /* ---------- the live half, rewritten in place ----------
      Only the figures inside [data-f] are touched, so a number being typed into
      a stop box is never yanked away mid-edit. */
+  /* which page is showing cards right now: the Open Trades page (every bot),
+     the manual desk (its own), or any bot's page (its own) */
+  scope(){
+    const a = Bots.active;
+    if (a === 'open') return { host: document.getElementById('botBody'), bot: null };
+    if (a === 'manual') return { host: document.getElementById('manualPositions'), bot: 'manual' };
+    const b = BOT_BY_ID[a];
+    if (b && Bots.isPage && !Bots.isPage(b) && !b.manual && !b.liveManual) return { host: document.getElementById('botPositions'), bot: a };
+    return null;
+  },
   refresh(){
-    const host = document.getElementById(Bots.active === 'manual' ? 'manualPositions' : 'botBody');
-    if (!host || !['open','manual'].includes(Bots.active)) return this.stop();
-    const rows = this.all().filter(r => Bots.active !== 'manual' || r.bot === 'manual');
+    const sc = this.scope();
+    const host = sc && sc.host;
+    if (!host) return this.stop();
+    const rows = this.all().filter(r => !sc.bot || r.bot === sc.bot);
     const byKey = {};
     for (const r of rows) byKey[r.bot + ':' + r.p.id] = r;
 
@@ -237,6 +248,7 @@ const OpenTrades = {
       const l = this.live(row), p = row.p;
       const set = (f, text, cls) => {
         const el = card.querySelector('[data-f="' + f + '"]');
+        if (el && el.dataset.armed === '1') return;
         if (!el) return;
         if (el.textContent !== text) el.textContent = text;
         if (cls != null) el.className = cls;
@@ -262,7 +274,7 @@ const OpenTrades = {
       this.recalc(card,row.bot+':'+p.id);
       const map = card.querySelector('.wsPriceMap');
       if (map && typeof WorkspaceUI !== 'undefined') map.innerHTML = WorkspaceUI.priceMap(p,l);
-      const cb = card.querySelector('[data-f="closebtn"]');
+      const cb = card.querySelector('[data-f="closebtn"]:not([data-armed="1"])');
       if (cb) cb.textContent = 'Close at market · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal);
       card.className = 'otCard ' + (l.unreal >= 0 ? 'up' : 'down');
     });
@@ -274,7 +286,7 @@ const OpenTrades = {
       this.bind(list.firstElementChild);
     }
     const template=document.createElement('div');
-    template.innerHTML=this.view(Bots.active==='manual'?'manual':null,true);
+    template.innerHTML=this.view(sc.bot,true);
     host.querySelector('.botStats')?.replaceWith(template.querySelector('.botStats'));
     host.querySelector('.otEmpty')?.remove();
     if(!rows.length)host.querySelector('.otList').insertAdjacentHTML('afterend','<div class="empty otEmpty">No open positions.</div>');
@@ -332,6 +344,28 @@ const OpenTrades = {
     const empty = root.querySelector('.otFilterEmpty');
     if (empty) empty.hidden = !(want && !shown);
     root.querySelectorAll('[data-otbot]').forEach(b => b.classList.toggle('on', (b.dataset.otbot || '') === want));
+  },
+
+  /* a bot's page is rebuilt every 30 seconds; anything typed into a stop or
+     target box must survive that */
+  snapshot(host){
+    const out = {};
+    if (!host) return out;
+    host.querySelectorAll('[data-otsl],[data-ottp],[data-otts],[data-ottg]').forEach(el => {
+      const k = el.dataset.otsl != null ? 'sl:' + el.dataset.otsl : el.dataset.ottp != null ? 'tp:' + el.dataset.ottp
+              : el.dataset.otts != null ? 'ts:' + el.dataset.otts : 'tg:' + el.dataset.ottg;
+      if (el.value !== (el.dataset.saved != null ? el.dataset.saved : el.defaultValue)) out[k] = el.value;
+    });
+    return out;
+  },
+  restore(host, snap){
+    if (!host || !snap) return;
+    for (const [k, v] of Object.entries(snap)){
+      const [kind, key] = [k.slice(0, 2), k.slice(3)];
+      const attr = { sl: 'data-otsl', tp: 'data-ottp', ts: 'data-otts', tg: 'data-ottg' }[kind];
+      const el = host.querySelector('[' + attr + '="' + key + '"]');
+      if (el) el.value = v;
+    }
   },
 
   bind(host){
@@ -400,9 +434,25 @@ const OpenTrades = {
       const { bot, id } = this.split(raw.slice(0, cut));
       Bots.partialClose(bot, id, parseFloat(raw.slice(cut + 1)));
     }));
+    /* two presses to close: the first turns the button into a confirmation
+       for six seconds, so a slip of the hand never closes a trade */
     host.querySelectorAll('[data-otclose]').forEach(el => el.addEventListener('click', () => {
       const { bot, id } = this.split(el.dataset.otclose);
-      Bots.closePos(bot, id);
+      if (el.dataset.armed === '1'){
+        el.dataset.armed = ''; clearTimeout(el._disarm);
+        Bots.closePos(bot, id);
+        return;
+      }
+      el.dataset.armed = '1';
+      el.dataset.wasText = el.textContent;
+      el.textContent = 'Press again to close now · ' + el.textContent.split('·').pop().trim();
+      el.classList.add('armed');
+      const cancel = document.createElement('button');
+      cancel.className = 'bMini'; cancel.textContent = 'Keep it open'; cancel.dataset.otkeep = '1';
+      el.after(cancel);
+      const disarm = () => { el.dataset.armed = ''; el.classList.remove('armed'); cancel.remove(); this.refresh(); };
+      cancel.addEventListener('click', e => { e.stopPropagation(); clearTimeout(el._disarm); disarm(); });
+      el._disarm = setTimeout(disarm, 6000);
     }));
     this.start();
   },

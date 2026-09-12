@@ -340,8 +340,34 @@ const App = {
       /* a maximised chart hides the panel entirely — a tab click ends that */
       if (document.documentElement.dataset.chartmax === '1' && typeof App.setMax === 'function') App.setMax(false);
     };
+    /* the lower panel's size mode: normal → minimised → maximised → normal,
+       cycled by clicking the tab that is already open */
+    const setPanelMax = on => {
+      const bp = document.getElementById('bottomPanel');
+      bp.classList.toggle('panelMax', on);
+      /* the two tabs with an expand button of their own follow along */
+      const news = document.getElementById('bot-news'), nb = document.getElementById('mnExpand');
+      if (news && news.classList.contains('active')){
+        news.classList.toggle('mnExpanded', on);
+        if (nb){ nb.setAttribute('aria-pressed', String(on)); nb.textContent = on ? '⛶ Restore' : '⛶ Expand'; }
+      }
+      if (typeof WorkspaceUI !== 'undefined' && document.getElementById('bot-bots')?.classList.contains('active')) WorkspaceUI.expand(on);
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+    };
+    this.setPanelMax = setPanelMax;
     document.querySelectorAll('#botTabs button[data-tab]').forEach(b =>
       b.addEventListener('click', () => {
+        const bp = document.getElementById('bottomPanel');
+        if (b.classList.contains('active')){
+          const collapsed = bp.classList.contains('collapsed');
+          const maxed = bp.classList.contains('panelMax') ||
+            (b.dataset.tab === 'news' && document.getElementById('bot-news').classList.contains('mnExpanded')) ||
+            (b.dataset.tab === 'bots' && document.getElementById('bot-bots').classList.contains('wsExpanded'));
+          if (!collapsed && !maxed){ bp.classList.add('collapsed'); return; }          /* normal → minimised */
+          if (collapsed){ bp.classList.remove('collapsed'); openPanel(); setPanelMax(true); return; }   /* minimised → maximised */
+          setPanelMax(false);                                                            /* maximised → normal */
+          return;
+        }
         openPanel();
         document.querySelectorAll('#botTabs button[data-tab]').forEach(x => x.classList.toggle('active', x === b));
         document.querySelectorAll('.botPanel').forEach(p =>
@@ -354,6 +380,7 @@ const App = {
       }));
     document.getElementById('botCollapse').addEventListener('click', () => {
       const bp = document.getElementById('bottomPanel');
+      if (bp.classList.contains('panelMax')) setPanelMax(false);
       bp.classList.toggle('collapsed');
       if (!bp.classList.contains('collapsed') && document.getElementById('bot-heatmap').classList.contains('active')) Heat.show();
     });

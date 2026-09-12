@@ -15,7 +15,24 @@ const PosLines = {
   pending: null,       // a dragged level waiting for your Apply / Cancel
   focus: null,         // 'bot:id' opened from a bot page — drawn thicker for a while
   timer: null,
-  COL: { sl: '#f6465d', tp: '#2ebd85', entry: '#8fa3c8' },
+  COL: { sl: '#f6465d', tp: '#2ebd85', entry: '#8fa3c8', trail: '#ffd166' },
+
+  /* the trailing stop of a position, if it has one: where it switches on,
+     and — once on — where it sits right now, following the best price */
+  trailOf(r){
+    const p = r.p;
+    const trail = p.trail !== undefined ? p.trail : ((Bots.cfg(r.bot) || {}).trail || null);
+    if (!trail) return null;
+    const R1 = p.stopDist || Math.abs(p.entry - (p.slInit || p.sl));
+    if (!(R1 > 0)) return null;
+    const startR = trail.start != null ? trail.start : 1, gapR = trail.gap != null ? trail.gap : 0.5;
+    const arm = p.entry + p.dir * startR * R1;                    /* price where it switches on */
+    const peak = p.peak != null ? p.peak : null;
+    const gainR = peak != null ? (peak - p.entry) * p.dir / R1 : 0;
+    const on = p.trailed || gainR >= startR;
+    const level = on && peak != null ? peak - p.dir * gapR * R1 : null;   /* where the stop would sit now */
+    return { startR, gapR, arm, on, level, peak, R1 };
+  },
 
   rows(){
     if (!this.on || typeof Bots === 'undefined' || typeof OpenTrades === 'undefined') return [];
@@ -87,8 +104,10 @@ const PosLines = {
     return x == null || isNaN(x) ? 0 : Math.max(0, x);
   },
 
+  closeBtns: [],
   draw(ctx){
     const rows = this.rows();
+    this.closeBtns = [];
     this.sync();
     if (!rows.length || !Chart.priceSeries) return;
     const W = Draw.cssW, right = W - 2;
@@ -125,22 +144,51 @@ const PosLines = {
         return (v >= 0 ? '+' : '') + fmtNum(v);
       };
       const lx = 6;
-      this.label(ctx, lx, yE, side + ' ' + (p.lots ? p.lots + ' lot' : fmtNum(p.qty)) + ' · ' + r.botName + ' · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal), this.COL.entry, true);
+      const box = this.label(ctx, lx, yE, side + ' ' + (p.lots ? p.lots + ' lot' : fmtNum(p.qty)) + ' · ' + r.botName + ' · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal), this.COL.entry, true);
+      /* a small ✕ CLOSE button glued to the entry label */
+      const cb = { x: box.x + box.w + 4, y: box.y, w: 58, h: box.h, bot: r.bot, id: p.id };
+      ctx.fillStyle = 'rgba(246,70,93,.18)'; ctx.fillRect(cb.x, cb.y, cb.w, cb.h);
+      ctx.strokeStyle = this.COL.sl; ctx.strokeRect(cb.x + .5, cb.y + .5, cb.w - 1, cb.h - 1);
+      ctx.fillStyle = '#ffb3bd'; ctx.textBaseline = 'middle'; ctx.fillText('✕ close', cb.x + 6, cb.y + cb.h / 2);
+      this.closeBtns.push(cb);
       const tail = which => (this.drag && this.drag.which === which && dragging === this.drag) ? '  ← release, then confirm'
         : (this.pending && dragging === this.pending && this.pending.which === which) ? '  · waiting for your confirmation' : '  ⇕';
       if (yS != null) this.label(ctx, lx, yS, 'SL ' + fmtPrice(sl) + ' · ' + money(sl) + tail('sl'), this.COL.sl, yS > yE);
       if (yT != null) this.label(ctx, lx, yT, 'TP ' + fmtPrice(tp) + ' · ' + money(tp) + tail('tp'), this.COL.tp, yT > yE);
+      /* the trailing stop: dotted amber. Before it engages, the line marks the
+         price that switches it on; once engaged, the stop itself is the trail
+         (drawn red above) and the amber line shows the peak it follows. */
+      const tr = this.trailOf(r);
+      if (tr){
+        if (!tr.on){
+          const yA = this.yOf(tr.arm);
+          if (yA != null){
+            line(yA, this.COL.trail, [2, 4], 1);
+            this.label(ctx, W * 0.45, yA, 'TRAIL arms at ' + fmtPrice(tr.arm) + ' (' + tr.startR + 'R) · gap ' + tr.gapR + 'R', this.COL.trail, p.dir < 0);
+          }
+        } else if (tr.peak != null){
+          const yP = this.yOf(tr.peak);
+          if (yP != null){
+            line(yP, this.COL.trail, [2, 4], 1);
+            this.label(ctx, W * 0.45, yP, 'TRAILING · best ' + fmtPrice(tr.peak) + ' · gap ' + tr.gapR + 'R', this.COL.trail, p.dir < 0);
+          }
+          if (yS != null) this.label(ctx, W * 0.45, yS, 'trailing stop', this.COL.trail, yS > yE);
+        }
+      }
     }
     ctx.restore();
   },
 
   label(ctx, x, y, text, color, below){
     const w = ctx.measureText(text).width + 10, h = 16;
+    x = Math.max(2, Math.min(x, Draw.cssW - w - 4));      /* keep the whole label on the canvas */
     const yy = below ? y + 2 : y - h - 2;
     ctx.fillStyle = 'rgba(8,13,28,.85)'; ctx.fillRect(x, yy, w, h);
     ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(x + .5, yy + .5, w - 1, h - 1);
     ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 5, yy + h / 2);
+    return { x, y: yy, w, h };
   },
+  closeBtnAt(x, y){ return this.closeBtns.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null; },
 
   /* ---------- grabbing a stop or a target ---------- */
   hit(x, y){
@@ -156,10 +204,12 @@ const PosLines = {
     }
     return null;
   },
-  hover(x, y){ return this.hit(x, y) ? 'ns-resize' : ''; },
+  hover(x, y){ return this.closeBtnAt(x, y) ? 'pointer' : this.hit(x, y) ? 'ns-resize' : ''; },
 
   /* called from Draw's mousedown; true = we took the event */
   mousedown(e, x, y){
+    const cb = this.closeBtnAt(x, y);
+    if (cb){ this.confirmClose(cb.bot, cb.id); return true; }
     const h = this.hit(x, y);
     if (!h) return false;
     this.drag = Object.assign({}, h);        /* a copy — h keeps the price it started from */
@@ -214,6 +264,35 @@ PosLines.confirm = function(d, was){
   });
   box.querySelector('[data-pccancel]').addEventListener('click', () => this.cancelPending());
   Draw.redraw();
+};
+/* close at market, from the chart — confirmed first, like a moved level */
+PosLines.confirmClose = function(bot, id){
+  this.cancelPending();
+  const L = Bots.ledgers[bot]; const p = L && L.open.find(x => x.id === id);
+  if (!p) return;
+  const q = Bots.quoteFor(p.sym);
+  if (!q) return toast('No live price to close ' + baseAsset(p.sym) + ' against — check the bridge', 'warn');
+  const row = OpenTrades.all().find(r => r.bot === bot && r.p.id === id);
+  const l = row ? OpenTrades.live(row) : { unreal: 0 };
+  const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
+  const wrap = document.getElementById('mainWrap');
+  const y = Chart.priceSeries.priceToCoordinate(p.entry) || 0;
+  const botName = (BOT_BY_ID[bot] || {}).name || bot;
+  wrap.insertAdjacentHTML('beforeend', `<div id="posConfirm" class="posConfirm" style="top:${Math.max(8, Math.min(wrap.clientHeight - 120, y + 10))}px">
+    <b>Close at market · ${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))} <small>${esc(botName)}</small></b>
+    <div class="pcRow"><span>Size</span><i>${p.lots ? p.lots + ' lot' : fmtNum(p.qty)}</i><em></em><i></i></div>
+    <div class="pcRow"><span>Entry → price now</span><i>${fmtPrice(p.entry)}</i><em>→</em><i>${fmtPrice(q.price)}</i></div>
+    <div class="pcRow"><span>Result if closed now</span><i></i><em></em><i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i></div>
+    <div class="pcBtns"><button class="bMini danger" data-pcclose>Close now · ${fmtC(l.unreal)}</button><button class="bMini" data-pccancel>Cancel</button></div>
+    <small class="dim2">Closes the paper position at the live price. The bot's record will show “closed by operator”.</small>
+  </div>`);
+  const box = document.getElementById('posConfirm');
+  box.querySelector('[data-pcclose]').addEventListener('click', async () => {
+    box.remove();
+    await Bots.closePos(bot, id);
+    Draw.redraw();
+  });
+  box.querySelector('[data-pccancel]').addEventListener('click', () => this.cancelPending());
 };
 PosLines.cancelPending = function(){
   const box = document.getElementById('posConfirm');

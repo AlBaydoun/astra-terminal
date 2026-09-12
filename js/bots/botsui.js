@@ -9,6 +9,49 @@ Object.assign(Bots, {
     this.renderNav();
   },
 
+  /* ---- _ / ⛶ on every column of a bot's page ----
+     Minimise folds a column to its heading; maximise gives it the whole
+     width and hides the others. Remembered per bot and column. */
+  COL_KEY: 'astra_colstate',
+  colState(){ return lsGet(this.COL_KEY, {}) || {}; },
+  wireCols(host, botId){
+    const st = this.colState();
+    host.querySelectorAll('.botGrid').forEach(grid => {
+      let anyMax = false;
+      grid.querySelectorAll(':scope > .botCol').forEach(col => {
+        const h = col.querySelector(':scope > .botH');
+        if (!h) return;
+        const key = botId + '|' + h.textContent.replace(/[^A-Za-z]/g, '').slice(0, 24).toUpperCase();
+        col.dataset.colkey = key;
+        if (!h.querySelector('.colCtl')){
+          h.insertAdjacentHTML('beforeend', `<span class="paneCtl colCtl"><button data-col="min" title="Minimise this section">_</button><button data-col="max" title="Maximise this section">⛶</button></span>`);
+          h.querySelectorAll('[data-col]').forEach(btn => btn.addEventListener('click', e => {
+            e.stopPropagation(); e.preventDefault();
+            const cur = this.colState();
+            const what = btn.dataset.col;
+            if (what === 'min') cur[key] = cur[key] === 'min' ? null : 'min';
+            else { const on = cur[key] !== 'max'; for (const k of Object.keys(cur)) if (k.startsWith(botId + '|') && cur[k] === 'max') delete cur[k]; if (on) cur[key] = 'max'; }
+            if (!cur[key]) delete cur[key];
+            lsSet(this.COL_KEY, cur);
+            this.wireCols(host, botId);
+          }));
+          /* a folded column opens again when its heading is clicked */
+          h.addEventListener('click', e => {
+            if (e.target.closest('.colCtl')) return;
+            if (col.classList.contains('colMin')){ const cur = this.colState(); delete cur[key]; lsSet(this.COL_KEY, cur); this.wireCols(host, botId); }
+          });
+        }
+        const sst = st[key];
+        col.classList.toggle('colMin', sst === 'min');
+        col.classList.toggle('colMax', sst === 'max');
+        if (sst === 'max') anyMax = true;
+        const mb = h.querySelector('[data-col="min"]'); if (mb){ mb.textContent = sst === 'min' ? '▢' : '_'; mb.title = sst === 'min' ? 'Restore this section' : 'Minimise this section'; }
+        const xb = h.querySelector('[data-col="max"]'); if (xb){ xb.classList.toggle('on', sst === 'max'); xb.title = sst === 'max' ? 'Back to the normal layout' : 'Maximise this section'; }
+      });
+      grid.classList.toggle('hasMax', anyMax);
+    });
+  },
+
   /* the list on the left — re-run whenever its order changes */
   renderNav(){
     const nav = document.getElementById('botNav');
@@ -119,6 +162,8 @@ Object.assign(Bots, {
     }
     if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
     const keep = b.manual ? this.manualDraft : null;
+    /* typed stop/target values on a bot's own position cards survive the rebuild */
+    this._otKeep = host.dataset.bot === b.id && typeof OpenTrades !== 'undefined' ? OpenTrades.snapshot(host.querySelector('#botPositions')) : null;
     host.dataset.bot = b.id;
     host.innerHTML =
       `<div class="botHead">
@@ -775,7 +820,7 @@ Object.assign(Bots, {
       </div>
       ${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.equity(L) : ''}
       <div class="botGrid">
-        ${id==='manual'?'':`<div class="botCol"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length}</div>${this.openView(id, L)}</div>`}
+        ${id==='manual'?'':`<div class="botCol botColWide"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length} <span class="dim2">— the bot runs them; step in whenever you like</span></div><section id="botPositions">${OpenTrades.view(id)}</section></div>`}
         <div class="botCol"><div class="botH">${icon('clock')} CLOSED HISTORY</div>${this.closedView(L)}</div>
         <div class="botCol"><div class="botH">${icon('scanner')} DECISIONS</div>${this.decisionView(L)}</div>
         <div class="botCol"><div class="botH">${icon('report')} LESSONS FROM LOSSES</div>${this.lessonView(L)}
@@ -885,7 +930,12 @@ Object.assign(Bots, {
     }));
     /* the Open Trades page runs a one-second refresh; leaving it must stop
        that timer, or every page after it keeps ticking in the background */
-    if (b.trades) OpenTrades.bind(host); else if (b.manual) OpenTrades.bind(host.querySelector('#manualPositions')); else OpenTrades.stop();
+    this.wireCols(host, b.id);
+    const botPos = host.querySelector('#botPositions');
+    if (b.trades) OpenTrades.bind(host);
+    else if (b.manual) OpenTrades.bind(host.querySelector('#manualPositions'));
+    else if (botPos){ OpenTrades.restore(botPos, this._otKeep); this._otKeep = null; OpenTrades.bind(botPos); }
+    else OpenTrades.stop();
     if(b.manual&&typeof ManualAuto!=='undefined')ManualAuto.bind(host);
     if (b.dash) BotDash.bind(host);
     if (b.analysis) TradeAnalysis.bind(host);

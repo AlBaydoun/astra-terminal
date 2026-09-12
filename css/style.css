@@ -108,7 +108,7 @@ select#chartType {
 .spacer { flex: 1; }
 
 /* ============ MAIN LAYOUT ============ */
-#main { display: grid; grid-template-columns: 44px minmax(0, 1fr) 300px; gap: 8px; padding: 8px; min-height: 0; }
+#main { display: grid; grid-template-columns: var(--toolsW, 44px) minmax(0, 1fr) var(--sideW, 300px); gap: 8px; padding: 8px; min-height: 0; }
 
 /* left toolbar */
 #lefttools {
@@ -1954,3 +1954,121 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 body.stripFolded #chartLabelBar > *:not(#stripFoldBtn){ display:none !important; }
 body.stripFolded #chartLabelBar{ padding:3px 8px; }
 body.stripFolded #confluencePanel, body.stripFolded #todayCard{ display:none !important; }
+
+/* a bot's own open positions use the full Open Trades cards */
+.botColWide{ grid-column:1 / -1; }
+#botPositions .botNote{ display:none; }
+
+/* ============ window buttons on Windows 1/2/3 ============ */
+.paneCtl{ position:absolute; top:3px; right:6px; z-index:8; display:inline-flex; gap:2px; }
+.paneCtl button{
+  width:20px; height:18px; padding:0; display:grid; place-items:center; cursor:pointer;
+  background:rgba(6,10,22,.72); color:var(--dim); border:1px solid var(--border); border-radius:4px;
+  font-family:var(--font-mono); font-size:11px; line-height:1;
+}
+.paneCtl button:hover{ color:var(--text); border-color:var(--accent); }
+.paneCtl button.on{ color:var(--accent); border-color:rgba(0,229,255,.45); }
+.paneCtl [data-pc="close"]:hover{ color:#ffb3bd; border-color:rgba(246,70,93,.6); }
+.paneMode{ right:74px; }
+/* minimised: a strip you can click to restore */
+#chartArea .pane.paneMin{ height:22px !important; min-height:22px !important; flex:0 0 22px !important; cursor:pointer; }
+.pane.paneMin .paneChart, .pane.paneMin .paneMode, .pane.paneMin .paneGrip{ display:none !important; }
+.pane.paneMin .paneTag{ top:2px; opacity:.8; }
+.pane.paneMin .paneCtl{ top:2px; }
+/* maximised: this window takes most of the chart area, the price chart shrinks, the others fold */
+#chartArea.paneMaxed #mainWrap{ flex:0 0 120px !important; min-height:120px; }
+#chartArea.paneMaxed .pane.open:not(.paneMax){ height:22px !important; min-height:22px !important; flex:0 0 22px !important; }
+#chartArea.paneMaxed .pane.open:not(.paneMax) .paneChart{ display:none !important; }
+#chartArea .pane.paneMax{ flex:1 1 auto !important; height:auto !important; min-height:200px; }
+
+/* ============ window buttons on the price chart and the split charts ============ */
+#mainWrap .gridCtl{ top:6px; right:70px; z-index:12; }
+.miniHead .gridCtl{ position:static; margin-left:2px; }
+/* price chart minimised: a strip; the indicator windows take the room */
+#chartArea.mainMin #mainWrap{ flex:0 0 26px !important; min-height:26px !important; cursor:pointer; }
+#chartArea.mainMin #mainChart, #chartArea.mainMin #drawLayer, #chartArea.mainMin #legend, #chartArea.mainMin #indLegend{ display:none !important; }
+#chartArea.mainMin #mainWrap::before{ content:"PRICE CHART · minimised — click to restore"; position:absolute; left:10px; right:60px; top:6px; font-family:var(--font-mono); font-size:10px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#chartArea.mainMin #mainWrap .gridCtl{ top:3px; right:6px; }
+/* split chart minimised: header only */
+.miniCell.miniMin{ flex:0 0 auto !important; align-self:start; }
+.miniCell.miniMin .miniChart, .miniCell.miniMin .miniLegend{ display:none !important; }
+.miniCell.miniHidden{ display:none !important; }
+/* one chart maximised on the grid */
+#chartGrid.cellMax{ grid-template-columns:1fr !important; grid-template-rows:1fr !important; }
+#chartGrid.cellMax > *:not(.gridMax){ display:none !important; }
+#chartGrid.cellMax > .gridMax{ display:flex !important; }
+.gridCtl [data-gw="close"]:hover{ color:#ffb3bd; border-color:rgba(246,70,93,.6); }
+
+/* ============ side panel: minimise / maximise ============ */
+#sideTabs{ position:relative; padding-right:48px; }
+#sideTabs .sideCtl{ top:50%; right:6px; transform:translateY(-50%); }
+.sideStrip{ display:none; }
+#main.sideMin{ grid-template-columns:var(--toolsW,44px) minmax(0,1fr) 34px !important; }
+#main.sideMin #sidebar > :not(.sideStrip){ display:none !important; }
+#main.sideMin .sideStrip{
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:10px; height:100%; width:100%;
+  background:transparent; border:0; color:var(--dim); cursor:pointer; padding:10px 0;
+}
+#main.sideMin .sideStrip span{ writing-mode:vertical-rl; transform:rotate(180deg); font-family:var(--font-head); font-size:10px; letter-spacing:1.5px; }
+#main.sideMin .sideStrip b{ font-size:12px; }
+#main.sideMin .sideStrip:hover{ color:var(--accent); }
+#sidebar.sideMax{ position:fixed; inset:86px 12px 38px; z-index:850; box-shadow:0 24px 100px #0009; border-radius:14px; }
+
+.bMini.danger.armed{ background:rgba(246,70,93,.35); color:#fff; border-color:#f6465d; animation:otArm 1s ease-in-out infinite alternate; }
+@keyframes otArm{ from{ box-shadow:0 0 0 0 rgba(246,70,93,.5);} to{ box-shadow:0 0 0 4px rgba(246,70,93,0);} }
+
+/* ============ the left tools bar: fold / names ============ */
+#lefttools{ position:relative; }
+.toolsCtl{ display:flex; gap:2px; margin-bottom:2px; }
+.toolsCtl button, .toolsStrip{ width:14px !important; height:14px !important; padding:0 !important; font-size:9px !important; line-height:1; border-radius:3px !important; }
+.toolsCtl button.on{ color:var(--accent); border-color:rgba(0,229,255,.45) !important; }
+.toolsStrip{ display:none; }
+#main.toolsMin{ grid-template-columns:14px minmax(0,1fr) var(--sideW,300px) !important; }
+#main.toolsMin.sideMin{ grid-template-columns:14px minmax(0,1fr) 34px !important; }
+#main.toolsMin #lefttools > :not(.toolsStrip){ display:none !important; }
+#main.toolsMin #lefttools{ padding:4px 0; }
+#main.toolsMin .toolsStrip{ display:grid; height:100% !important; width:100% !important; color:var(--dim); }
+#main.toolsMin .toolsStrip:hover{ color:var(--accent); }
+/* names next to the icons */
+.toolName{ display:none; font-family:var(--font-head); font-size:11px; letter-spacing:.3px; white-space:nowrap; }
+#main.toolsWide{ grid-template-columns:var(--toolsW,150px) minmax(0,1fr) var(--sideW,300px) !important; }
+#main.toolsWide.sideMin{ grid-template-columns:var(--toolsW,150px) minmax(0,1fr) 34px !important; }
+#main.toolsWide #lefttools{ align-items:stretch; padding:8px 6px; }
+#main.toolsWide #lefttools button[data-tool], #main.toolsWide #lefttools button[id]:not(.toolsStrip){ width:auto; height:30px; display:flex; align-items:center; gap:8px; padding:0 8px; justify-content:flex-start; }
+#main.toolsWide #lefttools .toolName{ display:inline; }
+#main.toolsWide #lefttools .tsep{ width:auto; }
+#main.toolsWide .toolsCtl{ justify-content:flex-end; }
+/* the maximised chart keeps its own two-column grid whatever the side areas say */
+html[data-chartmax="1"] #main, html[data-chartmax="1"] #main.sideMin, html[data-chartmax="1"] #main.toolsWide{ grid-template-columns:var(--toolsW,44px) minmax(0,1fr) !important; }
+html[data-chartmax="1"] #main.toolsMin{ grid-template-columns:14px minmax(0,1fr) !important; }
+
+/* side panel closed: no column at all; the chart's "Watchlist" button brings it back */
+#main.sideClosed{ grid-template-columns:var(--toolsW,44px) minmax(0,1fr) !important; }
+#main.sideClosed.toolsMin{ grid-template-columns:14px minmax(0,1fr) !important; }
+#main.sideClosed.toolsWide{ grid-template-columns:var(--toolsW,150px) minmax(0,1fr) !important; }
+#main.sideClosed #sidebar{ display:none !important; }
+/* drag the side panel's left edge to resize it */
+.sideGrip{ position:absolute; left:0; top:0; bottom:0; width:6px; cursor:ew-resize; z-index:9; }
+.sideGrip::after{ content:""; position:absolute; top:50%; left:2px; width:2px; height:40px; margin-top:-20px; border-radius:2px; background:var(--border-soft); }
+.sideGrip:hover::after{ background:var(--accent); }
+#sidebar{ position:relative; }
+#main.sideMin .sideGrip, #sidebar.sideMax .sideGrip{ display:none; }
+.sideCtl [data-sw="close"]:hover{ color:#ffb3bd; border-color:rgba(246,70,93,.6); }
+
+/* drag the tools bar's right edge to resize it; wider bars show the names, narrow ones icons only */
+.toolsGrip{ position:absolute; right:-3px; top:0; bottom:0; width:6px; cursor:ew-resize; z-index:9; }
+.toolsGrip::after{ content:""; position:absolute; top:50%; left:2px; width:2px; height:40px; margin-top:-20px; border-radius:2px; background:var(--border-soft); }
+.toolsGrip:hover::after{ background:var(--accent); }
+#main.toolsMin .toolsGrip{ display:none; }
+#lefttools{ overflow:hidden; }
+#lefttools button[data-tool], #lefttools button[id]:not(.toolsStrip){ max-width:100%; overflow:hidden; }
+#main.toolsWide #lefttools .toolName{ overflow:hidden; text-overflow:ellipsis; }
+
+/* the Confluence strip under the chart: one line when minimised */
+#confluencePanel{ position:relative; padding-right:34px !important; }
+.cfMinBtn{ position:absolute; right:8px; top:6px; width:18px; height:16px; padding:0; display:grid; place-items:center; cursor:pointer;
+  background:rgba(6,10,22,.72); color:var(--dim); border:1px solid var(--border); border-radius:4px; font-family:var(--font-mono); font-size:10px; line-height:1; }
+.cfMinBtn:hover{ color:var(--accent); border-color:var(--accent); }
+#confluencePanel.cfMin{ padding-top:4px !important; padding-bottom:4px !important; line-height:1.4 !important; }
+#confluencePanel.cfMin > div, #confluencePanel.cfMin > small{ display:none; }
+#confluencePanel.cfMin .cfMinBtn{ top:3px; }

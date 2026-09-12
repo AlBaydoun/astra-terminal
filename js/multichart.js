@@ -22,7 +22,7 @@ const Multi = {
   init(){
     this.grid = document.getElementById('chartGrid');
     document.querySelectorAll('#layoutSeg button').forEach(b =>
-      b.addEventListener('click', () => this.setLayout(parseInt(b.dataset.l, 10))));
+      b.addEventListener('click', () => { this.setLayout(parseInt(b.dataset.l, 10)); if (typeof ChartWindows !== 'undefined') ChartWindows.onLayout(); }));
     BUS.on('tickers', ch => this.tick(ch));
     this.bindLegend();
     this.bindPicker();
@@ -43,6 +43,7 @@ const Multi = {
     this.cells.forEach(c => this.destroyCell(c));
     this.cells = [];
     for (let i = 0; i < n - 1; i++) this.createCell(i);
+    if (typeof ChartWindows !== 'undefined'){ for (const c of this.cells) ChartWindows.initCell(c); ChartWindows.apply(); }
   },
 
   /* ---------------- indicator settings, one set per mini ---------------- */

@@ -45,9 +45,12 @@ const ConfluenceOverlay = {
     const why=Chart.replay.active?'REPLAY · historical setups':!live?'WAIT · no fresh enabled price':s.dir
       ? ConfluenceBot.entryReason(s,Bots.quoteFor(STORE.symbol)) || (s.dir>0?'BUY setup':'SELL setup')
       : 'WAIT · '+(s.failed?.[0]||'No setup');
-    host.innerHTML=`<b>ASTRA CONFLUENCE · M15</b> <strong>${esc(why)}</strong>
+    const min=lsGet('astra_cfmin',false)===true;
+    host.classList.toggle('cfMin',min);
+    host.innerHTML=`<button class="cfMinBtn" data-cfmin title="${min?'Show the five checks':'Minimise to one line'}">${min?'▢':'_'}</button><b>ASTRA CONFLUENCE · M15</b> <strong>${esc(why)}</strong>
       <div>${(s.checks||[]).map(c=>`<span class="cfCheck ${c.ok?'up':'dim2'}">${c.ok?'✓':'○'} ${esc(c.name)}: ${esc(c.value)}</span>`).join('')}</div>
       <small>${s.dir?`Setup reference ${fmtPrice(s.entry)} · SL ${fmtPrice(s.sl)} · TP ${fmtPrice(s.tp)} · `:''}Labels use completed candles. Setup ≠ executed trade. Tick activity ≠ traded volume. Experimental.</small>`;
+    host.querySelector('[data-cfmin]').addEventListener('click',()=>{lsSet('astra_cfmin',!min);this.panel();});
   },
 };
 const confluenceIndicatorDef={id:'confluence',label:'ASTRA Confluence · BUY / SELL',kind:'price',mainOnly:true,

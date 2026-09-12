@@ -260,3 +260,17 @@ html[data-panel] .botsWrap { padding:0; }
 .bgSee { border:1px solid var(--border-soft); background:var(--ws-raised); color:var(--dim); }
 .bgHonest b, .bgSee b { display:block; margin-bottom:4px; color:var(--text); }
 @media (max-width:760px){ .bgHero { grid-template-columns:auto 1fr; } .bgArt { display:none; } .bgTable td.k { white-space:normal; } }
+
+/* ============ lower panel maximised (any tab) ============ */
+#bottomPanel.panelMax:not(.collapsed) {
+  position:fixed; inset:86px 12px 38px; height:auto!important; max-height:none!important;
+  z-index:850; border:1px solid var(--border); border-radius:14px; box-shadow:0 24px 100px #0009;
+}
+/* ============ _ / ⛶ on workspace columns ============ */
+.botH{ position:relative; padding-right:52px; }
+.botH .colCtl{ top:1px; right:0; }
+.botCol.colMin > :not(.botH){ display:none !important; }
+.botCol.colMin{ padding-bottom:8px; }
+.botCol.colMin > .botH{ cursor:pointer; margin-bottom:0; border-bottom:0; }
+.botGrid.hasMax > .botCol:not(.colMax){ display:none !important; }
+.botCol.colMax{ grid-column:1 / -1; }

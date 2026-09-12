@@ -366,7 +366,94 @@ const Chart = {
       const tag = this.panes[key].el.querySelector('.paneTag');
       if (tag) tag.textContent = names.join('  ·  ');
       this.ensureModeBtn(key);
+      this.ensurePaneCtl(key);
     }
+    this.applyPaneStates();
+  },
+
+  /* ---- window buttons: minimise, maximise, close ----
+     Minimise folds the window to a strip (its indicators stay switched on and
+     keep their settings); maximise gives it most of the chart area; close
+     takes its indicators off this window (and switches off any that lived
+     nowhere else). Minimise/maximise are remembered; close is a real change
+     to the indicator settings. */
+  paneState: lsGet('astra_panestate', {}),
+  ensurePaneCtl(key){
+    const pane = this.panes[key];
+    if (!pane || pane.el.querySelector('.paneCtl')) return;
+    const ctl = document.createElement('span');
+    ctl.className = 'paneCtl';
+    ctl.innerHTML = `<button data-pc="min" title="Minimise this window for now">_</button>` +
+      `<button data-pc="max" title="Maximise this window">⛶</button>` +
+      `<button data-pc="close" title="Close this window (take its indicators off it)">×</button>`;
+    ctl.querySelectorAll('button').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation(); e.preventDefault();
+      this.paneAction(key, b.dataset.pc);
+    }));
+    pane.el.appendChild(ctl);
+    /* a minimised strip restores on click anywhere on it */
+    pane.el.addEventListener('click', e => {
+      if (pane.el.classList.contains('paneMin') && !e.target.closest('.paneCtl')) this.paneAction(key, 'restore');
+    });
+  },
+  paneAction(key, what){
+    const st = this.paneState;
+    if (what === 'close'){
+      let changed = 0;
+      for (const d of INDS){
+        const c = this.settings[d.id];
+        if (!c || !c.on) continue;
+        const t = this.targetsOf(c);
+        if (!t.includes(key)) continue;
+        const rest = t.filter(x => x !== key);
+        if (rest.length){ c.targets = rest; c.target = rest[0]; }
+        else c.on = false;
+        changed++;
+      }
+      delete st[key];
+      lsSet('astra_panestate', st); lsSet('astra_ind', this.settings);
+      this.renderAll();
+      toast(changed ? 'Window closed — ' + changed + ' indicator' + (changed === 1 ? '' : 's') + ' taken off it (add it back from the ƒx list any time)' : 'Window closed', 'info');
+      return;
+    }
+    if (what === 'restore') delete st[key];
+    else if (what === 'min') st[key] = st[key] === 'min' ? null : 'min';
+    else if (what === 'max'){
+      const on = st[key] !== 'max';
+      for (const k of Object.keys(st)) if (st[k] === 'max') delete st[k];
+      if (on) st[key] = 'max';
+    }
+    if (!st[key]) delete st[key];
+    lsSet('astra_panestate', st);
+    this.applyPaneStates();
+  },
+  applyPaneStates(){
+    const st = this.paneState;
+    const area = document.getElementById('chartArea');
+    let anyMax = false;
+    for (const key of ['p1', 'p2', 'p3']){
+      const el = document.getElementById('pane-' + key);
+      if (!el) continue;
+      const s = this.panes[key] ? st[key] : null;
+      el.classList.toggle('paneMin', s === 'min');
+      el.classList.toggle('paneMax', s === 'max');
+      if (s === 'max') anyMax = true;
+      const ctl = el.querySelector('.paneCtl');
+      if (ctl){
+        ctl.querySelector('[data-pc="min"]').textContent = s === 'min' ? '▢' : '_';
+        ctl.querySelector('[data-pc="min"]').title = s === 'min' ? 'Restore this window' : 'Minimise this window for now';
+        ctl.querySelector('[data-pc="max"]').classList.toggle('on', s === 'max');
+        ctl.querySelector('[data-pc="max"]').title = s === 'max' ? 'Back to the normal size' : 'Maximise this window';
+      }
+    }
+    if (area) area.classList.toggle('paneMaxed', anyMax);
+    /* the charts measure themselves against their boxes */
+    setTimeout(() => {
+      try { this.main.applyOptions({}); } catch(e){}
+      for (const k of Object.keys(this.panes)) try { this.panes[k].chart.applyOptions({}); } catch(e){}
+      if (typeof Draw !== 'undefined'){ Draw.resize(); Draw.redraw(); }
+      window.dispatchEvent(new Event('resize'));
+    }, 60);
   },
 
   ensureModeBtn(key){
