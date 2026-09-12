@@ -1190,14 +1190,21 @@ const Bots = {
       const cfg = botId === 'manual' ? this.manualCfg() : this.cfg(botId) || {};
       const R = BotEngine.rules(cfg);
       const risk = BotEngine.remainingRisk(pos, R, patch.sl) + (pos.fees || 0);
-      const riskCeiling = botId === 'manual' && cfg.manualAllowWiderStop
-        ? Math.min(L.equity, BotEngine.equityNow(L)) * R.riskPct / 100
-        : Math.min(pos.riskCash, L.equity * R.riskPct / 100);
+      /* A stop moved BY HAND may widen the risk — that is the point of taking
+         over a trade — but not without limit. The hand ceiling is three times
+         the bot's risk per trade (or its own maximum, if higher), and the
+         daily-loss budget below still applies on top. */
+      const eq = Math.min(L.equity, BotEngine.equityNow(L));
+      const handPct = Math.max(R.riskPct * 3, R.maxRiskPct || 0);
+      const riskCeiling = eq * handPct / 100;
       if (risk > riskCeiling + 1e-8)
-        return toast('Stop change exceeds the position risk limit', 'warn');
+        return toast('That stop would risk ' + fmtNum(risk) + ' (' + (risk / eq * 100).toFixed(2) + '% of equity) — the hand limit for this bot is ' +
+          handPct + '% (' + fmtNum(riskCeiling) + ')', 'warn');
       const reserved = L.open.reduce((sum, p) => sum + BotEngine.remainingRisk(p, R, p === pos ? patch.sl : null), 0);
-      if (reserved > L.startEquity * R.maxDailyLossPct / 100 + Math.min(0, BotEngine.dailyPnl(L, Date.now())) + 1e-8)
-        return toast('Stop change exceeds the remaining daily loss budget', 'warn');
+      const dayBudget = L.startEquity * R.maxDailyLossPct / 100 + Math.min(0, BotEngine.dailyPnl(L, Date.now()));
+      if (reserved > dayBudget + 1e-8)
+        return toast('All open stops together would risk ' + fmtNum(reserved) + ', more than the ' + fmtNum(Math.max(0, dayBudget)) +
+          ' left in today’s loss budget (' + R.maxDailyLossPct + '% a day)', 'warn');
     }
     if (patch.tp != null && patch.tp > 0){
       if (pos.dir > 0 && patch.tp <= price) return toast('For a buy the target must be above ' + fmtPrice(price), 'warn');
@@ -1231,6 +1238,7 @@ const Bots = {
     const saved = BotEngine.save(botId, L);
     toast(saved ? bits.join(' · ') : 'Stop/target changed in memory but saving failed. Keep ASTRA open.', saved ? 'ok' : 'warn');
     this.render();
+    if (typeof Draw !== 'undefined') Draw.redraw();     /* the lines on the chart follow */
   },
 
   /* move the stop to the entry price — the commonest single action there is */

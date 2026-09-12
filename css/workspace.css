@@ -38,7 +38,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 #botTabs #wsExpand { margin-left:auto; display:none; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; color:var(--text); white-space:nowrap; }
 #bottomPanel:has(#bot-bots.active) #wsExpand { display:inline-flex; }
 #bottomPanel.collapsed #wsExpand, html[data-panel] #wsExpand { display:none!important; }
-#bottomPanel.collapsed { height:44px; }
+#bottomPanel.collapsed { height:44px !important; }
 #bottomPanel:not(.collapsed):has(#bot-bots.wsExpanded.active) {
   position:fixed; inset:86px 12px 38px; height:auto!important; max-height:none!important;
   z-index:850; border:1px solid var(--border); border-radius:14px; box-shadow:0 24px 100px #0009;
@@ -213,3 +213,50 @@ html[data-panel] .botsWrap { padding:0; }
 #manualPositions>.botH{font-size:15px;margin-bottom:12px}
 .manualAuto [hidden],.otCard [hidden]{display:none!important}
 .manualAuto fieldset{min-width:0}.manualAuto input{width:95px}
+
+/* ============ BOT GUIDES ============ */
+.botGuideBtn, .wsGuide {
+  display:inline-grid; place-items:center; width:20px; height:20px; margin-left:8px; padding:0; border-radius:50%;
+  border:1px solid rgba(0,229,255,.45); background:rgba(0,229,255,.08); color:var(--accent);
+  font:700 12px/1 var(--font-head); cursor:pointer; vertical-align:middle;
+}
+.botGuideBtn:hover, .wsGuide:hover { background:rgba(0,229,255,.2); }
+/* the sidebar rule "#botNav .wsNavGroup button" is stronger than a class, so
+   these must carry the id too — otherwise the ? stretches to full width and
+   sits on top of the bot's own button, swallowing every click */
+#botNav .wsNavItem .wsGuide { position:absolute; right:26px; top:50%; transform:translateY(-50%); display:none; width:18px; height:18px; padding:0; margin:0; font-size:11px; background:rgba(0,229,255,.08); border-color:rgba(0,229,255,.45); color:var(--accent); }
+#botNav .wsNavItem:hover .wsGuide, #botNav .wsNavItem:focus-within .wsGuide { display:inline-grid; }
+#botNav .wsNavItem .wsGuide:hover { background:rgba(0,229,255,.2); }
+#botGuideModal .bgBox { width:min(920px, 94vw); }
+#botGuideModal .mBody { max-height:78vh; overflow-y:auto; }
+.bgHero { display:grid; grid-template-columns:auto 1fr auto; gap:16px; align-items:center; padding:14px 16px; margin-bottom:14px;
+  border:1px solid var(--border); border-radius:12px; background:linear-gradient(135deg, rgba(0,229,255,.08), rgba(139,108,255,.08)); }
+.bgIcon { font-size:44px; line-height:1; width:64px; height:64px; display:grid; place-items:center; border-radius:16px; background:var(--ws-raised); border:1px solid var(--border); }
+.bgTitle b { font-family:var(--font-head); font-size:20px; letter-spacing:.4px; display:block; }
+.bgTitle p { margin:4px 0 8px; color:var(--text); font-size:14px; line-height:1.45; }
+.bgTags span, .bgFacts span { display:inline-block; margin:0 6px 4px 0; padding:2px 9px; border-radius:10px; font-size:11px; }
+.bgTags span { border:1px solid rgba(0,229,255,.4); color:var(--accent); }
+.bgFacts span { background:var(--ws-raised); color:var(--dim); border:1px solid var(--border-soft); }
+.bgArt { width:190px; color:var(--dim); text-align:center; }
+.bgArt svg { width:100%; height:100px; display:block; }
+.bgArt small { display:block; font-size:11px; line-height:1.3; margin-top:4px; }
+.bgH { font-family:var(--font-head); font-size:12px; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent); margin:18px 0 8px; }
+.bgSteps { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.bgSteps li { display:grid; grid-template-columns:40px 1fr; gap:10px; align-items:start; padding:10px 12px; border:1px solid var(--border-soft); border-radius:10px; background:var(--ws-raised); }
+.bgSteps li i { font-style:normal; font-size:22px; line-height:1; display:grid; place-items:center; height:32px; }
+.bgSteps li b { display:block; font-size:13.5px; margin-bottom:2px; }
+.bgSteps li span { color:var(--dim); font-size:13px; line-height:1.5; }
+.bgTable { width:100%; border-collapse:collapse; font-size:13px; }
+.bgTable th { text-align:left; color:var(--dim); font-weight:600; font-size:11px; letter-spacing:.6px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--border); }
+.bgTable td { padding:8px; border-bottom:1px solid var(--border-soft); vertical-align:top; line-height:1.45; color:var(--dim); }
+.bgTable td.k { color:var(--text); font-weight:600; white-space:nowrap; }
+.bgRules { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:8px; }
+.bgRules div { padding:10px 12px; border:1px solid var(--border-soft); border-radius:10px; background:var(--ws-raised); }
+.bgRules b { display:block; margin-bottom:3px; font-size:13px; }
+.bgRules span { color:var(--dim); font-size:12.5px; line-height:1.45; }
+.bgUse { margin:0; padding-left:20px; color:var(--text); font-size:13.5px; line-height:1.6; }
+.bgHonest, .bgSee { margin-top:14px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.5; }
+.bgHonest { border:1px solid rgba(255,209,102,.45); background:rgba(255,209,102,.08); }
+.bgSee { border:1px solid var(--border-soft); background:var(--ws-raised); color:var(--dim); }
+.bgHonest b, .bgSee b { display:block; margin-bottom:4px; color:var(--text); }
+@media (max-width:760px){ .bgHero { grid-template-columns:auto 1fr; } .bgArt { display:none; } .bgTable td.k { white-space:normal; } }

@@ -324,9 +324,25 @@ const App = {
       }));
 
     /* bottom panel tabs + collapse */
+    /* A tab must always OPEN the panel with room to read it. The panel keeps
+       whatever height it was last dragged to — drag it down to a sliver and
+       every tab looked as if it did nothing (News was the exception only
+       because it expands into an overlay of its own). */
+    const openPanel = () => {
+      const bp = document.getElementById('bottomPanel');
+      bp.classList.remove('collapsed');
+      const h = parseFloat(bp.style.height) || bp.getBoundingClientRect().height;
+      if (!(h >= 160)){
+        const want = Math.max(300, Math.min(window.innerHeight - 220, 360));
+        bp.style.height = want + 'px';
+        if (typeof Resize !== 'undefined' && Resize.sizes){ Resize.sizes.bottom = want; Resize.save(); }
+      }
+      /* a maximised chart hides the panel entirely — a tab click ends that */
+      if (document.documentElement.dataset.chartmax === '1' && typeof App.setMax === 'function') App.setMax(false);
+    };
     document.querySelectorAll('#botTabs button[data-tab]').forEach(b =>
       b.addEventListener('click', () => {
-        document.getElementById('bottomPanel').classList.remove('collapsed');
+        openPanel();
         document.querySelectorAll('#botTabs button[data-tab]').forEach(x => x.classList.toggle('active', x === b));
         document.querySelectorAll('.botPanel').forEach(p =>
           p.classList.toggle('active', p.id === 'bot-' + b.dataset.tab));
@@ -346,7 +362,7 @@ const App = {
        Hides the movers strip, the bottom panel and the side rail so the candles
        get the whole window. The drawing toolbar stays — the whole point of a big
        chart is to draw on it. M toggles, Escape comes back out. */
-    const setMax = on => {
+    const setMax = this.setMax = on => {
       document.documentElement.dataset.chartmax = on ? '1' : '';
       if (!on) delete document.documentElement.dataset.chartmax;
       localStorage.setItem('astra_chartmax', on ? '1' : '');

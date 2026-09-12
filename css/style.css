@@ -187,7 +187,7 @@ select#chartType {
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
   backdrop-filter: blur(14px); overflow: hidden; transition: height 0.2s;
 }
-#bottomPanel.collapsed { height: 37px; }
+#bottomPanel.collapsed { height: 37px !important; }  /* beats the dragged inline height */
 #bottomPanel.collapsed .botBody { display: none; }
 #botTabs { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--border-soft); }
 #botTabs button[data-tab] {
@@ -1913,3 +1913,44 @@ html[data-chartmax="1"] #maxBtn { color: var(--accent); border-color: rgba(0,229
 .ipTabs button:hover{ color:var(--text); }
 .ipTabs button.on{ color:var(--accent); border-bottom-color:var(--accent); }
 .ipPage[hidden]{ display:none; }
+
+/* ============ positions on the chart · Today card ============ */
+.chartTools{ display:inline-flex; gap:6px; margin-left:auto; }
+#chartLabelBar .bMini.on{ color:var(--accent); border-color:rgba(0,229,255,.45); background:rgba(0,229,255,.1); }
+.todayCard{ padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--border); font-size:12px; flex-shrink:0; }
+.tdHead{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.tdHead b{ font-family:var(--font-head); letter-spacing:.6px; }
+.tdHead .mClose{ margin-left:auto; }
+.tdWords{ margin:0 0 8px; font-size:13px; line-height:1.55; color:var(--text); }
+.tdStats{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:6px; }
+.tdStat span{ display:block; font-size:10px; letter-spacing:.5px; text-transform:uppercase; color:var(--dim); }
+.tdStat b{ font-family:var(--font-mono); font-weight:500; }
+.tdStat b.up{ color:var(--green,#2ebd85); } .tdStat b.down{ color:var(--red,#f6465d); }
+.tdRange{ position:relative; height:6px; border-radius:3px; background:linear-gradient(90deg, rgba(246,70,93,.5), rgba(143,163,200,.3), rgba(46,189,133,.5)); margin:2px 0 10px; }
+.tdRange i{ position:absolute; top:-3px; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--panel); }
+.tdHeatHead{ font-size:11px; letter-spacing:.5px; text-transform:uppercase; color:var(--dim); margin-bottom:4px; }
+.tdHeat{ display:grid; grid-template-columns:repeat(auto-fill, minmax(76px, 1fr)); gap:4px; }
+.tdTile{ display:flex; flex-direction:column; align-items:flex-start; gap:1px; padding:5px 7px; border:1px solid transparent; border-radius:6px; color:var(--text); cursor:pointer; font-size:11px; }
+.tdTile b{ font-family:var(--font-head); font-size:11px; } .tdTile span{ font-family:var(--font-mono); font-size:10px; opacity:.9; }
+.tdTile.me{ border-color:var(--accent); }
+.tdTile:hover{ filter:brightness(1.15); }
+/* open trades: the per-bot filter */
+.otFilter .bMini small{ opacity:.7; margin-left:3px; }
+
+/* confirmation box for a dragged stop / target */
+.posConfirm{
+  position:absolute; right:70px; z-index:30; width:280px; padding:10px 12px; border-radius:10px;
+  background:rgba(8,13,28,.96); border:1px solid rgba(0,229,255,.45); box-shadow:0 10px 30px rgba(0,0,0,.5); font-size:12px;
+}
+.posConfirm > b{ display:block; font-family:var(--font-head); letter-spacing:.4px; margin-bottom:6px; }
+.posConfirm > b small{ color:var(--dim); font-weight:400; margin-left:6px; }
+.pcRow{ display:grid; grid-template-columns:1fr auto auto auto; gap:6px; align-items:center; padding:3px 0; }
+.pcRow span{ color:var(--dim); } .pcRow i{ font-style:normal; font-family:var(--font-mono); } .pcRow em{ color:var(--dim); font-style:normal; }
+.pcRow i.up{ color:var(--green,#2ebd85); } .pcRow i.down{ color:var(--red,#f6465d); }
+.pcBtns{ display:flex; gap:6px; margin:8px 0 6px; }
+.otChart{ margin-left:auto; }
+/* folding the strip above the chart */
+.stripFold{ padding:2px 7px; }
+body.stripFolded #chartLabelBar > *:not(#stripFoldBtn){ display:none !important; }
+body.stripFolded #chartLabelBar{ padding:3px 8px; }
+body.stripFolded #confluencePanel, body.stripFolded #todayCard{ display:none !important; }

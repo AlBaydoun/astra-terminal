@@ -284,6 +284,7 @@ const Draw = {
     ctx.clearRect(0, 0, this.cssW, this.cssH);
     if (!Chart.priceSeries) return;
     this.drawVP(ctx);
+    if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
     for (const it of this.items) this.drawItem(ctx, it, false);
     if (this.measure) this.drawMeasure(ctx, this.measure);
     if (this.tool === 'measure' && this.temp && this.cursor)
@@ -1222,6 +1223,8 @@ const Draw = {
       const r = this.canvas.getBoundingClientRect();
       const x = e.clientX - r.left, y = e.clientY - r.top;
       if (!Chart.priceSeries) return;
+      /* a stop or target of an open position wins over any drawing */
+      if (typeof PosLines !== 'undefined' && PosLines.mousedown(e, x, y)){ e.preventDefault(); e.stopPropagation(); return; }
 
       let it = this.selected(), mode = null, idx = -1;
       if (it){
@@ -1268,8 +1271,9 @@ const Draw = {
       const r = this.canvas.getBoundingClientRect();
       const x = e.clientX - r.left, y = e.clientY - r.top;
       const it = this.selected();
-      let cur = '';
-      if (it && this.handleAt(it, x, y) >= 0) cur = 'grab';
+      let cur = typeof PosLines !== 'undefined' ? PosLines.hover(x, y) : '';
+      if (cur) {}
+      else if (it && this.handleAt(it, x, y) >= 0) cur = 'grab';
       else if (it && this.grabbable(it, x, y)) cur = 'move';
       else if (this.items.some(o => this.grabbable(o, x, y))) cur = 'move';
       const wrapEl = document.getElementById('mainWrap');

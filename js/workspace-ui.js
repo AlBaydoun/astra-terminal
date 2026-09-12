@@ -49,6 +49,7 @@ const WorkspaceUI = {
         return members.map((b, i) =>
         `<div class="wsNavItem"><button data-bot="${esc(b.id)}" data-ws-search="${esc((this.name(b)+' '+group).toLowerCase())}" class="${b.id === active ? 'active' : ''}"${b.id === active ? ' aria-current="page"' : ''}>
         ${this.icon(this.botIcon(b))}<span>${esc(this.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</button>` +
+        `<button type="button" class="wsGuide" data-guide="${esc(b.id)}" title="How it works">?</button>` +
         `<span class="wsMove"><button type="button" data-mv="-1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>` +
         `<button type="button" data-mv="1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move down"${i === members.length - 1 ? ' disabled' : ''}>▼</button></span></div>`).join('');
       })() + '</section>').join('') +

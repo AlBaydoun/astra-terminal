@@ -66,7 +66,7 @@ Object.assign(Bots, {
       OpenTrades.stop();
       if (host.dataset.bot !== 'permissions'){
         host.dataset.bot = 'permissions';
-        host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Instrument permissions</b>
+        host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Instrument permissions <button class="botGuideBtn" data-guide="permissions" title="How this page works">?</button></b>
           <span>Control which pairs may open new trades across the bots.</span></div></div>
           <div class="botCtl" id="prTools"></div>${BotDash.pairRulesView()}`;
         host.querySelector('#prSearch').addEventListener('input', e => {
@@ -123,7 +123,8 @@ Object.assign(Bots, {
     host.innerHTML =
       `<div class="botHead">
          ${typeof WorkspaceUI !== 'undefined' ? '<div class="wsHeroIcon">' + WorkspaceUI.icon(WorkspaceUI.botIcon(b)) + '</div>' : ''}
-         <div class="botTitle"><b>${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}</b><span>${esc(b.blurb)}</span></div>
+         <div class="botTitle"><b>${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}
+           <button class="botGuideBtn" data-guide="${esc(b.id)}" title="How this bot works — the full guide">?</button></b><span>${esc(b.blurb)}</span></div>
          ${b.live
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
@@ -807,6 +808,7 @@ Object.assign(Bots, {
         <span class="dim2">${esc(p.tf)} · ${esc(p.model || '')}${p.riskMult > 1 ? ' · <b class="ok">size ×' + p.riskMult.toFixed(1) + '</b>' : ''}</span>
         <span>${p.lots ? p.lots + ' lot' : +p.qty.toPrecision(4)} @ ${fmtPrice(p.entry)}</span>
         ${levels}
+        <button class="bMini otChart" data-poschart="${esc(id)}:${p.id}" title="Open the chart with this trade's stop and target drawn — drag them, then confirm, and the bot's trade is updated">On chart ↗</button>
         <span class="${pctClass(u)}">${(u >= 0 ? '+' : '') + fmtNum(u)}</span>
         <span class="dim2">opened ${this.when(p.entryTime)}</span>
         <button class="bMini" data-close="${id}:${p.id}">Close</button></div>`;
@@ -906,6 +908,10 @@ Object.assign(Bots, {
         this.render();
       });
     });
+    host.querySelectorAll('[data-poschart]').forEach(el => el.addEventListener('click', () => {
+      const [bot, id] = el.dataset.poschart.split(':');
+      if (typeof PosLines !== 'undefined') PosLines.show(bot, isNaN(+id) ? id : +id);
+    }));
     host.querySelectorAll('[data-act]').forEach(el => el.addEventListener('click', () => {
       const a = el.dataset.act;
       if (a === 'scan') this.runScan(true);

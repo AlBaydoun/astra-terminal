@@ -134,7 +134,9 @@ const OpenTrades = {
         ${sortBtn('sym', 'Instrument')}${sortBtn('bot', 'Bot')}
         <span class="otHint">Live figures refresh every second. Anything you type is left alone.</span>
       </div>
+      ${bot ? '' : this.botFilterBar(rows)}
       <div class="otList">${summaryOnly?'':sorted.map(r => this.card(r)).join('')}</div>
+      <div class="empty otFilterEmpty" hidden>No open trade from that bot right now.</div>
       <div class="botNote">Adjusting a bot's trade is allowed — it is your money. The trade is marked
         <b>adjusted</b> and stays marked when it closes, so a bot's record never quietly counts a trade
         the strategy did not run on its own. The original risk is never rewritten, so its R still measures
@@ -156,6 +158,7 @@ const OpenTrades = {
         <span class="otTag dim">${esc(p.tf || '')}${p.model ? ' · ' + esc(p.model) : ''}${p.riskMult > 1 ? ' · size ×' + p.riskMult.toFixed(1) : ''}</span>
         <span class="otTag warn" data-f="adjusted" ${p.touched?'':'hidden'} title="stop, target or size was changed by hand">adjusted</span>
         <span class="otTag on" data-f="trailing" ${trailOn?'':'hidden'}>trailing</span>
+        <button class="bMini otChart" data-otchart="${esc(k)}" title="Open the chart with this trade's stop and target drawn — drag them to change">On chart ↗</button>
         <span class="otTag warn" data-f="stale" ${l.stale?'':'hidden'} title="no fresh quote for this instrument">no quote</span>
         <span class="otPnl ${pctClass(l.unreal)}" data-f="unreal">${(l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal)}</span>
       </div>
@@ -303,7 +306,44 @@ const OpenTrades = {
     if (row && box) box.innerHTML = this.calcLine(row, host);
   },
 
+  /* ---- filter by bot: one chip per bot that has something open ----
+     Filtering hides cards instead of re-rendering, so nothing you are typing
+     into a card is lost, and the 1-second refresh keeps working underneath. */
+  filterBot: '',
+  botFilterBar(rows){
+    const counts = {};
+    for (const r of rows) counts[r.bot] = (counts[r.bot] || 0) + 1;
+    const ids = Object.keys(counts);
+    if (ids.length < 2 && !this.filterBot) return '';
+    const chip = (id, label, n) =>
+      `<button class="bMini${(this.filterBot || '') === id ? ' on' : ''}" data-otbot="${esc(id)}">${esc(label)}${n != null ? ' <small>' + n + '</small>' : ''}</button>`;
+    return `<div class="otBar otFilter"><span class="insLbl">Show</span>
+      ${chip('', 'All bots', rows.length)}
+      ${ids.map(id => chip(id, (rows.find(r => r.bot === id) || {}).botName || id, counts[id])).join('')}</div>`;
+  },
+  applyFilter(host){
+    const root = host.closest('#manualPositions, #botBody') || host;
+    const want = this.filterBot || '';
+    let shown = 0;
+    root.querySelectorAll('.otList [data-ot]').forEach(card => {
+      const hit = !want || card.dataset.ot.split(':')[0] === want;
+      card.hidden = !hit; if (hit) shown++;
+    });
+    const empty = root.querySelector('.otFilterEmpty');
+    if (empty) empty.hidden = !(want && !shown);
+    root.querySelectorAll('[data-otbot]').forEach(b => b.classList.toggle('on', (b.dataset.otbot || '') === want));
+  },
+
   bind(host){
+    host.querySelectorAll('[data-otchart]').forEach(el => el.addEventListener('click', () => {
+      const { bot, id } = this.split(el.dataset.otchart);
+      if (typeof PosLines !== 'undefined') PosLines.show(bot, id);
+    }));
+    host.querySelectorAll('[data-otbot]').forEach(el => el.addEventListener('click', () => {
+      this.filterBot = el.dataset.otbot || '';
+      this.applyFilter(host);
+    }));
+    if (this.filterBot) this.applyFilter(host);
     host.querySelectorAll('[data-otsort]').forEach(el => el.addEventListener('click', () => {
       this.sortKey = el.dataset.otsort;
       const list=host.closest('#manualPositions, #botBody').querySelector('.otList');
