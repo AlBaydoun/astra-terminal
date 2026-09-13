@@ -7,7 +7,7 @@ const ManualAuto = {
   count:0, seen:new Set(), events:[], status:'Stopped · choose a mode below.',
   draft:{mode:'price',source:'confluence',scope:'pair',direction:'both',exits:'signal',allocation:5,sl:0.5,tp:1,entries:0},
   config:null,
-  sources(){return Bots.ordered(BOTS.filter(b=>!b.manual&&(!Bots.isPage(b)||b.id==='scanner')&&typeof b.signal==='function'));},
+  sources(){return Bots.ordered(BOTS.filter(b=>!b.manual&&!Bots.disabled(b.id)&&(!Bots.isPage(b)||b.id==='scanner')&&typeof b.signal==='function'));},
   view(){
     const d=this.draft;
     const select=(key,items)=>`<select data-ma="${key}">${items.map(([v,l])=>`<option value="${esc(v)}"${String(d[key])===v?' selected':''}>${esc(l)}</option>`).join('')}</select>`;

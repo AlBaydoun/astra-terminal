@@ -38,6 +38,8 @@ const MarketFit = {
     ['forex',   'Forex',   'fx'],
     ['indices', 'Indices', 'index'],
     ['energy',  'Energy',  'energy'],
+    ['stocks',  'US Stocks', 'stock'],
+    ['other',   'Everything else', 'other'],
   ],
 
   /* Binance pairs that already carry months of trade history — kept so that
@@ -70,10 +72,42 @@ const MarketFit = {
         const enabled = syms.filter(s => typeof MarketSources === 'undefined' || MarketSources.allowed(s));
         if (enabled.length) out[id] = { label, syms: enabled };
       }
+      /* Every instrument the bridge actually offers belongs to a market too —
+         the catalogue only names the common ones, but "all crypto" must mean
+         ALL the crypto the broker lists, not the seven in the catalogue. */
+      if (typeof Feed !== 'undefined' && Feed.bridge){
+        const known = new Set(Object.values(out).flatMap(g => g.syms.map(s => Feed.brokerName(s))));
+        const byBg = {}; for (const [id, label, bg] of this.GROUP_DEFS) byBg[bg] = { id, label };
+        for (const sym of Feed.bridge.symbols){
+          if (known.has(sym)) continue;
+          if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) continue;
+          let bg = BROKER.costGroup(sym);
+          if (!byBg[bg] || bg === 'other') bg = this.guessGroup(sym);
+          const g = byBg[bg] || byBg.other;      /* nothing the account offers is left out */
+          if (!g) continue;
+          (out[g.id] = out[g.id] || { label: g.label, syms: [] }).syms.push(sym);
+          known.add(sym);
+        }
+      }
     }
     this._groups = Object.keys(out).length || typeof MarketSources !== 'undefined' ? out : this.FALLBACK;
     this._groupsKey = key;
     return this._groups;
+  },
+
+  /* a broker symbol the catalogue does not know, sorted by its name */
+  CCY: ['USD','EUR','GBP','JPY','CHF','AUD','NZD','CAD','SEK','NOK','DKK','PLN','HUF','CZK','ZAR','MXN','SGD','HKD','CNH','TRY','THB'],
+  CRYPTO_BASES: ['BTC','ETH','LTC','XRP','BCH','DOT','XLM','KSM','TRX','UNI','AVAX','MATIC','LINK','SOL','ADA','DOGE','BNB','EOS','ATOM','ALGO','XTZ','NEO','DASH','ZEC','ETC','FIL','AAVE','SHIB','NEAR','APT','ARB','OP','SUI','TON','PEPE'],
+  guessGroup(sym){
+    const b = String(sym).replace(/\.[A-Za-z]{1,4}$/, '').toUpperCase();
+    if (/^X(AU|AG|PT|PD)/.test(b)) return 'metal';
+    if (/WTI|BRENT|OIL|NGAS|NATGAS|GASOL|^XNG/.test(b)) return 'energy';
+    if (this.CRYPTO_BASES.some(c => b.startsWith(c) && b.length >= c.length + 3)) return 'crypto';
+    if (b.length === 6 && this.CCY.includes(b.slice(0, 3)) && this.CCY.includes(b.slice(3))) return 'fx';
+    if (/^(US|DE|UK|JP|FR|EU|HK|AU|ES|IT|CH|NL|CN|IN|CHA|SG|CA|SPA|SWI|NED|TWN)\d|^(NAS|SPX|DJ|DAX|FTSE|NIKKEI|STOXX|CAC|IBEX|ASX|HSI)/.test(b)) return 'index';
+    /* a plain ticker with no suffix and no currency pair in it is a share CFD */
+    if (/^[A-Z]{1,5}$/.test(b) && !String(sym).includes('.')) return 'stock';
+    return 'other';
   },
 
   get GROUPS(){ return this.buildGroups(); },

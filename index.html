@@ -66,6 +66,11 @@
       <option value="line">Line</option>
       <option value="area">Area</option>
     </select>
+    <button id="acctPill" class="acctPill off" title="Your JustMarkets account, read straight from MetaTrader — click for the Live page">
+      <span class="apHead"><i class="apDot"></i><span class="apName">JUSTMARKETS</span><small class="apLogin"></small></span>
+      <span class="apMain"><b class="apBal">—</b><small class="apCur"></small></span>
+      <span class="apRow"><span>Equity <b class="apEq">—</b></span><span>Free <b class="apFree">—</b></span><span>Open <b class="apPl">—</b></span><span class="apGo" title="Open the Live page">Live page ↗</span></span>
+    </button>
     <button class="tbtn" id="indBtn" title="Indicators">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-6 4 3 6-8 3 4"/></svg>
       Indicators
@@ -410,6 +415,7 @@
   <!-- ================= STATUS BAR ================= -->
   <footer id="statusbar">
     <div class="stItem"><div id="wsDot"></div><span id="wsLbl">CONNECTING…</span></div>
+    <div class="stItem stAcct" id="stAcct" title="Your JustMarkets balance, read from MetaTrader — click for the Live page"><label>BALANCE</label><span class="stv" id="stBal">—</span><span class="stv" id="stPl"></span></div>
     <div class="stItem"><label>MCAP</label><span class="stv" id="stMcap">—</span><span class="stv" id="stMcapCh"></span></div>
     <div class="stItem"><label>BTC.D</label><span class="stv" id="stBtcD">—</span></div>
     <div class="stItem"><label>ETH.D</label><span class="stv" id="stEthD">—</span></div>
@@ -609,9 +615,11 @@
 <script src="js/bots/reports.js"></script>
 <script src="js/bots/dashboard.js"></script>
 <script src="js/bots/analysis.js"></script>
+<script src="js/bots/explorer.js"></script>
 <script src="js/bots/opentrades.js"></script>
 <script src="js/bots/live.js"></script>
 <script src="js/workspace-ui.js"></script>
+<script src="js/bots/markets-ui.js"></script>
 <script src="js/bots/botsui.js"></script>
 <script src="js/bots/guide.js"></script>
 <script src="js/bots/liveui.js"></script>
@@ -625,6 +633,7 @@
 <script src="js/confluence-indicator.js"></script>
 <script src="js/poslines.js"></script>
 <script src="js/windows.js"></script>
+<script src="js/account.js"></script>
 <script src="js/popout.js"></script>
 <script src="js/market-ticker.js"></script>
 <script src="js/market-news.js"></script>

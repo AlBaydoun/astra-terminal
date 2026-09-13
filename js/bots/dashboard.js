@@ -14,7 +14,7 @@ const BotDash = {
   /* only real trading bots — the Dashboard, Market Fit, Live Trading, Report,
      Scanner and Brain are pages, not bots, and have no ledger of their own */
   bots(){
-    return BOTS.filter(b => !Bots.isPage(b) && Bots.ledger(b.id));
+    return BOTS.filter(b => !Bots.isPage(b) && Bots.ledger(b.id) && !Bots.disabled(b.id));
   },
 
   allTrades(){
@@ -134,6 +134,68 @@ const BotDash = {
   folded: lsGet('astra_dashfold', { pairs: true }),
   order: lsGet('astra_dashorder', null),
 
+  /* ---- WHY IS NOTHING TRADING? — shown in full when nothing is open ---- */
+  healthOpen: lsGet('astra_dashhealth', true) !== false,
+  healthView(openCount){
+    const d = Bots.diagnose(6);
+    const verdicts = [];
+    if (d.tickAgo == null || d.tickAgo > 120)
+      verdicts.push(['down', 'The bot cycle is not running' + (d.tickAgo != null ? ' — last run ' + Math.round(d.tickAgo / 60) + ' min ago' : ' yet') + '. It runs every 30 seconds while ASTRA is open; if this stays red, reload ASTRA.']);
+    else verdicts.push(['up', 'The bot cycle is running (last pass ' + d.tickAgo + 's ago, ' + d.active + ' of ' + d.bots + ' bots active' + (d.paused ? ', ' + d.paused + ' paused' : '') + ').']);
+    if (d.weekend)
+      verdicts.push(['warn', 'It is the weekend: forex, metals, indices and oil are closed, so their prices are stale and the live-only rule refuses them. Only crypto can trade until Monday.']);
+    if (d.live === 0)
+      verdicts.push(['down', 'No instrument has a live price right now (' + d.stale + ' stale, ' + d.blocked + ' blocked). A quote older than 3 minutes is never traded on — check the MetaTrader bridge.']);
+    else verdicts.push([d.live < 5 ? 'warn' : 'up', d.live + ' instrument' + (d.live === 1 ? '' : 's') + ' with a live price' + (d.live <= 12 ? ' (' + d.liveList.map(baseAsset).join(', ') + ')' : '') + ', ' + d.stale + ' stale, ' + d.blocked + ' blocked by the Prohibited list.']);
+    if (d.blocked && d.live + d.stale < 5)
+      verdicts.push(['warn', 'Most of the universe is on the Prohibited list — open Instrument permissions and allow the pairs you want traded.']);
+    if (d.looked === 0 && d.tickAgo != null && d.tickAgo <= 120)
+      verdicts.push(['warn', 'The bots wrote no decisions in the last ' + d.hours + ' hours — nothing had a live price to look at.']);
+    else if (d.looked)
+      verdicts.push([d.opens ? 'up' : 'dim', 'In the last ' + d.hours + ' hours the bots looked ' + d.looked + ' times: ' + d.waits + ' waited, ' + d.rejects + ' were refused by a rule, ' + d.brain + ' vetoed by the Master Brain, ' + d.opens + ' opened.']);
+    const reasons = d.top.length ? `<div class="hlReasons"><b>Most common reasons for not trading</b>${d.top.map(([why, n]) => `<div><span>${n}×</span>${esc(why)}</div>`).join('')}</div>` : '';
+    const chip = (b, act, label, cls) => `<span class="hlChip">${esc(WorkspaceUI.name(b))} <button class="bMini ${cls || ''}" data-hl="${act}:${esc(b.id)}">${label}</button></span>`;
+    const lists = [
+      d.pausedBots.length ? `<div class="hlList"><b>Paused (${d.pausedBots.length}) — no new trades until unpaused</b>${d.pausedBots.map(b => chip(b, 'unpause', '▶ Unpause', 'go')).join('')}<button class="bMini go" data-hl="unpauseall:">▶ Unpause all</button></div>` : '',
+      d.lockedBots.length ? `<div class="hlList"><b>Locked — paper account below the 100 minimum (${d.lockedBots.length})</b>${d.lockedBots.map(b => chip(b, 'reset', '↺ Reset to 10,000', 'danger')).join('')}<button class="bMini danger" data-hl="resetall:">↺ Reset all locked</button></div>` : '',
+      d.disabledBots.length ? `<div class="hlList dim2"><b>Switched off in Settings (${d.disabledBots.length})</b>${d.disabledBots.map(b => chip(b, 'enable', 'Switch on')).join('')}</div>` : '',
+    ].join('');
+    const folded = openCount > 0 && !this.healthOpen;
+    return `<section class="dashSec hlSec ${folded ? 'shut' : ''}">
+      <header class="dashSecHead" data-hltoggle>
+        <button class="secFold" title="${folded ? 'Open' : 'Fold'} this section"><i>${folded ? '▸' : '▾'}</i></button>
+        <h3>🩺 ${openCount ? 'BOT HEALTH' : 'WHY IS NOTHING TRADING?'}</h3>
+        <span class="dashSecSub">${openCount ? openCount + ' open' : 'no open trade right now'}</span></header>
+      ${folded ? '' : `<div class="dashSecBody hlBody">${verdicts.map(([c, t]) => `<div class="hl ${c}">${esc(t)}</div>`).join('')}${lists}${reasons}
+        <div class="dim2">Press <b>Run now</b> on any bot to see its reasons per instrument.</div></div>`}
+    </section>`;
+  },
+
+  /* ---- Bots on / off (Settings & safety) ---- */
+  botSettingsView(){
+    const all = BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.liveManual);
+    const row = b => {
+      const off = Bots.disabled(b.id), cfg = Bots.cfg(b.id) || {}, L = Bots.ledger(b.id);
+      const locked = L && Number.isFinite(L.equity) && L.equity < BotEngine.rules(cfg).minEquity;
+      const state = off ? 'OFF' : cfg.paused ? 'PAUSED' : locked ? 'LOCKED' : 'RUNNING';
+      return `<div class="bsRow ${off ? 'off' : ''}">
+        <label class="bsSwitch" title="${off ? 'Switch this bot on' : 'Switch this bot off — it disappears from every list; its record is kept'}"><input type="checkbox" data-bsen="${esc(b.id)}" ${off ? '' : 'checked'}><i></i></label>
+        <b>${esc(WorkspaceUI.name(b))}</b>
+        <span class="bsState ${state.toLowerCase()}">${state}</span>
+        <span class="dim2">${L ? fmtNum(L.equity) + ' equity · ' + (L.closed || []).length + ' trades' : ''}</span>
+        <span class="bsBtns">
+          ${off ? '' : `<button class="bMini" data-bspause="${esc(b.id)}">${cfg.paused ? '▶ Unpause' : '⏸ Pause'}</button>`}
+          ${locked && !off ? `<button class="bMini danger" data-bsreset="${esc(b.id)}">↺ Reset to 10,000</button>` : ''}
+          <button class="botGuideBtn" data-guide="${esc(b.id)}" title="How this bot works">?</button>
+        </span></div>`;
+    };
+    return `<div class="bsWrap">
+      <p class="dim2">Untick a bot to switch it off: it leaves the sidebar, the Dashboard, the Manual bot's signal list and the Live page, and opens nothing new. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. A bot that still holds a position keeps managing it to its stop or target.</p>
+      <div class="botCtl"><button class="bMini go" data-bsall="on">Switch all on</button><button class="bMini go" data-bsall="unpause">▶ Unpause all</button><button class="bMini danger" data-bsall="resetlocked">↺ Reset every locked bot</button></div>
+      ${Bots.ordered(all).map(row).join('')}
+    </div>`;
+  },
+
   DEFAULT_ORDER: ['money', 'bots', 'instruments', 'breakdowns', 'days', 'open', 'log', 'pairs'],
 
   secOrder(ids){
@@ -235,6 +297,7 @@ const BotDash = {
     const anyShut = this._shownIds.some(id => this.folded[id]);
 
     return `<div class="dashWrap">
+      ${this.healthView(open.length)}
       <div class="wsTradeLinks"><button data-ws-bot="analysis">▥ Buy / Sell Analysis</button></div>
       ${this.filterBar(all)}
       <div class="botStats">

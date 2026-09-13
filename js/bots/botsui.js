@@ -52,6 +52,18 @@ Object.assign(Bots, {
     });
   },
 
+  bindBotSettings(host){
+    host.querySelectorAll('[data-bsen]').forEach(el => el.addEventListener('change', () => Bots.setDisabled(el.dataset.bsen, !el.checked)));
+    host.querySelectorAll('[data-bspause]').forEach(el => el.addEventListener('click', () => Bots.setPaused(el.dataset.bspause, !(Bots.cfg(el.dataset.bspause) || {}).paused)));
+    host.querySelectorAll('[data-bsreset]').forEach(el => el.addEventListener('click', () => this.resetBot(el.dataset.bsreset)));
+    host.querySelectorAll('[data-bsall]').forEach(el => el.addEventListener('click', () => {
+      const what = el.dataset.bsall;
+      if (what === 'on'){ lsSet(Bots.DISABLED_KEY, []); this.renderNav(); this.render(); }
+      if (what === 'unpause'){ for (const b of Bots.idle().paused) { const c = Bots.cfg(b.id); c.paused = false; this.saveCfg(b.id); } this.render(); toast('Every paused bot is running again', 'ok'); }
+      if (what === 'resetlocked'){ for (const b of Bots.idle().locked) this.resetBot(b.id); }
+    }));
+  },
+
   /* the list on the left — re-run whenever its order changes */
   renderNav(){
     const nav = document.getElementById('botNav');
@@ -122,6 +134,15 @@ Object.assign(Bots, {
       this.refreshPermissions(host);
       return;
     }
+    if (this.active === 'botsettings'){
+      if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
+      OpenTrades.stop();
+      host.dataset.bot = 'botsettings';
+      host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Bots on / off</b>
+        <span>Switch bots on or off, pause and unpause them, and reset a locked paper account.</span></div></div>` + BotDash.botSettingsView();
+      this.bindBotSettings(host);
+      return;
+    }
     const b = BOT_BY_ID[this.active] || BOTS[0];
     if (!b) return;
     /* a bot can exist before its ledger does — during boot, or when the Strategy
@@ -133,6 +154,7 @@ Object.assign(Bots, {
       LiveManual.status(); return;
     }
 
+    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;   /* the Deep Dive redraws only on your clicks */
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults')){
       TradeAnalysis.refresh();
       return;
@@ -176,6 +198,7 @@ Object.assign(Bots, {
        </div>` +
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
+        : b.explorer ? Explorer.view()
         : b.analysis ? TradeAnalysis.view()
         : b.trades ? OpenTrades.view()
         : b.fit ? this.fitView()
@@ -341,7 +364,8 @@ Object.assign(Bots, {
       : 'No winning instrument yet — it would trade everything until there is one';
 
     let body = '';
-    if (mode === 'manual'){
+    if (mode === 'manual' && typeof BotMarkets !== 'undefined') body = BotMarkets.view(b, cfg);
+    else if (mode === 'manual'){
       const chosen = cfg.groups && cfg.groups.length ? cfg.groups : null;   // null = every group
       const groupChips = Object.entries(G).map(([id, g]) => {
         const on = !chosen || chosen.includes(id);
@@ -937,8 +961,20 @@ Object.assign(Bots, {
     else if (botPos){ OpenTrades.restore(botPos, this._otKeep); this._otKeep = null; OpenTrades.bind(botPos); }
     else OpenTrades.stop();
     if(b.manual&&typeof ManualAuto!=='undefined')ManualAuto.bind(host);
-    if (b.dash) BotDash.bind(host);
-    if (b.analysis) TradeAnalysis.bind(host);
+    if (b.dash){
+      BotDash.bind(host);
+      host.querySelectorAll('[data-hltoggle]').forEach(h => h.addEventListener('click', e => { if (e.target.closest('[data-hl]')) return; BotDash.healthOpen = !BotDash.healthOpen; lsSet('astra_dashhealth', BotDash.healthOpen); this.render(); }));
+      host.querySelectorAll('[data-hl]').forEach(el => el.addEventListener('click', e => {
+        e.stopPropagation();
+        const [act, id] = el.dataset.hl.split(':');
+        if (act === 'unpause') Bots.setPaused(id, false);
+        if (act === 'unpauseall'){ for (const b of Bots.idle().paused){ const c = Bots.cfg(b.id); c.paused = false; this.saveCfg(b.id); } this.render(); toast('Every paused bot is running again', 'ok'); }
+        if (act === 'reset') this.resetBot(id);
+        if (act === 'resetall'){ for (const b of Bots.idle().locked) this.resetBot(b.id); }
+        if (act === 'enable') Bots.setDisabled(id, false);
+      }));
+    }
+    if (b.explorer) Explorer.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.liveManual) LiveManual.bind(host);
@@ -1112,6 +1148,7 @@ Object.assign(Bots, {
     }));
 
     /* whole market groups on and off */
+    if (typeof BotMarkets !== 'undefined') BotMarkets.bind(host, b);
     host.querySelectorAll('[data-mgroup]').forEach(el => el.addEventListener('click', () => {
       const cfg = this.cfg(b.id);
       const all = Object.keys(this.marketGroups());

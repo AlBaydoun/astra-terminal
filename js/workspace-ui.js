@@ -30,16 +30,16 @@ const WorkspaceUI = {
     if (b.dash || b.trades || b.report || b.analysis) return 'Overview';
     if (b.manual || b.liveManual || b.id === 'confluence') return 'Trading desk';
     if (b.scan || b.confluenceScanner || b.fit || b.brain) return 'Scanners & research';
-    if (b.live || b.id === 'permissions') return 'Settings & safety';
+    if (b.live || b.id === 'permissions' || b.id === 'botsettings') return 'Settings & safety';
     return 'Strategy bots'; // Every future registry entry remains reachable.
   },
   botIcon(b){
     return b.dash ? 'dashboard' : b.trades ? 'positions' : b.manual ? 'manual'
-      : b.scan || b.confluenceScanner ? 'scanner' : b.report || b.fit || b.analysis ? 'report'
-      : b.live || b.id === 'permissions' ? 'shield' : 'bot';
+      : b.scan || b.confluenceScanner ? 'scanner' : b.explorer ? 'layers' : b.report || b.fit || b.analysis ? 'report'
+      : b.live || b.id === 'permissions' ? 'shield' : b.id === 'botsettings' ? 'manual' : 'bot';
   },
   nav(active){
-    const entries = BOTS.concat({id:'permissions', name:'Instrument permissions'});
+    const entries = BOTS.filter(b => !Bots.disabled(b.id)).concat({id:'permissions', name:'Instrument permissions'}, {id:'botsettings', name:'Bots on / off'});
     return `<div class="wsNavTop"><span class="wsEyebrow">YOUR WORKSPACE</span>
       <label class="wsSearch">${this.icon('search')}<input id="wsBotSearch" type="search" aria-label="Search bots and pages" placeholder="Find a bot or page…" value="${esc(this.query)}" autocomplete="off"></label></div>
       <div class="wsNavGroups">` + ['Overview','Trading desk','Scanners & research','Strategy bots','Settings & safety'].map(group =>
@@ -78,11 +78,19 @@ const WorkspaceUI = {
     });
   },
   openBot(id){
-    if (id !== 'permissions' && !BOT_BY_ID[id]) return;
+    if (id !== 'permissions' && id !== 'botsettings' && !BOT_BY_ID[id]) return;
     // Use the normal render route, including its manual-ticket draft handling.
     Bots.active = id;
     const tab = document.querySelector('#botTabs [data-tab="bots"]');
-    if (tab) tab.click(); else Bots.render();
+    /* clicking an already-active tab cycles its size, so only click it to
+       switch TO the Bots tab; otherwise render in place and make sure the
+       panel is open */
+    if (tab && !tab.classList.contains('active')) tab.click();
+    else {
+      const bp = document.getElementById('bottomPanel');
+      if (bp && bp.classList.contains('collapsed')) bp.classList.remove('collapsed');
+      Bots.render();
+    }
     this.sync(id);
     document.getElementById('botBody').scrollTop = 0;
   },

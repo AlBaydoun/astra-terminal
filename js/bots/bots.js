@@ -384,7 +384,7 @@ const Bots = {
     for (const s of BotEngine.PRIORITY) if (BROKER.is(s) || STORE.tickers.has(s)) add(s);
     for (const s of (Watch.list || [])) add(s);
     for (const s of (MK.monitored || [])) add(s);
-    if (Feed.bridge) for (const s of Feed.bridge.symbols) if (out.length < 120) add(s);
+    if (Feed.bridge) for (const s of Feed.bridge.symbols) if (out.length < 400) add(s);   /* the whole account, not a slice of it */
     for (const s of STORE.universe.slice(0, 40)) add(s);
     return out;
   },
@@ -590,10 +590,44 @@ const Bots = {
      six. Two of them had already drifted: the report backtested the Dashboard,
      and the tick loop ran a scan for every page. One list, asked once. */
   isPage(b){ return !!(b && (b.brain || b.scan || b.report || b.dash || b.fit || b.live || b.trades || b.analysis)); },
-  tradingBots(){ return BOTS.filter(b => !this.isPage(b)); },
+  tradingBots(){ return BOTS.filter(b => !this.isPage(b) && !this.disabled(b.id)); },
+
+  /* ---- bots switched off in Settings: gone from every list, ledger kept ----
+     A disabled bot opens nothing new; a position it still holds is managed to
+     its stop or target like any other. Its ledger and settings stay, so
+     switching it back on brings it back exactly as it was. */
+  DISABLED_KEY: 'astra_botdisabled',
+  disabledIds(){ return lsGet(this.DISABLED_KEY, []) || []; },
+  disabled(id){ return this.disabledIds().includes(id); },
+  setDisabled(id, off){
+    const list = this.disabledIds().filter(x => x !== id);
+    if (off) list.push(id);
+    lsSet(this.DISABLED_KEY, list);
+    if (off && this.active === id) this.active = 'dash';
+    this.renderNav && this.renderNav();
+    this.render();
+  },
+  /* the bots that can trade but are not: paused by you, or locked on an empty paper account */
+  idle(){
+    const out = { paused: [], locked: [] };
+    for (const b of this.tradingBots()){
+      if (b.manual || b.liveManual) continue;
+      const cfg = this.cfg(b.id) || {};
+      const L = this.ledger(b.id);
+      if (cfg.paused) out.paused.push(b);
+      else if (L && Number.isFinite(L.equity) && L.equity < BotEngine.rules(cfg).minEquity) out.locked.push(b);
+    }
+    return out;
+  },
+  setPaused(id, on){
+    const cfg = this.cfg(id); if (!cfg) return;
+    cfg.paused = !!on; this.saveCfg(id); this.render();
+  },
 
   /* ---------- the periodic pass ---------- */
+  lastTickAt: 0,
   async tick(){
+    this.lastTickAt = Date.now();
     /* contract sizes first — without them the risk engine cannot size in lots */
     if (Feed.bridge) await Feed.loadSpecs(this.universe().slice(0, 40));
     // Restored positions may not be on any watchlist. Fetch their own quotes
@@ -622,7 +656,7 @@ const Bots = {
     if (this.scanShouldRun()) this.runScan();
 
     for (const b of BOTS){
-      if (this.isPage(b) || b.manual) continue;
+      if (this.isPage(b) || b.manual || this.disabled(b.id)) continue;
       const cfg = this.cfg(b.id);
       if (cfg.paused && !b.runPaper) continue;
       await this.runBot(b, false);
@@ -631,6 +665,48 @@ const Bots = {
   },
 
   scanShouldRun(){ return !this.scan.busy && Date.now() - this.scan.at > 60000; },
+
+  /* ---------- "why is nothing trading?" ----------
+     Everything the bots are up against right now, counted: whether the cycle
+     is running, how many instruments have a LIVE price (closed markets do
+     not), how many are blocked by the Prohibited list, and the reasons the
+     bots themselves wrote down in the last hours, most common first. */
+  diagnose(hours){
+    const since = Date.now() - (hours || 6) * 3600 * 1000;
+    const trading = this.tradingBots().filter(b => !b.manual && !b.liveManual);
+    const active = trading.filter(b => !(this.cfg(b.id) || {}).paused);
+    const idle = this.idle();
+    const uni = this.universe();
+    let live = 0, stale = 0, blocked = 0;
+    const staleList = [], liveList = [];
+    for (const sym of uni){
+      if (typeof PairRules !== 'undefined' && PairRules.blocked(sym)){ blocked++; continue; }
+      if (this.quoteFor(sym)){ live++; liveList.push(sym); } else { stale++; staleList.push(sym); }
+    }
+    const reasons = {};
+    let looked = 0, waits = 0, rejects = 0, brain = 0, opens = 0;
+    for (const b of trading){
+      const L = this.ledgers[b.id];
+      if (!L) continue;
+      for (const d of L.decisions || []){
+        if (d.t < since) break;
+        looked++;
+        if (d.kind === 'wait') waits++; else if (d.kind === 'reject') rejects++; else if (d.kind === 'brain') brain++; else if (d.kind === 'open') opens++;
+        if (d.kind === 'wait' || d.kind === 'reject' || d.kind === 'brain'){
+          /* strip the instrument and timeframe so identical reasons pool */
+          const why = String(d.text).replace(/^.*?—\s*/, '').replace(/^Scored \d+ of 100/, 'Scored below the minimum').replace(/\d+(\.\d+)?%/g, 'n%').slice(0, 90);
+          reasons[why] = (reasons[why] || 0) + 1;
+        }
+      }
+    }
+    const top = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const day = new Date().getUTCDay();
+    const weekend = day === 6 || day === 0 || (day === 5 && new Date().getUTCHours() >= 21);
+    return { tickAgo: this.lastTickAt ? Math.round((Date.now() - this.lastTickAt) / 1000) : null,
+      bots: trading.length, active: active.length, paused: trading.length - active.length,
+      universe: uni.length, live, stale, blocked, liveList, staleList, looked, waits, rejects, brain, opens, top, weekend, hours: hours || 6,
+      pausedBots: idle.paused, lockedBots: idle.locked, disabledBots: this.disabledIds().map(id => BOT_BY_ID[id]).filter(Boolean) };
+  },
 
   /* ---------- Market Scanner ---------- */
   async runScan(manual){
@@ -751,13 +827,17 @@ const Bots = {
          until there is */
       if (good.length) all = all.filter(s => good.includes(s));
     } else {
-      if (cfg.groups && cfg.groups.length){
-        const pool = this.groupSymbols(cfg.groups);
-        all = all.filter(s => pool.includes(s));
-      }
+      /* "every market" means every market a trading bot was built for —
+         share CFDs are only traded when a bot is switched onto them by hand */
+      const groups = (cfg.groups && cfg.groups.length) ? cfg.groups : Object.keys(this.marketGroups()).filter(g => g !== 'stocks' && g !== 'other');
+      const pool = this.groupSymbols(groups);
+      all = all.filter(s => pool.includes(s));
       if (cfg.instruments && cfg.instruments.length)
         all = all.filter(s => cfg.instruments.includes(s));
     }
+    /* pairs you blocked for this bot, in every mode */
+    if (cfg.blocked && cfg.blocked.length)
+      all = all.filter(s => !cfg.blocked.includes(s));
 
     /* The prohibited list has the last word, in every mode. A pair Al has
        stopped must not come back because Market Fit took a liking to it this
@@ -767,6 +847,12 @@ const Bots = {
     if (typeof PairRules !== 'undefined')
       all = all.filter(s => !PairRules.blocked(s));
 
+    /* preferred pairs go first: the bot walks this list in order and stops
+       when it has filled its open slots, so first in line = first chance */
+    if (cfg.preferred && cfg.preferred.length){
+      const rank = s => cfg.preferred.indexOf(s);
+      all = all.slice().sort((a, b) => (rank(a) < 0 ? 1e9 : rank(a)) - (rank(b) < 0 ? 1e9 : rank(b)));
+    }
     return all;
   },
 
@@ -794,7 +880,23 @@ const Bots = {
     if (b.runPaper) return b.runPaper(b); // Fixed experiments own a paper-only runner.
     const cfg = this.cfg(b.id);
     const L = this.ledgers[b.id];
-    let syms = this.allowed(b).slice(0, cfg.scanDepth || 24);
+    /* A bot looks at up to scanDepth instruments per cycle (24 by default) so
+       a cycle stays quick. It does NOT always look at the same 24: the window
+       walks around the list cycle after cycle, so every allowed instrument gets
+       its turn — with the ★ preferred ones looked at every single time. */
+    const allowedAll = this.allowed(b);
+    const depth = cfg.scanDepth || 24;
+    let syms = allowedAll;
+    if (allowedAll.length > depth){
+      const pref = (cfg.preferred || []).filter(s => allowedAll.includes(s));
+      const rest = allowedAll.filter(s => !pref.includes(s));
+      const room = Math.max(4, depth - pref.length);
+      const start = (this._scanCursor = this._scanCursor || {})[b.id] || 0;
+      const slice = [];
+      for (let i = 0; i < Math.min(room, rest.length); i++) slice.push(rest[(start + i) % rest.length]);
+      this._scanCursor[b.id] = rest.length ? (start + room) % rest.length : 0;
+      syms = pref.concat(slice);
+    }
     let acted = false;
 
     /* A ranking bot does not take whichever instrument happens to come first in

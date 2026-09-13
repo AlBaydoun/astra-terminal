@@ -69,6 +69,17 @@ const BotGuide = {
       use: ['Start here every morning: which bot made money yesterday, which pair keeps losing.', 'Click a bot row, then read its per-instrument table — that is where you find a pair worth prohibiting.', 'Everything is paper. The real account has its own page (Live connection & safety).'],
       honest: 'Numbers here are simulated: real spreads and slippage from MetaTrader, but no real fills. Treat them as evidence, not as profit.' },
 
+    explorer: { icon: '🪆', art: 'split', tagline: 'Every trade, opened like a Russian doll — press anything to see what is inside it.',
+      tags: ['Overview', 'Drill-down', 'Read only'],
+      steps: [
+        ['🌍', 'Start with everything', 'All closed paper trades from every bot: net result, trades, win rate, profit factor, average R, time in trades, today, best and worst, the curve.'],
+        ['🪆', 'Open a doll', 'Every way the set can be split is shown as bars — Market, Instrument, Bot, Timeframe, Side, Day, Hour, Weekday, How it ended, How long it ran, Hand-adjusted. Press a bar and the whole page becomes that slice.'],
+        ['🧵', 'Keep going', 'Forex → EURUSD → Triple → 15m → Sells → a day → an hour. The breadcrumb at the top shows the path; press any step to jump back, or ✕ clear.'],
+        ['🔎', 'The trades themselves', 'Once a doll holds 80 trades or fewer, they are listed one by one at the bottom.'],
+      ],
+      settings: [['None', 'It is a reading page.', 'Everything is computed live from the bots’ records.']],
+      use: ['Ask questions with it: "does selling gold in the London hours work for the Pattern bots?" is four presses.', 'Compare the small numbers on the bars (trades · win rate) with the bar length (net) — a long bar from three trades is luck.'],
+      honest: 'Paper trades with real spreads and fees but simulated fills. Small slices lie: below ~30 trades, treat any number as a hint.' },
     analysis: { icon: '⚖️', art: 'votes', tagline: 'Did buying or selling earn more — and on what?',
       tags: ['Overview', 'Read only'],
       steps: [

@@ -110,7 +110,7 @@ Object.assign(Bots, {
        Choosing is still yours: nothing arms itself. */
     const rows = (typeof BotReports !== 'undefined') ? BotReports.rows() : [];
     const candidates = BOTS
-      .filter(b => !Bots.isPage(b) && !b.manual)
+      .filter(b => !Bots.isPage(b) && !b.manual && !Bots.disabled(b.id))
       .map(b => ({ b, row: rows.find(r => r.id === b.id) || null, ready: Live.readiness(b.id) }))
       .sort((x, y) => ((y.row && y.row.rank) || -9) - ((x.row && x.row.rank) || -9));
 
