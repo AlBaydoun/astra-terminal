@@ -161,7 +161,7 @@ const WorkspaceUI = {
       ${link('dash','Overview','dashboard')}${link('manual','Manual','manual')}${link('open','Open trades','positions')}${link('confluenceScanner','Scanner','scanner')}
       <span class="wsToolbarSpacer"></span><button data-ws-chart="">${this.icon('chart')}<span>Chart</span></button>
       <button data-ws-news>${this.icon('news')}<span>News</span></button>
-      <button data-ws-settings>${this.icon('manual')}<span>Markets</span></button></nav>`);
+      <button data-ws-settings title="Market sources — which feeds and markets ASTRA uses (JustMarkets, Binance…)">${this.icon('manual')}<span>Markets</span></button></nav>`);
     const tabs = document.getElementById('botTabs');
     const icons = {screener:'search',heatmap:'layers',observer:'target',intel:'chart',news:'news',bots:'bot'};
     tabs.querySelectorAll('[data-tab]').forEach(btn => {

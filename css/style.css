@@ -2106,3 +2106,5 @@ html[data-chartmax="1"] #main.toolsMin{ grid-template-columns:14px minmax(0,1fr)
 .acctPill.folded .apBal{ font-size:17px; }
 .apGo{ color:var(--accent); cursor:pointer; margin-left:2px; } .apGo:hover{ text-decoration:underline; }
 .acctPill:not(.folded) .apRow{ display:flex !important; }
+/* "Market settings" left the top bar: it lives under the Bots workspace's Markets button (the element stays so that button can open it) */
+#topbar #marketSettingsBtn{ display:none !important; }
