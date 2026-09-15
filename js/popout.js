@@ -22,6 +22,7 @@ const Popout = {
     book:      { label: 'Order book',    w: 460,  h: 900 },
     alerts:    { label: 'Alerts',        w: 520,  h: 700 },
     portfolio: { label: 'Paper account', w: 620,  h: 800 },
+    replay:    { label: 'Trade replay',  w: 1400, h: 900, hint: 'The replay chart with its indicators and recorder' },
   },
 
   /* which panels live in the lower strip vs the right sidebar */

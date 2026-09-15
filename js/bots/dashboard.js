@@ -264,8 +264,9 @@ const BotDash = {
         'whole history per pair \u2014 click a row for its record',
         this.instrumentTable(all, this.allOpen())),
       breakdowns: () => this.section('breakdowns', 'BREAKDOWNS',
-        'the filtered trades, cut four ways',
+        'the filtered trades, cut five ways',
         '<div class="dashCols">' +
+          '<div class="dashCol"><h4 class="dashColH">By market</h4>' + this.breakdown(shown.map(t => Object.assign({}, t, { market: MarketFit.marketLabel(t.sym) })), 'market', 'Market') + '</div>' +
           '<div class="dashCol"><h4 class="dashColH">By timeframe</h4>' + this.breakdown(shown, 'tf', 'Timeframe') + '</div>' +
           '<div class="dashCol"><h4 class="dashColH">By instrument</h4>' + this.breakdown(shown, 'sym', 'Instrument', baseAsset) + '</div>' +
           '<div class="dashCol"><h4 class="dashColH">By direction</h4>' + this.sideTable(shown) + '</div>' +

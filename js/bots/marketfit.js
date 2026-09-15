@@ -39,7 +39,7 @@ const MarketFit = {
     ['indices', 'Indices', 'index'],
     ['energy',  'Energy',  'energy'],
     ['stocks',  'US Stocks', 'stock'],
-    ['other',   'Everything else', 'other'],
+    ['other',   'European stocks & other', 'other'],
   ],
 
   /* Binance pairs that already carry months of trade history — kept so that
@@ -109,6 +109,16 @@ const MarketFit = {
     if (/^[A-Z]{1,5}$/.test(b) && !String(sym).includes('.')) return 'stock';
     return 'other';
   },
+
+  /* the market a symbol belongs to, by the same rules the market cards use */
+  marketOf(sym){
+    let bg = typeof BROKER !== 'undefined' ? BROKER.costGroup(sym) : 'other';
+    if (!bg || bg === 'other') bg = this.guessGroup(sym);
+    if (bg === 'other' && /^[A-Z0-9]+(_p)?$/.test(String(sym)) && !/^X(AU|AG|PT|PD)/.test(sym)) bg = 'eustock';
+    return bg;
+  },
+  MARKET_LABEL: { crypto: 'Crypto', metal: 'Metals', fx: 'Forex', index: 'Indices', energy: 'Energy', stock: 'US Stocks', eustock: 'European Stocks', other: 'Other' },
+  marketLabel(sym){ return this.MARKET_LABEL[this.marketOf(sym)] || 'Other'; },
 
   get GROUPS(){ return this.buildGroups(); },
 

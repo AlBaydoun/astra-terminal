@@ -2108,3 +2108,42 @@ html[data-chartmax="1"] #main.toolsMin{ grid-template-columns:14px minmax(0,1fr)
 .acctPill:not(.folded) .apRow{ display:flex !important; }
 /* "Market settings" left the top bar: it lives under the Bots workspace's Markets button (the element stays so that button can open it) */
 #topbar #marketSettingsBtn{ display:none !important; }
+
+/* ============ Market Clock / Trade Replay as windows ============ */
+.obsWrap.obsDialog{ position:static !important; width:auto !important; max-width:none !important; height:auto !important; max-height:none !important;
+  border:0 !important; border-radius:0 !important; box-shadow:none !important; overflow:visible !important; margin:0 !important; }
+.obsWrap .obsHead{ position:static !important; }
+#obsMax{ position:fixed; inset:0; z-index:900; display:flex; flex-direction:column; background:#0b1324; color:#eaf3ff; }
+#obsMax[hidden]{ display:none !important; }   /* the id rule used to beat the hidden attribute: the empty overlay stayed on top of everything after Esc */
+[data-theme=light] #obsMax{ background:#f2f6fb; color:#13253b; }
+.obsMaxBar{ display:flex; align-items:center; justify-content:space-between; padding:4px 12px; font-size:11px; color:#a5b8d3; border-bottom:1px solid #314661; }
+.obsMaxBar .paneCtl{ position:static; }
+.obsMaxBody{ flex:1; min-height:0; overflow:auto; padding:4px; }
+.obsPanel{ overflow:auto; }
+.obsPanel .obsWrap .obsHead{ padding:14px 24px 8px; }
+.obsPanel .obsWrap .obsHead h1{ font-size:22px; }
+.obsPanel .obsWrap .mcHero{ min-height:110px; padding:16px 24px; }
+.obsPanel .obsWrap .mcOrbit{ font-size:56px; }
+.obsPanel .obsWrap .mcHero strong{ font-size:26px; }
+
+.rxList{ display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
+.rxChip{ display:inline-flex; align-items:center; gap:4px; padding:3px 6px 3px 9px; border:1px solid #314661; border-radius:12px; font-size:11px; background:#142139; color:#eaf3ff; }
+.rxChip button{ padding:0 4px !important; border:0 !important; background:transparent !important; font-size:12px; line-height:1; }
+#rxRec.on{ background:rgba(246,70,93,.3) !important; border-color:#f6465d !important; animation:otArm 1s ease-in-out infinite alternate; }
+
+/* trade replay: the upper part (filters, list, facts) can be folded so the chart gets the screen */
+.obsWrap.trChartOnly .obsToolbar#trFilters, .obsWrap.trChartOnly #trStats, .obsWrap.trChartOnly .trList,
+.obsWrap.trChartOnly #trFilters + #trStats + .trList + .obsToolbar, .obsWrap.trChartOnly .obsFoot, .obsWrap.trChartOnly #trFacts,
+.obsWrap.trChartOnly .obsHead{ display:none !important; }
+.obsWrap.trChartOnly .trLayout{ grid-template-columns:1fr; margin:8px; }
+.obsWrap.trChartOnly .trCanvas{ height:calc(100vh - 330px); min-height:300px; }
+.trFoldBar{ display:flex; gap:8px; align-items:center; padding:6px 32px; font-size:12px; color:#a5b8d3; }
+.obsWrap.trChartOnly .trFoldBar{ padding:6px 12px; }
+/* a replay window of its own */
+html[data-panel="replay"] #main, html[data-panel="replay"] #topbar, html[data-panel="replay"] #statusbar, html[data-panel="replay"] #tickerStrip{ display:none !important; }
+html[data-panel="replay"] #obsMax{ display:flex !important; }
+html[data-panel="replay"] #obsMax .obsMaxBar [data-obsact]{ display:none; }
+/* the tab strip inside the full-screen bar */
+#obsMax .obsMaxBar{ gap:12px; }
+#obsMax .obsMaxBar #botTabs{ border:0; padding:0; flex:0 0 auto; }
+#obsMax .obsMaxBar .obsMaxHint{ flex:1; text-align:right; }

@@ -52,7 +52,7 @@ const BotMarkets = {
         <div class="mkCardHead">
           <label class="bsSwitch" title="${on ? 'Switch this whole market off for this bot' : 'Switch this market on for this bot'}"><input type="checkbox" data-mkgroup="${esc(id)}" ${on ? 'checked' : ''}><i></i></label>
           <b>${esc(g.label)}</b>
-          <span class="dim2">${(id === 'stocks' || id === 'other') && !on ? (id === 'stocks' ? 'share CFDs' : 'everything the account offers that fits no other market') + ' — off unless you switch them on · ' + g.syms.length + ' names' : on ? nLive + ' tradable now · ' + (g.syms.length - nBlocked) + ' of ' + g.syms.length + ' allowed' + (pref ? ' · ' + pref + ' ★' : '') + (nBlocked ? ' · ' + nBlocked + ' ✕' : '') : 'off — ' + g.syms.length + ' pairs'}</span>
+          <span class="dim2">${(id === 'stocks' || id === 'other') && !on ? (id === 'stocks' ? 'US share CFDs' : 'European share CFDs and anything else the account offers') + ' — off unless you switch them on · ' + g.syms.length + ' names' : on ? nLive + ' tradable now · ' + (g.syms.length - nBlocked) + ' of ' + g.syms.length + ' allowed' + (pref ? ' · ' + pref + ' ★' : '') + (nBlocked ? ' · ' + nBlocked + ' ✕' : '') : 'off — ' + g.syms.length + ' pairs'}</span>
           ${on ? `<span class="mkCardTools">
             <button class="bMini" data-mkall="${esc(id)}|allow" title="Allow every pair in this market">All allowed</button>
             <button class="bMini" data-mkall="${esc(id)}|block" title="Block every pair, then allow the ones you want">All blocked</button>

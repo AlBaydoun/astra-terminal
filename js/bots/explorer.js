@@ -11,7 +11,7 @@ const Explorer = {
 
   /* ---------- the dimensions a set can be split by ---------- */
   DIMS: [
-    { id: 'market',  label: 'Market',      of: t => BROKER.costGroup(t.sym), name: v => Explorer.GROUP_LABEL[v] || v },
+    { id: 'market',  label: 'Market',      of: t => MarketFit.marketOf(t.sym), name: v => MarketFit.MARKET_LABEL[v] || Explorer.GROUP_LABEL[v] || v },
     { id: 'sym',     label: 'Instrument',  of: t => Feed.brokerName(t.sym), name: v => baseAsset(v).replace(/\.[A-Za-z]{1,4}$/, '') },
     { id: 'bot',     label: 'Bot',         of: t => t.bot, name: v => (BOT_BY_ID[v] ? WorkspaceUI.name(BOT_BY_ID[v]) : v) },
     { id: 'tf',      label: 'Timeframe',   of: t => t.tf || '?', name: v => v },
@@ -31,15 +31,32 @@ const Explorer = {
 
   /* ---------- data ---------- */
   all(){ return BotDash.allTrades().filter(t => Number.isFinite(t.pnl)); },
+  /* a path step is either a value of a dimension (dim + value) or a RANGE of
+     a number (range: [lo, hi] on 'pnl' or 'r') — the histograms drill by range */
+  pass(t, f){
+    if (f.range){ const v = f.dim === 'pnl' ? t.pnl : t.r; return Number.isFinite(v) && v >= f.range[0] && v < f.range[1]; }
+    return this.dim(f.dim).of(t) === f.value;
+  },
+  /* values unticked in a split card: excluded from the set until cleared */
+  excludes: {},
+  excluded(t){
+    for (const [dimId, list] of Object.entries(this.excludes)){
+      if (!list || !list.length) continue;
+      const d = this.dim(dimId); if (!d) continue;
+      let v; try { v = d.of(t); } catch(e){ continue; }
+      if (list.includes(v)) return true;
+    }
+    return false;
+  },
   filtered(){
     let rows = this.all();
-    for (const f of this.path){ const d = this.dim(f.dim); rows = rows.filter(t => d.of(t) === f.value); }
-    return rows;
+    for (const f of this.path) rows = rows.filter(t => this.pass(t, f));
+    return rows.filter(t => !this.excluded(t));
   },
   openNow(){
     let rows = BotDash.allOpen();
-    for (const f of this.path){ const d = this.dim(f.dim); rows = rows.filter(t => { try { return d.of(t) === f.value; } catch(e){ return false; } }); }
-    return rows;
+    for (const f of this.path) rows = rows.filter(t => { try { return f.range ? true : this.pass(t, f); } catch(e){ return false; } });
+    return rows.filter(t => { try { return !this.excluded(t); } catch(e){ return true; } });
   },
   stats(rows){
     const n = rows.length, wins = rows.filter(t => t.pnl > 0), losses = rows.filter(t => t.pnl <= 0);
@@ -102,14 +119,18 @@ const Explorer = {
       <text x="45" y="42" class="exDonutBig">${Math.round(st.winPct)}%</text><text x="45" y="56" class="exDonutSmall">won</text>
     </svg>`;
   },
-  histogram(values, buckets, fmt){
+  histogram(values, buckets, fmt, field){
     if (!values.length) return '';
     const lo = Math.min(...values), hi = Math.max(...values);
     const step = (hi - lo) / buckets || 1;
     const bins = new Array(buckets).fill(0);
     for (const v of values){ let i = Math.floor((v - lo) / step); if (i >= buckets) i = buckets - 1; bins[i]++; }
     const max = Math.max(...bins);
-    return `<div class="exHist">${bins.map((n, i) => `<div class="exBin" title="${fmt(lo + i * step)} to ${fmt(lo + (i + 1) * step)}: ${n}"><i style="height:${max ? n / max * 100 : 0}%" class="${lo + (i + 0.5) * step >= 0 ? 'up' : 'down'}"></i></div>`).join('')}
+    return `<div class="exHist">${bins.map((n, i) => {
+        const a = lo + i * step, b = i === buckets - 1 ? hi + 1e-9 : lo + (i + 1) * step;
+        const tip = fmt(a) + ' to ' + fmt(lo + (i + 1) * step) + ': ' + n + (n && field ? ' · press to open these trades' : '');
+        return `<button class="exBin" ${n && field ? `data-exrange="${field}|${a}|${b}|${esc(fmt(a) + ' … ' + fmt(lo + (i + 1) * step))}"` : 'disabled'} title="${esc(tip)}"><i style="height:${max ? n / max * 100 : 0}%" class="${lo + (i + 0.5) * step >= 0 ? 'up' : 'down'}"></i></button>`;
+      }).join('')}
       <div class="exHistAxis"><span>${fmt(lo)}</span><span>${fmt(hi)}</span></div></div>`;
   },
   hourStrip(rows){
@@ -122,7 +143,11 @@ const Explorer = {
   /* one "split by" card: bars per value, click to open that doll */
   splitCard(dim, rows){
     const groups = {};
-    for (const t of rows){ const k = dim.of(t); (groups[k] = groups[k] || []).push(t); }
+    /* values you unticked stay in the list (unticked) so you can tick them back;
+       everything else on the page is computed without them */
+    const ownEx = this.excludes[dim.id] || [];
+    const source = ownEx.length ? this.rowsWithout(dim.id) : rows;
+    for (const t of source){ const k = dim.of(t); (groups[k] = groups[k] || []).push(t); }
     let entries = Object.entries(groups).map(([k, list]) => ({ k, n: list.length, net: list.reduce((a, t) => a + t.pnl, 0), wins: list.filter(t => t.pnl > 0).length }));
     if (entries.length < 2 && dim.id !== 'sym') return '';
     if (dim.order) entries.sort((a, b) => dim.order.indexOf(a.k) - dim.order.indexOf(b.k));
@@ -131,36 +156,50 @@ const Explorer = {
     const maxAbs = Math.max(1, ...entries.map(e => Math.abs(e.net)));
     const all = this.showAll[dim.id];
     const shown = all ? entries : entries.slice(0, 14);
-    const bar = e => `<button class="exBar" data-exdrill="${esc(dim.id)}|${esc(e.k)}" title="Open ${esc(dim.name(e.k))}">
+    const ex = this.excludes[dim.id] || [];
+    const bar = e => `<div class="exBarRow${ex.includes(e.k) ? ' off' : ''}">
+      <input type="checkbox" class="exTick" data-extick="${esc(dim.id)}|${esc(e.k)}" ${ex.includes(e.k) ? '' : 'checked'} title="Untick to leave ${esc(dim.name(e.k))} out of everything on this page">
+      <button class="exBar" data-exdrill="${esc(dim.id)}|${esc(e.k)}" title="Open ${esc(dim.name(e.k))}">
         <span class="exBarName">${esc(dim.name(e.k))}</span>
         <span class="exBarTrack"><i class="${e.net >= 0 ? 'up' : 'down'}" style="width:${Math.abs(e.net) / maxAbs * 100}%"></i></span>
         <span class="exBarNum ${e.net >= 0 ? 'up' : 'down'}">${this.money(e.net)}</span>
-        <span class="exBarMeta">${e.n} · ${Math.round(e.wins / e.n * 100)}%</span></button>`;
+        <span class="exBarMeta">${e.n} · ${Math.round(e.wins / e.n * 100)}%</span></button></div>`;
     return this.section('split:' + dim.id, esc(dim.label), entries.length + ' ' + (entries.length === 1 ? 'value' : 'values') + ' · press one to open it',
       `<div class="exBars">${shown.map(bar).join('')}</div>` +
       (entries.length > 14 ? `<button class="bMini exMoreBtn" data-exmore="${esc(dim.id)}">${all ? 'Show the top 14 only' : 'Show all ' + entries.length + ' (' + (entries.length - 14) + ' more)'}</button>` : ''),
       'exSplit');
   },
   showAll: {},
+  /* the set with every exclusion applied EXCEPT this dimension's own */
+  rowsWithout(dimId){
+    const keep = this.excludes; const tmp = Object.assign({}, keep); delete tmp[dimId];
+    this.excludes = tmp; let rows; try { rows = this.filtered(); } finally { this.excludes = keep; }
+    return rows;
+  },
+  clearExcludes(){ this.excludes = {}; lsSet('astra_explorer_excl', {}); this.dirty = true; Bots.render(); },
 
   /* ---------- sections: fold, maximise, move, resize — all remembered ---------- */
   SEC_KEY: 'astra_explorer_secs',
   secState(){ return lsGet(this.SEC_KEY, { order: [], fold: {}, max: null, h: {} }) || { order: [], fold: {}, max: null, h: {} }; },
   saveSec(st){ lsSet(this.SEC_KEY, st); },
+  DEFAULT_SPAN: { hero: 6, curve: 6, list: 6 },
   section(id, title, sub, body, cls){
     const st = this.secState();
     const folded = !!st.fold[id], maxed = st.max === id;
     const h = st.h[id] ? `style="height:${st.h[id]}px"` : '';
-    return `<section class="exSec ${cls || 'exCard'}${folded ? ' folded' : ''}${maxed ? ' maxed' : ''}" data-exsec="${esc(id)}">
+    const span = (st.w && st.w[id]) || this.DEFAULT_SPAN[id] || 2;
+    return `<section class="exSec ${cls || 'exCard'}${folded ? ' folded' : ''}${maxed ? ' maxed' : ''}" data-exsec="${esc(id)}" style="grid-column:span ${span}">
       <div class="exSecHead">
         <b>${title}</b><span>${esc(sub || '')}</span>
         <span class="paneCtl exSecCtl">
-          <button data-exs="up" title="Move up">▲</button><button data-exs="down" title="Move down">▼</button>
+          <button data-exs="left" title="Move left (earlier)">◂</button><button data-exs="right" title="Move right (later)">▸</button>
+          <button data-exs="narrow" title="Narrower">−</button><button data-exs="wide" title="Wider">+</button>
           <button data-exs="fold" title="${folded ? 'Open' : 'Fold'}">${folded ? '▢' : '_'}</button>
           <button data-exs="max" class="${maxed ? 'on' : ''}" title="${maxed ? 'Back to normal' : 'Maximise'}">⛶</button>
         </span>
       </div>
       ${folded ? '' : `<div class="exSecBody" ${h}>${body}</div>`}
+      <div class="exColGrip" data-exgrip="${esc(id)}" title="Drag to change the width, like a column in Excel"></div>
     </section>`;
   },
   ordered(list){
@@ -177,12 +216,18 @@ const Explorer = {
     const st = this.secState();
     if (what === 'fold'){ st.fold[id] = !st.fold[id]; if (st.fold[id] && st.max === id) st.max = null; }
     else if (what === 'max'){ st.max = st.max === id ? null : id; delete st.fold[id]; }
-    else if (what === 'up' || what === 'down'){
+    else if (what === 'left' || what === 'right' || what === 'up' || what === 'down'){
       const cur = this.ordered(ids.map(i => ({ id: i }))).map(o => o.id);
-      const i = cur.indexOf(id), j = i + (what === 'up' ? -1 : 1);
-      if (i < 0 || j < 0 || j >= cur.length) return;
+      const i = cur.indexOf(id); if (i < 0) return;
+      const j = what === 'left' || what === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= cur.length) return;
       cur.splice(i, 1); cur.splice(j, 0, id);
       st.order = st.order.filter(x => !cur.includes(x)).concat(cur);
+    }
+    else if (what === 'narrow' || what === 'wide' || typeof what === 'number'){
+      st.w = st.w || {};
+      const cur = st.w[id] || this.DEFAULT_SPAN[id] || 2;
+      st.w[id] = Math.max(1, Math.min(6, typeof what === 'number' ? what : cur + (what === 'wide' ? 1 : -1)));
     }
     this.saveSec(st); this.dirty = true; Bots.render();
   },
@@ -194,8 +239,10 @@ const Explorer = {
     this.dirty = false;
     const rows = this.filtered(), st = this.stats(rows), open = this.openNow();
     const crumbs = [`<button class="exCrumb${this.path.length ? '' : ' on'}" data-excrumb="-1">Everything</button>`]
-      .concat(this.path.map((f, i) => `<i>›</i><button class="exCrumb${i === this.path.length - 1 ? ' on' : ''}" data-excrumb="${i}">${esc(this.dim(f.dim).label)}: ${esc(f.label)}</button>`)).join('');
-    const usedDims = new Set(this.path.map(f => f.dim));
+      .concat(this.path.map((f, i) => `<i>›</i><button class="exCrumb${i === this.path.length - 1 ? ' on' : ''}" data-excrumb="${i}">${esc(f.range ? (f.dim === 'pnl' ? 'Result' : 'R') : this.dim(f.dim).label)}: ${esc(f.label)}</button>`)).join('');
+    const exN = Object.values(this.excludes).reduce((a, l) => a + (l ? l.length : 0), 0);
+    const exChip = exN ? `<span class="exExcl">excluding ${exN} ${exN === 1 ? 'value' : 'values'} <button class="bMini" data-exclear="1" title="Tick everything again">tick all</button></span>` : '';
+    const usedDims = new Set(this.path.filter(f => !f.range).map(f => f.dim));
     const splitSecs = this.DIMS.filter(d => !usedDims.has(d.id)).map(d => ({ id: 'split:' + d.id, html: this.splitCard(d, rows) })).filter(x => x.html);
     const pfTxt = st.pf === Infinity ? '∞' : st.pf.toFixed(2);
     const list = rows.length && rows.length <= 80
@@ -225,14 +272,14 @@ const Explorer = {
     const secs = this.ordered([
       { id: 'hero',  html: this.section('hero', 'The picture', 'what this doll holds', hero, 'exHeroSec') },
       { id: 'curve', html: this.section('curve', 'The curve', 'every trade added up, in time order', this.curveSvg(st)) },
-      { id: 'pnl',   html: this.section('pnl', 'Result per trade', 'how the wins and losses are spread', this.histogram(rows.map(t => t.pnl), 16, v => fmtNum(v))) },
-      { id: 'rdist', html: this.section('rdist', 'R per trade', 'reward against the risk taken', this.histogram(rows.map(t => t.r).filter(Number.isFinite), 16, v => v.toFixed(1) + 'R')) },
+      { id: 'pnl',   html: this.section('pnl', 'Result per trade', 'how the wins and losses are spread', this.histogram(rows.map(t => t.pnl), 16, v => fmtNum(v), 'pnl')) },
+      { id: 'rdist', html: this.section('rdist', 'R per trade', 'reward against the risk taken', this.histogram(rows.map(t => t.r).filter(Number.isFinite), 16, v => v.toFixed(1) + 'R', 'r')) },
       { id: 'hours', html: this.section('hours', 'Hour of the day', 'when the trades were opened · colour = net · press an hour to open it', this.hourStrip(rows)) },
     ].concat(splitSecs).concat(list ? [{ id: 'list', html: this.section('list', 'The trades themselves', rows.length <= 80 ? rows.length + ' — newest first' : rows.length + ' trades', list) }] : []));
     const maxed = this.secState().max;
     this._secIds = secs.map(x => x.id);
     return `<div class="exWrap${maxed ? ' hasMax' : ''}">
-      <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}</div>
+      <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}</div>
       ${rows.length ? `<div class="exSecs">${secs.map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${this.path.length ? ' Try a wider doll.' : ''}</div>`}
     </div>`;
   },
@@ -246,6 +293,8 @@ const Explorer = {
   crumb(i){
     this.path = i < 0 ? [] : this.path.slice(0, i + 1);
     lsSet('astra_explorer_path', this.path);
+    /* "Everything" means everything: the ticks come back too */
+    if (i < 0){ this.excludes = {}; lsSet('astra_explorer_excl', {}); }
     this.dirty = true; Bots.render();
   },
   bind(host){
@@ -255,6 +304,29 @@ const Explorer = {
     }));
     host.querySelectorAll('[data-excrumb]').forEach(b => b.addEventListener('click', () => this.crumb(+b.dataset.excrumb)));
     host.querySelectorAll('[data-exmore]').forEach(b => b.addEventListener('click', () => { this.showAll[b.dataset.exmore] = !this.showAll[b.dataset.exmore]; this.dirty = true; Bots.render(); }));
+    host.querySelectorAll('[data-exrange]').forEach(b => b.addEventListener('click', () => {
+      const [field, lo, hi, label] = b.dataset.exrange.split('|');
+      this.path.push({ dim: field, range: [+lo, +hi], label });
+      lsSet('astra_explorer_path', this.path); this.dirty = true; Bots.render();
+    }));
+    host.querySelectorAll('[data-extick]').forEach(cb => cb.addEventListener('change', () => {
+      const i = cb.dataset.extick.indexOf('|'); const dimId = cb.dataset.extick.slice(0, i), val = cb.dataset.extick.slice(i + 1);
+      const list = (this.excludes[dimId] || []).filter(v => v !== val);
+      if (!cb.checked) list.push(val);
+      this.excludes[dimId] = list; lsSet('astra_explorer_excl', this.excludes);
+      this.dirty = true; Bots.render();
+    }));
+    host.querySelectorAll('[data-exclear]').forEach(b => b.addEventListener('click', () => this.clearExcludes()));
+    /* drag a section's right edge to change its width in grid columns */
+    host.querySelectorAll('[data-exgrip]').forEach(g => g.addEventListener('mousedown', e => {
+      e.preventDefault(); e.stopPropagation();
+      const sec = g.closest('.exSec'), grid = sec.parentElement, id = g.dataset.exgrip;
+      const colW = grid.getBoundingClientRect().width / 6, startX = e.clientX, startW = sec.getBoundingClientRect().width;
+      document.body.classList.add('resizing');
+      const move = ev => { const span = Math.max(1, Math.min(6, Math.round((startW + ev.clientX - startX) / colW))); sec.style.gridColumn = 'span ' + span; sec.dataset.span = span; };
+      const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); if (sec.dataset.span) this.secAction(id, +sec.dataset.span, this._secIds || []); };
+      window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    }));
     host.querySelectorAll('[data-exs]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       this.secAction(b.closest('[data-exsec]').dataset.exsec, b.dataset.exs, this._secIds || []);
@@ -283,6 +355,7 @@ const Explorer = {
   },
 };
 Explorer.path = lsGet('astra_explorer_path', []) || [];
+Explorer.excludes = lsGet('astra_explorer_excl', {}) || {};
 BOTS.push({ id: 'explorer', name: 'Deep Dive', analysis: true, explorer: true,
   blurb: 'Every trade, opened like a Russian doll: start with everything, press a market, then a pair, a bot, a timeframe, a side, a day — and see the whole picture of what is left at every step.',
   defaults: { tf: '15m', tfAuto: false, minScore: 0, maxOpen: 0 }, warmup: 0, signal: () => null });
