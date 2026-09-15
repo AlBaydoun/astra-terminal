@@ -1,0 +1,5 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>ASTRA observatory checks</title><style>body{background:#101b2b;color:#dbedff;font:15px system-ui;padding:30px}button{padding:12px}pre{white-space:pre-wrap}</style><h1>Market clock & replay checks</h1><p>Isolated fixtures. No trading engine, storage writes or order endpoints.</p><button id="run">Run checks</button><pre id="results"></pre><script>
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const WorkspaceUI={icon:()=>'<svg viewBox="0 0 24 24"></svg>'};
+const BOTS=[],BROKER={costGroup:()=> 'other'},MarketFit={guessGroup:s=>s==='AAPL'?'stock':'other'},MarketSources={brokerList:()=>[]},MK={names:{}},Feed={specFor:()=>null},BotDash={dayOf:t=>new Date(t).toISOString().slice(0,10)};
+</script><script src="../js/market-clock.js"></script><script src="../js/trade-review.js"></script><script src="../js/market-news.js"></script><script src="observatory-checks.js"></script></html>

@@ -190,13 +190,13 @@ select#chartType {
 #bottomPanel.collapsed { height: 37px !important; }  /* beats the dragged inline height */
 #bottomPanel.collapsed .botBody { display: none; }
 #botTabs { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--border-soft); }
-#botTabs button[data-tab] {
+#botTabs button:is([data-tab], .obsLaunch) {
   background: transparent; border: 0; color: var(--dim); font-family: var(--font-head);
   font-size: 13px; font-weight: 600; letter-spacing: 1px; padding: 5px 12px;
   border-radius: 6px; cursor: pointer; transition: all 0.12s;
 }
-#botTabs button[data-tab]:hover { color: var(--text); }
-#botTabs button[data-tab].active { color: var(--accent); background: rgba(0, 229, 255, 0.08); }
+#botTabs button:is([data-tab], .obsLaunch):hover { color: var(--text); }
+#botTabs button:is([data-tab], .obsLaunch).active { color: var(--accent); background: rgba(0, 229, 255, 0.08); }
 #botCollapse {
   margin-left: auto; background: transparent; border: 0; color: var(--dim); cursor: pointer;
   width: 26px; height: 26px; border-radius: 6px;
