@@ -184,6 +184,16 @@ Object.assign(Bots, {
     }
     if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
     const keep = b.manual ? this.manualDraft : null;
+    /* the live desk: never rebuild under a hand that is typing, and carry the
+       ticked acknowledgements and typed phrases across a rebuild */
+    if (b.id === 'live' && host.dataset.bot === b.id && host.contains(document.activeElement) && document.activeElement.matches('input,select,textarea')) return;
+    /* the periodic pass refreshes the desk in place (its living picture and the
+       real positions) instead of rebuilding the whole page; a full rebuild happens
+       on your own actions, and at most every five minutes otherwise */
+    if (b.id === 'live' && host.dataset.bot === b.id && typeof LiveDesk !== 'undefined' && host.querySelector('.ldWrap') && !LiveDesk._force && Date.now() - (LiveDesk._builtAt || 0) < 300000){
+      LiveDesk.refreshPulse(true); LiveDesk.refreshPositions(); return;
+    }
+    const ldSnap = (b.id === 'live' && host.dataset.bot === b.id && typeof LiveDesk !== 'undefined') ? LiveDesk.snapshot(host) : null;
     /* typed stop/target values on a bot's own position cards survive the rebuild */
     this._otKeep = host.dataset.bot === b.id && typeof OpenTrades !== 'undefined' ? OpenTrades.snapshot(host.querySelector('#botPositions')) : null;
     host.dataset.bot = b.id;
@@ -213,6 +223,8 @@ Object.assign(Bots, {
 
     this.bind(b);
     this.restoreForm(keep);
+    if (ldSnap) LiveDesk.restore(host, ldSnap);
+    if (b.id === 'live' && typeof LiveDesk !== 'undefined'){ LiveDesk._builtAt = Date.now(); LiveDesk._force = false; }
   },
 
   showPermissions(sym = ''){

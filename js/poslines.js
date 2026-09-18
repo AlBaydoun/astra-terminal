@@ -15,11 +15,12 @@ const PosLines = {
   pending: null,       // a dragged level waiting for your Apply / Cancel
   focus: null,         // 'bot:id' opened from a bot page — drawn thicker for a while
   timer: null,
-  COL: { sl: '#f6465d', tp: '#2ebd85', entry: '#8fa3c8', trail: '#ffd166' },
+  COL: { sl: '#f6465d', tp: '#2ebd85', entry: '#8fa3c8', trail: '#ffd166', real: '#ffb03a' },
 
   /* the trailing stop of a position, if it has one: where it switches on,
      and — once on — where it sits right now, following the best price */
   trailOf(r){
+    if (r.live) return typeof LiveDesk !== 'undefined' ? LiveDesk.trailInfo(r) : null;
     const p = r.p;
     const trail = p.trail !== undefined ? p.trail : ((Bots.cfg(r.bot) || {}).trail || null);
     if (!trail) return null;
@@ -38,7 +39,22 @@ const PosLines = {
     if (!this.on || typeof Bots === 'undefined' || typeof OpenTrades === 'undefined') return [];
     const key = s => typeof Feed !== 'undefined' ? Feed.brokerName(s) : s;
     const here = key(STORE.symbol);
-    return OpenTrades.all().filter(r => key(r.p.sym) === here);
+    const paper = OpenTrades.all().filter(r => key(r.p.sym) === here);
+    /* the REAL positions on the account are drawn too — gold, marked REAL —
+       and a dragged level on one of those is sent to the broker */
+    const real = typeof LiveDesk !== 'undefined' ? LiveDesk.chartRows().filter(r => key(r.p.sym) === here) : [];
+    return paper.concat(real);
+  },
+  /* the live half of a row, paper or real */
+  liveOf(r){ return r.live ? LiveDesk.liveOf(r) : OpenTrades.live(r); },
+  /* the position behind a bot:id pair, paper or real */
+  posOf(bot, id){
+    if (String(id).startsWith('T')){
+      const r = typeof LiveDesk !== 'undefined' ? LiveDesk.chartRows().find(x => x.bot === bot && x.p.id === id) : null;
+      return r ? { p: r.p, row: r, live: true } : null;
+    }
+    const L = Bots.ledgers[bot]; const p = L && L.open.find(x => x.id === id);
+    return p ? { p, row: OpenTrades.all().find(r => r.bot === bot && r.p.id === id) || null, live: false } : null;
   },
 
   /* From a bot page or Open Trades: jump to the chart of that trade with
@@ -114,7 +130,8 @@ const PosLines = {
     ctx.save();
     ctx.font = '11px ' + (getComputedStyle(document.body).getPropertyValue('--font-mono') || 'monospace');
     for (const r of rows){
-      const p = r.p, l = OpenTrades.live(r);
+      const p = r.p, l = this.liveOf(r);
+      const entryCol = r.live ? this.COL.real : this.COL.entry;
       const live = [this.drag, this.pending].find(d => d && d.bot === r.bot && d.id === p.id) || null;
       const dragging = live;
       const sl = dragging && dragging.which === 'sl' ? dragging.price : p.sl;
@@ -134,7 +151,7 @@ const PosLines = {
         ctx.beginPath(); ctx.setLineDash(dash); ctx.lineWidth = w; ctx.strokeStyle = color;
         ctx.moveTo(0, y); ctx.lineTo(right, y); ctx.stroke(); ctx.setLineDash([]);
       };
-      line(yE, this.COL.entry, [4, 3], hot ? 2 : 1);
+      line(yE, entryCol, [4, 3], hot || r.live ? 2 : 1);
       if (yS != null) line(yS, this.COL.sl, [], (dragging && dragging.which === 'sl') || hot ? 2.5 : 1.5);
       if (yT != null) line(yT, this.COL.tp, [], (dragging && dragging.which === 'tp') || hot ? 2.5 : 1.5);
       /* labels, on the left of the line */
@@ -144,7 +161,7 @@ const PosLines = {
         return (v >= 0 ? '+' : '') + fmtNum(v);
       };
       const lx = 6;
-      const box = this.label(ctx, lx, yE, side + ' ' + (p.lots ? p.lots + ' lot' : fmtNum(p.qty)) + ' · ' + r.botName + ' · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal), this.COL.entry, true);
+      const box = this.label(ctx, lx, yE, (r.live ? 'REAL ' : '') + side + ' ' + (p.lots ? p.lots + ' lot' : fmtNum(p.qty)) + ' · ' + r.botName + ' · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal), entryCol, true);
       /* a small ✕ CLOSE button glued to the entry label */
       const cb = { x: box.x + box.w + 4, y: box.y, w: 58, h: box.h, bot: r.bot, id: p.id };
       ctx.fillStyle = 'rgba(246,70,93,.18)'; ctx.fillRect(cb.x, cb.y, cb.w, cb.h);
@@ -164,13 +181,18 @@ const PosLines = {
           const yA = this.yOf(tr.arm);
           if (yA != null){
             line(yA, this.COL.trail, [2, 4], 1);
-            this.label(ctx, W * 0.45, yA, 'TRAIL arms at ' + fmtPrice(tr.arm) + ' (' + tr.startR + 'R) · gap ' + tr.gapR + 'R', this.COL.trail, p.dir < 0);
+            this.label(ctx, W * 0.45, yA, tr.text || ('TRAIL arms at ' + fmtPrice(tr.arm) + ' (' + tr.startR + 'R) · gap ' + tr.gapR + 'R'), this.COL.trail, p.dir < 0);
           }
         } else if (tr.peak != null){
           const yP = this.yOf(tr.peak);
           if (yP != null){
             line(yP, this.COL.trail, [2, 4], 1);
-            this.label(ctx, W * 0.45, yP, 'TRAILING · best ' + fmtPrice(tr.peak) + ' · gap ' + tr.gapR + 'R', this.COL.trail, p.dir < 0);
+            this.label(ctx, W * 0.45, yP, tr.text || ('TRAILING · best ' + fmtPrice(tr.peak) + ' · gap ' + tr.gapR + 'R'), this.COL.trail, p.dir < 0);
+          }
+          if (tr.level != null && r.live){
+            /* where the desk will put the real stop next */
+            const yL = this.yOf(tr.level);
+            if (yL != null){ line(yL, this.COL.trail, [1, 3], 1); this.label(ctx, W * 0.45, yL, 'stop follows to ' + fmtPrice(tr.level), this.COL.trail, yL > yE); }
           }
           if (yS != null) this.label(ctx, W * 0.45, yS, 'trailing stop', this.COL.trail, yS > yE);
         }
@@ -199,7 +221,7 @@ const PosLines = {
         const price = p[which];
         if (!(price > 0)) continue;
         const ly = this.yOf(price);
-        if (ly != null && Math.abs(ly - y) <= 6) return { bot: r.bot, id: p.id, which, price };
+        if (ly != null && Math.abs(ly - y) <= 6) return { bot: r.bot, id: p.id, which, price, live: !!r.live, ticket: r.ticket };
       }
     }
     return null;
@@ -238,8 +260,12 @@ const PosLines = {
    Nothing is written to the bot's trade until you press Apply. */
 PosLines.confirm = function(d, was){
   this.cancelPending();
-  const L = Bots.ledgers[d.bot]; const p = L && L.open.find(x => x.id === d.id);
+  const found = this.posOf(d.bot, d.id); const p = found && found.p;
   if (!p) return;
+  if (d.live && (!Live.state || !Live.state.linked || !Live.bridge.trading)){
+    Draw.redraw();
+    return toast('That is a REAL position — the live bridge must be running and linked before its levels can be changed', 'warn');
+  }
   this.pending = d;
   const cash = price => (price - p.entry) * p.dir * p.qty * BotEngine.cashRate(p, true);
   const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
@@ -252,14 +278,19 @@ PosLines.confirm = function(d, was){
     <div class="pcRow"><span>${isSL ? 'Stop' : 'Target'}</span><i>${fmtPrice(was)}</i><em>→</em><i class="${isSL ? 'down' : 'up'}">${fmtPrice(d.price)}</i></div>
     <div class="pcRow"><span>${isSL ? 'Loss if hit' : 'Profit if hit'}</span><i>${fmtC(cash(was))}</i><em>→</em><i class="${cash(d.price) >= 0 ? 'up' : 'down'}">${fmtC(cash(d.price))}</i></div>
     <div class="pcRow"><span>From the price now</span><i>${(Math.abs(d.price - (Bots.quoteFor(p.sym) || { price: p.entry }).price) / (Bots.quoteFor(p.sym) || { price: p.entry }).price * 100).toFixed(2)}%</i></div>
-    <div class="pcBtns"><button class="bMini go" data-pcapply>Apply to the trade</button><button class="bMini" data-pccancel>Cancel</button></div>
-    <small class="dim2">The trade will be marked “adjusted” in the bot’s record.</small>
+    <div class="pcBtns"><button class="bMini ${d.live ? 'danger' : 'go'}" data-pcapply>${d.live ? 'Send to the broker' : 'Apply to the trade'}</button><button class="bMini" data-pccancel>Cancel</button></div>
+    <small class="dim2">${d.live ? 'REAL position #' + d.ticket + ' — the broker is told to move the level; it holds with this PC off.' : 'The trade will be marked “adjusted” in the bot’s record.'}</small>
   </div>`);
   const box = document.getElementById('posConfirm');
+  if (d.live) box.classList.add('real');
   box.querySelector('[data-pcapply]').addEventListener('click', async () => {
     const patch = {}; patch[d.which] = d.price;
     box.remove(); this.pending = null;
-    await Bots.editPos(d.bot, d.id, patch);      /* the same rules as the Open Trades page */
+    if (d.live){
+      const sl = d.which === 'sl' ? d.price : p.sl, tp = d.which === 'tp' ? d.price : (p.tp || 0);
+      await LiveDesk.modify(d.ticket, sl, tp, 'moved on the chart');
+      await Live.sync();
+    } else await Bots.editPos(d.bot, d.id, patch);      /* the same rules as the Open Trades page */
     Draw.redraw();
   });
   box.querySelector('[data-pccancel]').addEventListener('click', () => this.cancelPending());
@@ -268,28 +299,33 @@ PosLines.confirm = function(d, was){
 /* close at market, from the chart — confirmed first, like a moved level */
 PosLines.confirmClose = function(bot, id){
   this.cancelPending();
-  const L = Bots.ledgers[bot]; const p = L && L.open.find(x => x.id === id);
+  const found = this.posOf(bot, id); const p = found && found.p;
   if (!p) return;
-  const q = Bots.quoteFor(p.sym);
+  const real = found.live;
+  if (real && (!Live.state || !Live.state.linked || !Live.bridge.trading))
+    return toast('That is a REAL position — the live bridge must be running and linked before it can be closed from here', 'warn');
+  const q = Bots.quoteFor(p.sym) || (real ? { price: found.row.raw.price_current } : null);
   if (!q) return toast('No live price to close ' + baseAsset(p.sym) + ' against — check the bridge', 'warn');
-  const row = OpenTrades.all().find(r => r.bot === bot && r.p.id === id);
-  const l = row ? OpenTrades.live(row) : { unreal: 0 };
+  const row = found.row;
+  const l = row ? this.liveOf(row) : { unreal: 0 };
   const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
   const wrap = document.getElementById('mainWrap');
   const y = Chart.priceSeries.priceToCoordinate(p.entry) || 0;
   const botName = (BOT_BY_ID[bot] || {}).name || bot;
   wrap.insertAdjacentHTML('beforeend', `<div id="posConfirm" class="posConfirm" style="top:${Math.max(8, Math.min(wrap.clientHeight - 120, y + 10))}px">
-    <b>Close at market · ${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))} <small>${esc(botName)}</small></b>
+    <b>${real ? 'Close the REAL position · ' : 'Close at market · '}${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))} <small>${esc(botName)}</small></b>
     <div class="pcRow"><span>Size</span><i>${p.lots ? p.lots + ' lot' : fmtNum(p.qty)}</i><em></em><i></i></div>
     <div class="pcRow"><span>Entry → price now</span><i>${fmtPrice(p.entry)}</i><em>→</em><i>${fmtPrice(q.price)}</i></div>
     <div class="pcRow"><span>Result if closed now</span><i></i><em></em><i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i></div>
     <div class="pcBtns"><button class="bMini danger" data-pcclose>Close now · ${fmtC(l.unreal)}</button><button class="bMini" data-pccancel>Cancel</button></div>
-    <small class="dim2">Closes the paper position at the live price. The bot's record will show “closed by operator”.</small>
+    <small class="dim2">${real ? 'REAL position #' + found.row.ticket + ' — the broker closes it at the market price now.' : 'Closes the paper position at the live price. The bot\'s record will show “closed by operator”.'}</small>
   </div>`);
   const box = document.getElementById('posConfirm');
+  if (real) box.classList.add('real');
   box.querySelector('[data-pcclose]').addEventListener('click', async () => {
     box.remove();
-    await Bots.closePos(bot, id);
+    if (real) await LiveDesk.closeTicket(found.row.ticket, 'closed from the chart');
+    else await Bots.closePos(bot, id);
     Draw.redraw();
   });
   box.querySelector('[data-pccancel]').addEventListener('click', () => this.cancelPending());

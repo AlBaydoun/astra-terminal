@@ -25,6 +25,7 @@ REAL ORDERS
 
     POST /order   {code, symbol, side, lots, sl, tp, comment}
     POST /close   {code, ticket}
+    POST /modify  {code, ticket, sl, tp}   — move the stop / target of an ASTRA position
     GET /manual-preview   read-only valuation and a one-use reviewed request
     POST /manual-order    {code, previewId} — explicit manual market orders
     POST /manual-review   {code, acknowledgement} — operator review after an uncertain outcome
@@ -448,6 +449,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._order(body)
         if u.path == "/close":
             return self._close(body)
+        if u.path == "/modify":
+            return self._modify(body)
         return self._send({"error": "not_found"}, 404)
 
     def _order(self, b):
@@ -559,6 +562,78 @@ class Handler(BaseHTTPRequestHandler):
         log_order("CLOSE RESULT %s retcode=%s" % ("OK" if ok else "REJECTED", r.retcode))
         return self._send({"ok": ok, "retcode": r.retcode, "comment": r.comment}, 200 if ok else 502)
 
+    def _modify(self, b):
+        """Move the stop-loss and/or take-profit of ONE open position.
+
+        Only a position ASTRA itself opened (its magic number) can be touched,
+        the stop can never be removed, and both levels are checked against the
+        current price and the broker's minimum stop distance before anything
+        is sent. This is what the live desk uses to lock in profit and trail.
+        """
+        try:
+            ticket = int(b.get("ticket", 0))
+            sl = float(b.get("sl", 0) or 0)
+            tp = float(b.get("tp", 0) or 0)
+        except (TypeError, ValueError):
+            return self._send({"error": "bad_numbers"}, 400)
+        with _lock:
+            poss = mt5.positions_get(ticket=ticket)
+        if not poss:
+            return self._send({"error": "not_found", "message": "No open position with that ticket."}, 404)
+        pos = poss[0]
+        if pos.magic != MAGIC:
+            log_order("MODIFY REFUSED ticket=%s is not an ASTRA position" % ticket)
+            return self._send({"error": "not_ours",
+                               "message": "That position was not opened by ASTRA; change it in MetaTrader."}, 403)
+        if not (sl > 0):
+            return self._send({"error": "stop_required",
+                               "message": "A position without a stop-loss is refused by the bridge."}, 400)
+        with _lock:
+            info = mt5.symbol_info(pos.symbol)
+            tick = mt5.symbol_info_tick(pos.symbol)
+        if info is None or tick is None:
+            return self._send({"error": "no_quote"}, 503)
+        is_buy = pos.type == mt5.POSITION_TYPE_BUY
+        # the price the level would be checked against, and the broker's minimum distance
+        ref = tick.bid if is_buy else tick.ask
+        min_dist = (getattr(info, "trade_stops_level", 0) or 0) * (info.point or 0)
+        if is_buy:
+            if sl >= ref - min_dist:
+                return self._send({"error": "stop_wrong_side",
+                                   "message": "The stop must stay below the price by at least the broker's minimum distance."}, 400)
+            if tp > 0 and tp <= ref + min_dist:
+                return self._send({"error": "target_wrong_side",
+                                   "message": "The target must stay above the price by at least the broker's minimum distance."}, 400)
+        else:
+            if sl <= ref + min_dist:
+                return self._send({"error": "stop_wrong_side",
+                                   "message": "The stop must stay above the price by at least the broker's minimum distance."}, 400)
+            if tp > 0 and tp >= ref - min_dist:
+                return self._send({"error": "target_wrong_side",
+                                   "message": "The target must stay below the price by at least the broker's minimum distance."}, 400)
+        digits = info.digits or 5
+        sl = round(sl, digits)
+        tp = round(tp, digits) if tp > 0 else 0.0
+        if abs(sl - pos.sl) < (info.point or 1e-9) / 2 and abs(tp - (pos.tp or 0)) < (info.point or 1e-9) / 2:
+            return self._send({"ok": True, "retcode": 0, "comment": "unchanged", "sl": sl, "tp": tp})
+        req = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": pos.symbol,
+            "position": ticket,
+            "sl": sl,
+            "tp": tp,
+            "magic": MAGIC,
+        }
+        log_order("MODIFY ticket=%s %s sl %s->%s tp %s->%s" % (ticket, pos.symbol, pos.sl, sl, pos.tp, tp))
+        with _lock:
+            r = mt5.order_send(req)
+        if r is None:
+            log_order("MODIFY FAILED no response: %s" % (mt5.last_error(),))
+            return self._send({"error": "send_failed", "message": str(mt5.last_error())}, 502)
+        ok = r.retcode == mt5.TRADE_RETCODE_DONE
+        log_order("MODIFY RESULT %s retcode=%s" % ("OK" if ok else "REJECTED", r.retcode))
+        return self._send({"ok": ok, "retcode": r.retcode, "comment": r.comment, "sl": sl, "tp": tp}, 200 if ok else 502)
+
     def do_GET(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
@@ -573,6 +648,7 @@ class Handler(BaseHTTPRequestHandler):
                     "balance": getattr(acc, "balance", None),
                     "equity": getattr(acc, "equity", None),
                     "margin_free": getattr(acc, "margin_free", None),
+                    "leverage": getattr(acc, "leverage", None),
                     "symbols": all_symbols(),
                     "trading": TRADING_ENABLED,
                     "magic": MAGIC,

@@ -12,13 +12,21 @@ Object.assign(Bots, {
     const stats = Live.stats();
     const armed = Live.armedList();
 
+    const handArmed = armed.some(id => !(S.armed[id] || {}).desk);
     return `<div class="lvWrap">
       <div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · manual orders</button></div>
       ${this.lvBanner(st, B, armed)}
       ${this.lvStep1(S, B)}
-      ${this.lvStep2(S)}
-      ${this.lvStep3(S)}
-      ${armed.length ? this.lvArmed(S) : ''}
+      ${typeof LiveDesk !== 'undefined' ? LiveDesk.view() : ''}
+      <details class="lvClassic"${handArmed ? ' open' : ''}>
+        <summary><i>⚙</i> Hard ceilings every real order obeys · and the classic way: arm one bot by name</summary>
+        <div class="lvClassicBody">
+          <p class="dim2">The desk above works inside these ceilings — it can never go past them. Arming a single bot by its name is still here for a bot you want to run on its own allow-list, outside the desk’s choices.</p>
+          ${this.lvStep2(S)}
+          ${this.lvStep3(S)}
+          ${armed.length ? this.lvArmed(S) : ''}
+        </div>
+      </details>
       ${this.lvAccount(stats, B)}
       ${this.lvAudit(S)}
       <div class="botNote warn">Live results here are read back from MetaTrader itself. Paper and live are kept
@@ -95,7 +103,7 @@ Object.assign(Bots, {
               <input type="time" data-lvcap="sessionTo" value="${esc(C.sessionTo)}">
             </span></label>
         </div>
-        <div class="lvIns"><span>Instruments it may trade — nothing is allowed until you choose:</span>
+        <div class="lvIns"><span>Instruments a bot armed BY NAME may trade — nothing is allowed until you choose (the desk uses its own markets and pairs):</span>
           <div class="insBar">${chips}</div></div>
         <button class="bBtn" data-act="lvsavecaps">Save limits</button>
       </div>
@@ -174,7 +182,7 @@ Object.assign(Bots, {
       return `<div class="lvBot ${live ? 'live' : 'shadow'}">
         <div class="lvBotTop">
           <b>${esc(b.name)}</b>
-          <span class="lvMode ${live ? 'live' : ''}">${live ? 'LIVE' : 'SHADOW'}</span>
+          <span>${a.desk ? '<span class="lvMode desk" title="Armed by the live desk — its money, markets and exit rules apply">DESK</span> ' : ''}<span class="lvMode ${live ? 'live' : ''}">${live ? 'LIVE' : 'SHADOW'}</span></span>
         </div>
         <div class="lvBotMeta">armed ${this.when(a.at)}${a.liveAt ? ' · live since ' + this.when(a.liveAt) : ''}</div>
         <div class="lvBotBtns">
@@ -276,6 +284,7 @@ Object.assign(Bots, {
   /* ---- events ---- */
   bindLive(host){
     const act = a => host.parentElement.querySelector('[data-act="' + a + '"]');
+    if (typeof LiveDesk !== 'undefined') LiveDesk.bind(host);
 
     host.querySelectorAll('[data-lvins]').forEach(el => el.addEventListener('click', () => {
       const S = Live.load();
@@ -285,7 +294,7 @@ Object.assign(Bots, {
       if (i >= 0) list.splice(i, 1); else list.push(sym);
       S.caps.instruments = list;
       Live.save();
-      this.render();
+      (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }));
 
     host.querySelectorAll('[data-lvgo]').forEach(el => el.addEventListener('click', () => {
@@ -293,15 +302,15 @@ Object.assign(Bots, {
       const inp = host.querySelector('[data-lvgoinput="' + id + '"]');
       const r = Live.goLive(id, inp ? inp.value : '');
       toast(r.ok ? BOT_BY_ID[id].name + ' is now LIVE — real orders can be placed' : r.why, r.ok ? 'warn' : 'warn');
-      this.render();
+      (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }));
     host.querySelectorAll('[data-lvshadow]').forEach(el => el.addEventListener('click', () => {
-      Live.toShadow(el.dataset.lvshadow); toast('Back in shadow — nothing will be sent', 'ok'); this.render();
+      Live.toShadow(el.dataset.lvshadow); toast('Back in shadow — nothing will be sent', 'ok'); (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }));
     host.querySelectorAll('[data-lvdisarm]').forEach(el => el.addEventListener('click', () => {
       const id = el.dataset.lvdisarm;
       if (!confirm('Disarm ' + (BOT_BY_ID[id] || {}).name + '?')) return;
-      Live.disarm(id, 'by hand'); this.render();
+      Live.disarm(id, 'by hand'); (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }));
     host.querySelectorAll('[data-lvclose]').forEach(el => el.addEventListener('click', async () => {
       const ticket = +el.dataset.lvclose;
@@ -316,7 +325,7 @@ Object.assign(Bots, {
         toast(j.ok ? 'Position closed' : 'Could not close: ' + (j.message || j.error), j.ok ? 'ok' : 'warn');
         await Live.sync();
       } catch(e){ toast('Could not reach the bridge', 'warn'); }
-      this.render();
+      (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }));
   },
 
@@ -324,20 +333,20 @@ Object.assign(Bots, {
     if (a === 'lvrefresh'){
       await Live.probe(); await Live.sync();
       toast(Live.bridge.trading ? 'Live bridge answering' : 'The live bridge is not running', Live.bridge.trading ? 'ok' : 'info');
-      return this.render();
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
     if (a === 'lvkill'){
       if (!confirm('Stop live trading and disarm every bot?\n\nOpen positions are NOT closed — close those yourself, or from the table below.')) return;
       Live.kill('stopped by the operator');
-      return this.render();
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
     if (a === 'lvlink'){
       const el = document.getElementById('lvCode');
       const r = await Live.link(el ? el.value : '');
       toast(r.ok ? 'Linked to the live account' : r.why, r.ok ? 'ok' : 'warn');
-      return this.render();
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
-    if (a === 'lvunlink'){ Live.unlink(); return this.render(); }
+    if (a === 'lvunlink'){ Live.unlink(); return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render()); }
     if (a === 'lvsavecaps'){
       const S = Live.load();
       document.querySelectorAll('[data-lvcap]').forEach(el => {
@@ -347,7 +356,7 @@ Object.assign(Bots, {
       Live.save();
       Live.audit('caps', 'Limits changed', S.caps);
       toast('Limits saved', 'ok');
-      return this.render();
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
     if (a === 'lvarm'){
       const boxes = [...document.querySelectorAll('.lvAckBox')];
@@ -357,7 +366,7 @@ Object.assign(Bots, {
       const typed = (document.getElementById('lvConfirm') || {}).value;
       const r = Live.arm(id, Live.state.caps, typed);
       toast(r.ok ? BOT_BY_ID[id].name + ' armed in shadow' : r.why, r.ok ? 'ok' : 'warn');
-      return this.render();
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
   },
 });

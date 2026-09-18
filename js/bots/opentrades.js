@@ -105,7 +105,8 @@ const OpenTrades = {
       return a;
     }, { unreal: 0, value: 0, risk: 0, up: 0, down: 0 });
 
-    if (!rows.length) return `<div class="botStats">
+    const real = (!bot && !summaryOnly && typeof LiveDesk !== 'undefined') ? '<div id="ldRealHost">' + LiveDesk.positionsView() + '</div>' : '';
+    if (!rows.length) return real + `<div class="botStats">
         ${Bots.stat('OPEN NOW', 0)}
       </div>
       <div class="otList"></div><div class="empty otEmpty">Nothing is open. New positions appear here automatically.</div>`;
@@ -120,7 +121,7 @@ const OpenTrades = {
     const sortBtn = (k, label) =>
       `<button class="bMini${this.sortKey === k ? ' on' : ''}" data-otsort="${k}">${esc(label)}</button>`;
 
-    return `<div class="botStats">
+    return real + `<div class="botStats">
         ${Bots.stat('OPEN NOW', rows.length)}
         ${Bots.stat('IN PROFIT', tot.up, tot.up ? 1 : 0)}
         ${Bots.stat('IN LOSS', tot.down, -1)}
@@ -369,6 +370,7 @@ const OpenTrades = {
   },
 
   bind(host){
+    if (typeof LiveDesk !== 'undefined' && host.querySelector('#ldRealHost')) LiveDesk.bindPositions(host.querySelector('#ldRealHost'));
     host.querySelectorAll('[data-otchart]').forEach(el => el.addEventListener('click', () => {
       const { bot, id } = this.split(el.dataset.otchart);
       if (typeof PosLines !== 'undefined') PosLines.show(bot, id);

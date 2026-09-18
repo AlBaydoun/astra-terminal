@@ -179,8 +179,10 @@ const Live = {
   disarm(botId, why){
     this.load();
     const bot = BOT_BY_ID[botId];
+    const wasDesk = !!(this.state.armed[botId] || {}).desk;
     delete this.state.armed[botId];
     this.save();
+    if (wasDesk && typeof LiveDesk !== 'undefined') LiveDesk.dropped(botId);
     this.audit('disarm', ((bot && bot.name) || botId) + ' disarmed' + (why ? ' — ' + why : ''));
   },
 
@@ -192,6 +194,7 @@ const Live = {
     this.state.killReason = reason || 'stopped by the operator';
     this.save();
     this.audit('kill', 'KILL SWITCH — ' + n + ' bot(s) disarmed: ' + this.state.killReason);
+    if (typeof LiveDesk !== 'undefined') LiveDesk.onKill();
     if (typeof toast === 'function') toast('Live trading stopped — every bot disarmed', 'warn');
   },
 
@@ -228,11 +231,17 @@ const Live = {
      If the smallest lot the broker will accept already risks more than the cap,
      the honest answer is to refuse. Some instruments simply cannot be traded at
      0.5% of a small account. */
-  liveLots(sig){
-    const bal = this.bridge.balance || this.state.startBalance || 0;
+  liveLots(sig, opts){
+    opts = opts || {};
+    const bal = opts.balance > 0 ? opts.balance : (this.bridge.balance || this.state.startBalance || 0);
     if (!(bal > 0)) return { ok: false, why: 'the live balance is not known yet — press Refresh' };
 
     const C = this.state.caps;
+    /* the live desk hands over the money it wants risked (a share of the bots'
+       own pool); without it the cap is a share of the whole balance */
+    const riskBase = opts.riskBase > 0 ? opts.riskBase : bal;
+    const riskPct = opts.riskPct > 0 ? opts.riskPct : C.riskPct;
+    const baseName = opts.riskBase > 0 ? 'the bot money' : 'the live balance';
     const stopDist = Math.abs(sig.entry - sig.sl);
     if (!(stopDist > 0)) return { ok: false, why: 'the stop distance is zero' };
 
@@ -244,7 +253,7 @@ const Live = {
     const riskPerLot = (stopDist / spec.tickSize) * spec.tickValue;
     if (!(riskPerLot > 0)) return { ok: false, why: 'the contract value could not be worked out' };
 
-    const riskCash = bal * C.riskPct / 100;
+    const riskCash = riskBase * riskPct / 100;
     const step = spec.volumeStep || 0.01;
     const minLot = spec.volumeMin || step;
     let lots = Math.floor((riskCash / riskPerLot) / step) * step;
@@ -252,15 +261,15 @@ const Live = {
     if (lots < minLot){
       const minRisk = minLot * riskPerLot;
       return { ok: false, why: 'the smallest size the broker accepts (' + minLot + ' lot) would risk ' +
-        fmtNum(minRisk) + ', which is ' + (minRisk / bal * 100).toFixed(2) + '% of the live balance — above your ' +
-        C.riskPct + '% limit' };
+        fmtNum(minRisk) + ', which is ' + (minRisk / riskBase * 100).toFixed(2) + '% of ' + baseName + ' — above your ' +
+        riskPct + '% limit', minRisk, minLot };
     }
     lots = Math.min(lots, C.maxLots, spec.volumeMax || lots);
     lots = Math.floor(lots / step) * step;
     if (lots < minLot)
       return { ok: false, why: 'your ' + C.maxLots + ' lot ceiling is below the broker minimum of ' + minLot };
 
-    return { ok: true, lots: +lots.toFixed(4), riskCash: +(lots * riskPerLot).toFixed(2), balance: bal };
+    return { ok: true, lots: +lots.toFixed(4), riskCash: +(lots * riskPerLot).toFixed(2), balance: bal, riskPerLot };
   },
 
   check(bot, sig, gate, quote){
@@ -270,10 +279,20 @@ const Live = {
 
     if (!a) return { ok: false, reason: 'not armed' };
     if (this.state.killedAt) return { ok: false, reason: 'live trading was stopped: ' + this.state.killReason };
-    if (!this.state.linked) return { ok: false, reason: 'the bridge session code has not been entered' };
-    if (!this.bridge.trading) return { ok: false, reason: 'the live bridge is not running' };
+    /* a desk bot in SHADOW may rehearse against the ordinary read-only bridge
+       (it only needs the balance and the contract sizes); LIVE still needs the
+       live bridge and its code, and so does every hand-armed bot */
+    const rehearsing = !!(a.desk && a.mode !== 'live');
+    if (!this.state.linked && !rehearsing) return { ok: false, reason: 'the bridge session code has not been entered' };
+    if (!this.bridge.trading && !rehearsing) return { ok: false, reason: 'the live bridge is not running' };
+    if (rehearsing && !(this.bridge.balance > 0) && !(this.state.startBalance > 0)) return { ok: false, reason: 'the account balance is not known yet — is the MT5 bridge running?' };
 
-    if (!C.instruments.includes(sig.sym))
+    /* a bot the live desk armed is judged by the desk's own choices — its
+       markets, pairs, timeframes and the bots' own pool of money. Everything
+       below (hours, ceilings, loss limits, kill switch) still applies on top. */
+    const desk = (typeof LiveDesk !== 'undefined' && a.desk) ? LiveDesk.gate(bot, sig) : null;
+    if (desk && !desk.ok) return { ok: false, reason: desk.why, stage: 'desk', quiet: !!desk.quiet };
+    if (!desk && !C.instruments.includes(sig.sym))
       return { ok: false, reason: baseAsset(sig.sym) + ' is not on the allowed list' };
 
     const now = this.hhmm();
@@ -284,11 +303,12 @@ const Live = {
       return { ok: false, reason: 'outside the trading hours ' + C.sessionFrom + '–' + C.sessionTo };
     }
 
-    if (!sig.sl) return { ok: false, reason: 'no stop-loss' };
+    const sl = desk ? desk.sl : sig.sl, tp = desk ? desk.tp : (sig.tp || 0);
+    if (!(sl > 0)) return { ok: false, reason: 'no stop-loss' };
 
     /* the size is worked out here, from the real balance — never taken from the
        paper engine, which sizes against its own virtual account */
-    const sized = this.liveLots(sig);
+    const sized = desk ? desk.sized : this.liveLots(sig);
     if (!sized.ok) return { ok: false, reason: sized.why };
     const lots = sized.lots;
     const bal = sized.balance;
@@ -311,15 +331,19 @@ const Live = {
         return { ok: false, reason: 'total loss limit reached — everything disarmed' };
       }
     }
-    return { ok: true, mode: a.mode, lots };
+    return { ok: true, mode: a.mode, lots, sl, tp, desk: !!desk };
   },
 
   /* ---------- sending ---------- */
   async submit(bot, sig, gate, quote){
+    this.load();
+    const deskBot = typeof LiveDesk !== 'undefined' && !!(this.state.armed[bot.id] || {}).desk;
+    if (deskBot) LiveDesk.saw(bot, sig);
     const g = this.check(bot, sig, gate, quote);
     if (!g.ok){
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, sent: false,
                     refused: g.reason, at: Date.now() });
+      if (deskBot) LiveDesk.refused(bot, sig, g.reason, g.stage || 'ceiling', g.quiet);
       return { ok: false, reason: g.reason };
     }
 
@@ -328,18 +352,22 @@ const Live = {
       symbol: sig.sym,
       side: sig.dir > 0 ? 'buy' : 'sell',
       lots: g.lots,
-      sl: sig.sl,
-      tp: sig.tp || 0,
+      sl: g.sl,
+      tp: g.tp || 0,
       comment: 'ASTRA ' + bot.id,
     };
 
     /* SHADOW: everything is worked out and written down, nothing is sent */
     if (g.mode !== 'live'){
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
-                    entry: sig.entry, sl: sig.sl, tp: sig.tp, sent: false, shadow: true,
+                    entry: sig.entry, sl: g.sl, tp: g.tp, sent: false, shadow: true, desk: g.desk,
                     at: Date.now(), tf: sig.tf, model: sig.model });
       this.audit('shadow-order', bot.name + ' would have ' + order.side.toUpperCase() + ' ' +
         baseAsset(sig.sym) + ' ' + g.lots + ' lots', order);
+      if (g.desk && typeof LiveDesk !== 'undefined'){
+        LiveDesk.sent(bot, sig, false, g.lots);
+        LiveDesk.note('shadow', 'SHADOW · ' + bot.name + ' would ' + order.side.toUpperCase() + ' ' + baseAsset(sig.sym) + ' ' + g.lots + ' lot' + (sig.tf ? ' on ' + sig.tf : '') + ' · stop ' + fmtPrice(g.sl) + (g.tp ? ' · target ' + fmtPrice(g.tp) : '') + ' · risk ' + fmtNum(LiveDesk.lastRisk || 0));
+      }
       return { ok: true, shadow: true };
     }
 
@@ -351,7 +379,7 @@ const Live = {
       const j = await r.json().catch(() => ({}));
       const ok = r.ok && j.ok;
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
-                    entry: j.price || sig.entry, sl: sig.sl, tp: sig.tp, sent: true, ok,
+                    entry: j.price || sig.entry, sl: g.sl, tp: g.tp, sent: true, ok, desk: g.desk,
                     ticket: j.ticket || null, retcode: j.retcode, brokerSaid: j.comment || j.message || j.error,
                     at: Date.now(), tf: sig.tf, model: sig.model });
       this.audit(ok ? 'order' : 'order-failed',
@@ -361,6 +389,12 @@ const Live = {
         toast('LIVE ' + order.side.toUpperCase() + ' ' + baseAsset(sig.sym) + ' ' + g.lots + ' lots — ticket ' + j.ticket, 'ok');
       if (!ok && typeof toast === 'function')
         toast('Live order refused: ' + (j.message || j.error || j.comment), 'warn');
+      if (ok && g.desk && typeof LiveDesk !== 'undefined'){
+        LiveDesk.adopt(j.ticket, bot.id, sig, order);
+        LiveDesk.sent(bot, sig, true, g.lots);
+        LiveDesk.note('order', 'REAL · ' + bot.name + ' ' + order.side.toUpperCase() + ' ' + baseAsset(sig.sym) + ' ' + g.lots + ' lot' + (sig.tf ? ' on ' + sig.tf : '') + ' — filled at ' + fmtPrice(j.price) + ', ticket ' + j.ticket + ' · stop ' + fmtPrice(g.sl) + (g.tp ? ' · target ' + fmtPrice(g.tp) : ''));
+      }
+      if (!ok && g.desk && typeof LiveDesk !== 'undefined') LiveDesk.note('order-failed', 'REAL order refused by the broker · ' + bot.name + ' ' + baseAsset(sig.sym) + ' — ' + (j.message || j.error || j.comment));
       await this.sync();
       return { ok, result: j };
     } catch(e){
@@ -436,8 +470,9 @@ const Live = {
     if (!this.bridge.trading) return { cls: 'idle', label: 'READ-ONLY', text: 'The live bridge is not running — nothing can be sent.' };
     if (!this.state.linked) return { cls: 'idle', label: 'NOT LINKED', text: 'The bridge is live but its session code has not been entered here.' };
     if (!armed) return { cls: 'idle', label: 'IDLE', text: 'Linked to the account, but no bot is armed.' };
-    if (live) return { cls: 'live', label: 'LIVE · ' + live + ' BOT' + (live > 1 ? 'S' : ''),
+    const desk = typeof LiveDesk !== 'undefined' && LiveDesk.isOn() ? ' · desk on' : '';
+    if (live) return { cls: 'live', label: 'LIVE · ' + live + ' BOT' + (live > 1 ? 'S' : '') + desk,
                        text: 'Real orders can be placed right now.' };
-    return { cls: 'shadow', label: 'SHADOW · ' + armed, text: 'Armed, recording every decision, sending nothing.' };
+    return { cls: 'shadow', label: 'SHADOW · ' + armed + desk, text: 'Armed, recording every decision, sending nothing.' };
   },
 };

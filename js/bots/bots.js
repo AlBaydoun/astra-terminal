@@ -297,6 +297,7 @@ const Bots = {
     /* the workspace runs on a slow, deliberate cadence — bots act on closed candles */
     this.timer = setInterval(() => this.tick(), 30000);
     if (typeof Auto !== 'undefined') Auto.init();
+    if (typeof LiveDesk !== 'undefined') LiveDesk.init();
     if (typeof ConfluenceScanner !== 'undefined') ConfluenceScanner.start();
     setTimeout(() => this.tick(), 8000);
   },
@@ -660,6 +661,7 @@ const Bots = {
       const cfg = this.cfg(b.id);
       if (cfg.paused && !b.runPaper) continue;
       await this.runBot(b, false);
+      (this.lastRunAt = this.lastRunAt || {})[b.id] = Date.now();     /* the live desk shows when each bot last looked */
     }
     this.render();
   },
