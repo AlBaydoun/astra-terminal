@@ -1024,31 +1024,37 @@ const LiveDesk = {
   exitView(S){
     const body = `
       ${this.sideChips(S.side || 'both', '')}
-      ${this.exitSketch(S.exit, S.stops)}
+      ${this.exitSketch(S.exit, S.stops, S.side)}
       ${this.exitControls(S.exit, S.stops, '')}
       <div class="ldNote">These are the desk’s rules for every bot that has none of its own. Open a bot below to give it its own. The desk only ever moves a stop in the trade’s favour and never removes one; each change is sent to the broker, so it holds even when this PC is off.</div>`;
     return this.card('exit', 'Exit rules', '🎯', body, 'what happens once a real trade is in profit');
   },
-  exitSketch(X, st){
+  exitSketch(X, st, side){
+    side = side || 'both';
+    const dir = side === 'sell' ? -1 : 1;                     /* a SELL is the mirror image: price falls, stop above, target below */
+    const col = side === 'buy' ? '#2ebd85' : side === 'sell' ? '#f6465d' : '#00e5ff';
     const sl = st.mode === 'percent' ? st.slPct : 0.5;
     const tgt = X.targetPct > 0 ? X.targetPct : 0.5, lock = X.lockPct, gap = X.trailGapPct;
     const bestPct = tgt + Math.max(gap, 0.15) + 0.15;
     const lo = Math.min(-sl, -0.2), hi = Math.max(bestPct + 0.15, 0.6);
-    const y = v => +(112 - (v - lo) / (hi - lo) * 100).toFixed(1);
+    /* v is "% in the trade's favour"; on the screen a sell in profit goes DOWN */
+    const y = v => +(dir > 0 ? 116 - (v - lo) / (hi - lo) * 96 : 20 + (v - lo) / (hi - lo) * 96).toFixed(1);
+    const up = yv => dir > 0 ? yv - 3 : yv + 11, dn = yv => dir > 0 ? yv + 10 : yv - 4;
     const yE = y(0), ySl = y(-sl), yT = y(tgt), yL = y(lock), yB = y(bestPct), yTr = y(bestPct - gap);
     const exitAt = X.onTarget === 'exit';
-    return `<svg class="ldSketch" viewBox="0 0 320 124">
-      <defs><linearGradient id="ldg" x1="0" x2="1"><stop offset="0" stop-color="#8fa3c8" stop-opacity=".15"/><stop offset="1" stop-color="#2ebd85" stop-opacity=".5"/></linearGradient></defs>
-      <rect x="0" y="0" width="320" height="124" fill="rgba(120,150,220,.04)"/>
+    const title = side === 'buy' ? '▲ BUY ONLY — profits when price rises' : side === 'sell' ? '▼ SELL ONLY — profits when price falls' : '⇅ BUY AND SELL — drawn as a buy; a sell is the mirror image';
+    return `<svg class="ldSketch ${side}" viewBox="0 0 320 132">
+      <rect x="0" y="0" width="320" height="132" fill="rgba(120,150,220,.04)"/>
+      <text x="12" y="11" class="ldSkT" style="fill:${col};font-weight:700">${title}</text>
       ${exitAt
-        ? `<path class="ldSkPath" d="M12 ${y(-0.05)} C 50 ${y(0.1)}, 80 ${y(-sl * 0.5)}, 120 ${y(tgt * 0.45)} S 170 ${yT}, 196 ${yT}" fill="none" stroke="url(#ldg)" stroke-width="3" stroke-linecap="round"/>`
-        : `<path class="ldSkPath" d="M12 ${y(-0.05)} C 50 ${y(0.1)}, 80 ${y(-sl * 0.5)}, 120 ${y(tgt * 0.45)} S 170 ${yT}, 200 ${y(tgt + 0.05)} S 250 ${yB}, 280 ${yB} S 305 ${y(bestPct - gap * 0.6)}, 312 ${y(bestPct - gap * 0.7)}" fill="none" stroke="url(#ldg)" stroke-width="3" stroke-linecap="round"/>`}
-      <line x1="12" x2="312" y1="${yE}" y2="${yE}" stroke="#8fa3c8" stroke-dasharray="4 3"/><text x="14" y="${yE - 3}" class="ldSkT">entry</text>
-      <line x1="12" x2="312" y1="${ySl}" y2="${ySl}" stroke="#f6465d"/><text x="14" y="${ySl - 3}" class="ldSkT sl">stop −${sl}%${st.mode === 'bot' ? ' (the bot’s)' : ''}</text>
-      <line x1="12" x2="312" y1="${yT}" y2="${yT}" stroke="#ffd166" stroke-dasharray="2 3"/><text x="14" y="${yT - 3}" class="ldSkT tr">target +${tgt}% → ${exitAt ? 'EXIT at the market' : 'lock the stop'}</text>
-      ${!exitAt ? `<line x1="196" x2="312" y1="${yL}" y2="${yL}" stroke="#2ebd85"/><text x="198" y="${yL + 10}" class="ldSkT tp">stop locked +${lock}%</text>` : ''}
-      ${!exitAt && X.trail ? `<line x1="250" x2="312" y1="${yTr}" y2="${yTr}" stroke="#2ebd85" stroke-dasharray="3 2"/><text x="200" y="${yTr - 3}" class="ldSkT tp">trails ${gap}% behind the best</text>` : ''}
-      <circle class="ldSkDot" cx="${exitAt ? 196 : 280}" cy="${exitAt ? yT : yB}" r="4" fill="${exitAt ? '#ffd166' : '#2ebd85'}"/>
+        ? `<path class="ldSkPath" d="M12 ${y(-0.05)} C 50 ${y(0.1)}, 80 ${y(-sl * 0.5)}, 120 ${y(tgt * 0.45)} S 170 ${yT}, 196 ${yT}" fill="none" stroke="${col}" stroke-opacity=".8" stroke-width="3" stroke-linecap="round"/>`
+        : `<path class="ldSkPath" d="M12 ${y(-0.05)} C 50 ${y(0.1)}, 80 ${y(-sl * 0.5)}, 120 ${y(tgt * 0.45)} S 170 ${yT}, 200 ${y(tgt + 0.05)} S 250 ${yB}, 280 ${yB} S 305 ${y(bestPct - gap * 0.6)}, 312 ${y(bestPct - gap * 0.7)}" fill="none" stroke="${col}" stroke-opacity=".8" stroke-width="3" stroke-linecap="round"/>`}
+      <line x1="12" x2="312" y1="${yE}" y2="${yE}" stroke="#8fa3c8" stroke-dasharray="4 3"/><text x="14" y="${up(yE)}" class="ldSkT">entry (${side === 'sell' ? 'sell' : 'buy'})</text>
+      <line x1="12" x2="312" y1="${ySl}" y2="${ySl}" stroke="#f6465d"/><text x="14" y="${up(ySl)}" class="ldSkT sl">stop ${sl}% ${dir > 0 ? 'below' : 'above'}${st.mode === 'bot' ? ' (the bot’s)' : ''}</text>
+      <line x1="12" x2="312" y1="${yT}" y2="${yT}" stroke="#ffd166" stroke-dasharray="2 3"/><text x="14" y="${up(yT)}" class="ldSkT tr">target +${tgt}% ${dir > 0 ? 'above' : 'below'} → ${exitAt ? 'EXIT at the market' : 'lock the stop'}</text>
+      ${!exitAt ? `<line x1="196" x2="312" y1="${yL}" y2="${yL}" stroke="#2ebd85"/><text x="198" y="${up(yL)}" class="ldSkT tp">stop locked +${lock}%</text>` : ''}
+      ${!exitAt && X.trail ? `<line x1="250" x2="312" y1="${yTr}" y2="${yTr}" stroke="#2ebd85" stroke-dasharray="3 2"/><text x="200" y="${up(yTr)}" class="ldSkT tp">trails ${gap}% behind the best</text>` : ''}
+      <circle class="ldSkDot" cx="${exitAt ? 196 : 280}" cy="${exitAt ? yT : yB}" r="4" fill="${exitAt ? '#ffd166' : col}"/>
     </svg>`;
   },
 
@@ -1150,7 +1156,7 @@ const LiveDesk = {
       <div class="ldPanelSec"><div class="ldPanelHead"><b>2 · Timeframes</b>${p.tfs ? '<em class="ldTag own">your choice</em><button class="bMini" data-ldpbreset="' + esc(b.id) + '|tfs">↺ automatic</button>' : '<em class="ldTag">automatic — ' + esc(cfg.tf || '15m') + '</em>'}<span>${p.tfs ? 'the desk runs this bot’s strategy on ' + p.tfs.join(', ') : 'tick more, and the desk runs the strategy on them itself'}</span></div>
         <div class="ldTfs">${tfChips}</div></div>
       <div class="ldPanelSec"><div class="ldPanelHead"><b>3 · Stops and exit rules</b>${p.exit || p.stops ? '<em class="ldTag own">this bot’s own</em><button class="bMini" data-ldpbreset="' + esc(b.id) + '|exit">↺ the desk’s rules</button>' : '<em class="ldTag">the desk’s rules</em><button class="bMini" data-ldpbown="' + esc(b.id) + '">give it its own</button>'}</div>
-        ${p.exit || p.stops ? this.exitSketch(X, st) + this.exitControls(X, st, 'pb|' + b.id + '|', true) : `<div class="dim2 ldPanelMini">${this.ruleWords(X, st)}</div>`}</div>
+        ${p.exit || p.stops ? this.exitSketch(X, st, this.sideFor(b)) + this.exitControls(X, st, 'pb|' + b.id + '|', true) : `<div class="dim2 ldPanelMini">${this.ruleWords(X, st)}</div>`}</div>
       <div class="ldPanelSec ldPanelStat"><b>Today</b> ${bs.seen || 0} signals · ${bs.shadow || 0} shadow · ${bs.real || 0} real · ${bs.refused || 0} refused${bs.lastText ? ' · last: ' + esc(bs.lastText) : ''}${this.deskRuns(b) ? ' · looks by the desk: ' + (bs.scans || 0) : ''}</div>
     </div>`;
   },
