@@ -251,7 +251,8 @@ const Explorer = {
           <span>${esc(BOT_BY_ID[t.bot] ? WorkspaceUI.name(BOT_BY_ID[t.bot]) : t.bot)} · ${esc(t.tf || '')}</span>
           <span class="dim2">${new Date(t.entryTime).toLocaleString()} → ${this.fmtDur((t.exitTime || 0) - (t.entryTime || 0))}</span>
           <span class="dim2">${esc(t.reason || '')}${t.touched ? ' · adjusted' : ''}</span>
-          <span class="${t.pnl >= 0 ? 'up' : 'down'} exRowPnl">${this.money(t.pnl)}<small>${Number.isFinite(t.r) ? ' · ' + t.r.toFixed(2) + 'R' : ''}</small></span></div>`).join('')}</div>`
+          <span class="${t.pnl >= 0 ? 'up' : 'down'} exRowPnl">${this.money(t.pnl)}<small>${Number.isFinite(t.r) ? ' · ' + t.r.toFixed(2) + 'R' : ''}</small></span>
+          <button class="bMini exReplay" data-exreplay="${esc(t.bot)}|${t.entryTime}|${t.exitTime || 0}|${esc(t.sym)}" title="Open this trade in Trade Replay: the candles around it, entry, stop, target and exit, candle by candle">▷ Replay</button></div>`).join('')}</div>`
       : rows.length ? `<div class="dim2 exMore">${rows.length} trades — open a smaller doll (a pair, a day…) to see them one by one.</div>` : '';
     const hero = `<div class="exHero">
         <div class="exHeroLeft">
@@ -284,6 +285,17 @@ const Explorer = {
     </div>`;
   },
 
+  /* one trade from the list → the Trade Replay, opened straight on that trade */
+  replay(bot, entryTime, exitTime, sym){
+    if (typeof TradeReview === 'undefined') return toast('Trade Replay is not loaded', 'warn');
+    const rec = TradeReview.records().find(t => t.bot === bot && t.sym === sym && +t.entryTime === entryTime && (!exitTime || +(t.exitTime || 0) === exitTime))
+             || TradeReview.records().find(t => t.bot === bot && t.sym === sym && Math.abs(+t.entryTime - entryTime) < 1000);
+    if (!rec) return toast('That trade is no longer in the bot’s record', 'warn');
+    TradeReview.show();
+    if (typeof ObsWindows !== 'undefined' && ObsWindows.set) ObsWindows.set('replay', 'max');
+    setTimeout(() => TradeReview.select(rec), 150);
+  },
+
   drill(dimId, value){
     const d = this.dim(dimId);
     this.path.push({ dim: dimId, value, label: d.name(value) });
@@ -303,6 +315,10 @@ const Explorer = {
       this.drill(b.dataset.exdrill.slice(0, i), b.dataset.exdrill.slice(i + 1));
     }));
     host.querySelectorAll('[data-excrumb]').forEach(b => b.addEventListener('click', () => this.crumb(+b.dataset.excrumb)));
+    host.querySelectorAll('[data-exreplay]').forEach(b => b.addEventListener('click', () => {
+      const [bot, entryTime, exitTime, sym] = b.dataset.exreplay.split('|');
+      this.replay(bot, +entryTime, +exitTime, sym);
+    }));
     host.querySelectorAll('[data-exmore]').forEach(b => b.addEventListener('click', () => { this.showAll[b.dataset.exmore] = !this.showAll[b.dataset.exmore]; this.dirty = true; Bots.render(); }));
     host.querySelectorAll('[data-exrange]').forEach(b => b.addEventListener('click', () => {
       const [field, lo, hi, label] = b.dataset.exrange.split('|');

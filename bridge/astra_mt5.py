@@ -321,13 +321,22 @@ def candles_from_ticks(symbol, bucket, limit):
     return bars[-limit:]
 
 
-def candles(symbol, tf, limit):
+def candles(symbol, tf, limit, since=None):
+    """The latest `limit` candles — or, with `since` (unix seconds), every candle
+    from that moment up to now (capped), which is what the trade replay needs to
+    walk a finished trade forward to the present."""
     if not ensure_selected(symbol):
         return None
     if tf in SUB_MINUTE:
         return candles_from_ticks(symbol, SUB_MINUTE[tf], min(limit, 2000))
     with _lock:
-        rates = mt5.copy_rates_from_pos(symbol, TF.get(tf, mt5.TIMEFRAME_H1), 0, min(limit, 5000))
+        if since:
+            frm = datetime.fromtimestamp(max(0, int(since)), tz=timezone.utc)
+            rates = mt5.copy_rates_range(symbol, TF.get(tf, mt5.TIMEFRAME_H1), frm, datetime.now(timezone.utc) + timedelta(days=1))
+            if rates is not None and len(rates) > min(limit, 60000):
+                rates = rates[-min(limit, 60000):]
+        else:
+            rates = mt5.copy_rates_from_pos(symbol, TF.get(tf, mt5.TIMEFRAME_H1), 0, min(limit, 5000))
     if rates is None:
         return None
     return [
@@ -708,7 +717,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send({"error": "bad_symbol"}, 400)
                 tf = q.get("tf", ["1h"])[0]
                 limit = int(q.get("limit", ["1000"])[0] or 1000)
-                c = candles(sym, tf, limit)
+                since = q.get("from", [""])[0]
+                c = candles(sym, tf, limit, int(since) if since.isdigit() else None)
                 if c is None:
                     return self._send({"error": "symbol_not_found"}, 404)
                 return self._send({"candles": c, "meta": {"symbol": sym, "exchange": "MT5"}})

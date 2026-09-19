@@ -161,7 +161,7 @@ const Feed = {
     if (r.kind === 'disabled') throw new Error(MarketSources.reason(sym));
     // Candle routing is not evidence of a fresh executable quote.
     if (r.kind === 'bridge'){
-      const url = this.BRIDGE_URL + '/candles?symbol=' + encodeURIComponent(r.addr) + '&tf=' + tf + '&limit=' + (limit || 1000);
+      const url = this.BRIDGE_URL + '/candles?symbol=' + encodeURIComponent(r.addr) + '&tf=' + tf + '&limit=' + (limit || 1000) + (options && options.from ? '&from=' + Math.floor(options.from) : '');
       const res = await fetch(url, options?.signal ? {signal:options.signal} : undefined);
       if (!res.ok) throw new Error('bridge HTTP ' + res.status);
       const j = await res.json();

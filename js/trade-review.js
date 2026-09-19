@@ -59,7 +59,12 @@ const TradeReview = {
   setClock(){this.host.querySelector('#trClock').value=Feed.route(this.sym).kind==='bridge'&&Feed.bridgeClock?.offset!==0?'broker':'utc';},
   async load(){
     this.pause();const v=++this.version;this.controller?.abort();this.controller=new AbortController();this.bars=[];this.original=[];this.dispose();this.controls(false);this.host.querySelector('#trNotice').textContent='Loading up to 5,000 historical candles…';
-    try{const tf=this.host.querySelector('#trTf').value;if(!tf)throw Error('Choose a supported timeframe.');const bars=await API.klines(this.sym,tf,5000,{signal:this.controller.signal});if(v!==this.version||!this.host.open)return;this.original=bars.map(b=>({...b}));this.loadedTf=tf;this.snapshot=false;this.setClock();this.prepare();}
+    try{const tf=this.host.querySelector('#trTf').value;if(!tf)throw Error('Choose a supported timeframe.');
+      /* a finished trade is loaded from well before its entry right up to NOW, so it
+         can be walked forward past the exit — did the target ever get hit? */
+      const t=this.selected,secs={'1s':1,'30s':30,'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400,'1d':86400,'1w':604800}[tf]||900;
+      const from=t&&Number.isFinite(t.entryTime)&&!['1s','30s'].includes(tf)?Math.floor(t.entryTime/1000-secs*250-6*3600):null;
+      const bars=await API.klines(this.sym,tf,from?60000:5000,{signal:this.controller.signal,from});if(v!==this.version||!this.host.open)return;this.original=bars.map(b=>({...b}));this.loadedTf=tf;this.snapshot=false;this.setClock();this.prepare();}
     catch(e){if(v!==this.version)return;this.host.querySelector('#trNotice').textContent='History unavailable: '+e.message+'. The saved trade details remain available.';console.warn('ASTRA trade review:',e.message);}
   },
   normalize(bar){
@@ -75,7 +80,27 @@ const TradeReview = {
     this.index=t?Math.max(0,this.bars.findIndex(b=>b.time+seconds>t.entryTime/1000)):Math.min(49,this.bars.length-1);
     const gaps=this.bars.slice(1).filter((b,i)=>b.time-this.bars[i].time>seconds*1.5).length;
     this.host.querySelector('#trNotice').textContent=`${this.bars.length} candles · ${new Date(first*1000).toISOString()} → ${new Date(last*1000).toISOString()}. ${gaps} session breaks / gaps. ${omitted} incomplete, duplicate or invalid candles excluded. `+(t?(has?'Trade interval covered by returned candles. ':'Trade interval is NOT fully covered; replay is partial. '):'Frozen chart snapshot. ')+(this.host.querySelector('#trClock').value==='broker'?'Clock assumes JustMarkets EET/EEST server timestamps, converted to UTC. ':'Candle timestamps treated as UTC. ');
-    this.createChart();this.controls(true);this.draw();this.focus();
+    this.createChart();this.controls(true);this.draw();this.focus();this.afterExit();
+  },
+  /* What happened AFTER the trade closed: did price ever reach the saved target,
+     did it go through the stop first, how far did it run — and a way to jump there. */
+  afterExit(){
+    const t=this.selected,host=this.host.querySelector('#trFacts');if(!host)return;host.querySelector('#trAfter')?.remove();if(!t||!this.bars.length)return;
+    const secs=this.seconds(),dir=t.dir>0?1:-1,fmt=v=>this.fmt(v),after=this.bars.filter(b=>b.time>=t.exitTime/1000),last=this.bars.at(-1);
+    const hit=(lvl,side)=>{if(!(lvl>0))return -1;return after.findIndex(b=>side>0?b.high>=lvl:b.low<=lvl);};
+    const tpIdx=hit(t.tp,dir),slIdx=hit(t.sl,-dir);
+    let best=t.exit,bestAt=null;for(const b of after){const v=dir>0?b.high:b.low;if((v-best)*dir>0){best=v;bestAt=b.time;}}
+    const span=ms=>{const m=Math.round(ms/60000);return m<60?m+' min':m<1440?(m/60).toFixed(1)+' h':(m/1440).toFixed(1)+' days';};
+    const jumpBtn=(label,time)=>`<button class="trAfterJump" data-tr-jump="${time}">${label}</button>`;
+    const bestPct=t.exit>0?((best-t.exit)/t.exit*dir*100):0;
+    let verdict;
+    if(tpIdx>=0&&(slIdx<0||tpIdx<=slIdx))verdict=`<b class="pos">✓ The target ${fmt(t.tp)} WAS reached</b> — ${span(after[tpIdx].time*1000-t.exitTime)} after the exit${slIdx>=0?', before the stop side':''}. ${jumpBtn('▶▶ Jump to the target hit',after[tpIdx].time*1000)}`;
+    else if(slIdx>=0&&tpIdx<0)verdict=`<b class="neg">✗ The target was never reached</b> — price went through the stop level ${fmt(t.sl)} ${span(after[slIdx].time*1000-t.exitTime)} after the exit instead. ${jumpBtn('▶▶ Jump to the stop hit',after[slIdx].time*1000)}`;
+    else if(slIdx>=0&&tpIdx>slIdx)verdict=`<b class="neg">✗ The stop side came first</b> — price crossed ${fmt(t.sl)} ${span(after[slIdx].time*1000-t.exitTime)} after the exit; the target ${fmt(t.tp)} was only reached ${span(after[tpIdx].time*1000-t.exitTime)} later. ${jumpBtn('▶▶ Stop hit',after[slIdx].time*1000)} ${jumpBtn('▶▶ Target hit',after[tpIdx].time*1000)}`;
+    else verdict=`<b>— The target ${t.tp>0?fmt(t.tp):'(none saved)'} has not been reached up to ${new Date(last.time*1000).toLocaleString()}</b>${bestAt?` — the best price since the exit was ${fmt(best)} (${bestPct>=0?'+':''}${bestPct.toFixed(2)}% in the trade’s favour) ${jumpBtn('▶▶ Best price',bestAt*1000)}`:''}`;
+    const coverage=after.length?`${after.length} candles after the exit, up to ${new Date(last.time*1000).toLocaleString()} (${span(last.time*1000-t.exitTime)} later).`:'No candles after the exit were returned — reload with a longer timeframe.';
+    host.insertAdjacentHTML('afterbegin',`<div id="trAfter" class="trAfter"><h3>After the exit — walking forward to now</h3><p>${verdict}</p><p class="trNotice">${coverage} Use ▶ Play, ▶| or the slider to walk past the exit; ${jumpBtn('▶▶ To now',last.time*1000)}</p></div>`);
+    host.querySelectorAll('[data-tr-jump]').forEach(b=>b.onclick=()=>{this.jump(+b.dataset.trJump);});
   },
   seconds(){return {'1s':1,'30s':30,'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400,'1d':86400,'1w':604800}[this.loadedTf]||900;},
   controls(on){for(const id of ['trBack','trPlay','trStep','trSeek','trJumpGo','trFit'])this.host.querySelector('#'+id).disabled=!on;for(const id of ['trEntry','trExit'])this.host.querySelector('#'+id).disabled=!on||!this.selected;},
@@ -91,7 +116,10 @@ const TradeReview = {
   draw(){
     if(!this.series||!this.bars.length)return;const bars=this.bars.slice(0,this.index+1),kind=this.host.querySelector('#trOverlay').value;this.series.setData(bars);
     const ema=n=>{let v=bars[0].close;return bars.map(b=>{v+=2/(n+1)*(b.close-v);return {time:b.time,value:v};});};this.ema20.setData(kind==='ema'?ema(20):[]);this.ema50.setData(kind==='ema'?ema(50):[]);
-    const t=this.selected,markers=[];if(t)for(const [at,label,color,shape,position]of [[t.entryTime,'ENTRY','#80baff','arrowUp','belowBar'],[t.exitTime,'EXIT','#f5cc77','arrowDown','aboveBar']]){const b=this.bars.find(b=>b.time<=at/1000&&at/1000<b.time+this.seconds());if(b&&b.time<=bars.at(-1).time)markers.push({time:b.time,position,color,shape,text:label});}this.series.setMarkers(markers.sort((a,b)=>a.time-b.time));
+    const t=this.selected,markers=[];if(t)for(const [at,label,color,shape,position]of [[t.entryTime,'ENTRY','#80baff','arrowUp','belowBar'],[t.exitTime,'EXIT','#f5cc77','arrowDown','aboveBar']]){const b=this.bars.find(b=>b.time<=at/1000&&at/1000<b.time+this.seconds());if(b&&b.time<=bars.at(-1).time)markers.push({time:b.time,position,color,shape,text:label});}
+    if(t){const dir=t.dir>0?1:-1,after=bars.filter(b=>b.time>=t.exitTime/1000);const tpB=t.tp>0?after.find(b=>dir>0?b.high>=t.tp:b.low<=t.tp):null;const slB=t.sl>0?after.find(b=>dir>0?b.low<=t.sl:b.high>=t.sl):null;
+      if(tpB)markers.push({time:tpB.time,position:dir>0?'aboveBar':'belowBar',color:'#5be8cf',shape:'circle',text:'TARGET HIT'});if(slB)markers.push({time:slB.time,position:dir>0?'belowBar':'aboveBar',color:'#ff879b',shape:'circle',text:'STOP SIDE'});}
+    this.series.setMarkers(markers.sort((a,b)=>a.time-b.time));
     const pane=this.host.querySelector('#trRsi');pane.hidden=kind!=='rsi';if(kind==='rsi'){
       if(!this.rsiChart){this.rsiChart=LightweightCharts.createChart(pane,{width:pane.clientWidth,height:140,handleScroll:false,handleScale:false,layout:{background:{color:'#142139'},textColor:'#c9d9ed'},timeScale:{timeVisible:true},rightPriceScale:{autoScale:true,minimumWidth:96}});this.rsiSeries=this.rsiChart.addLineSeries({color:'#b399ff',lineWidth:2});for(const v of [30,70])this.rsiSeries.createPriceLine({price:v,color:'#52667f',lineWidth:1,lineStyle:2,axisLabelVisible:true});}
       const values=IND.rsi(bars.map(b=>b.close),14);this.rsiSeries.setData(bars.map((b,i)=>Number.isFinite(values[i])?{time:b.time,value:values[i]}:{time:b.time}));const range=this.chart.timeScale().getVisibleLogicalRange();if(range)this.rsiChart.timeScale().setVisibleLogicalRange(range);

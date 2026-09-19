@@ -365,7 +365,7 @@ html[data-panel] .botsWrap { padding:0; }
 .exBarNum{ font-family:var(--font-mono); text-align:right; } .exBarNum.up{ color:var(--green,#2ebd85); } .exBarNum.down{ color:var(--red,#f6465d); }
 .exBarMeta{ font-family:var(--font-mono); font-size:10.5px; color:var(--dim); text-align:right; }
 .exList{ display:grid; gap:4px; }
-.exRow{ display:grid; grid-template-columns:130px 1fr 1fr 1fr 110px; gap:10px; align-items:center; padding:7px 10px; border:1px solid var(--border-soft); border-radius:8px; font-size:12px; background:var(--panel); border-left-width:3px; }
+.exRow{ display:grid; grid-template-columns:130px 1fr 1fr 1fr 110px auto; gap:10px; align-items:center; padding:7px 10px; border:1px solid var(--border-soft); border-radius:8px; font-size:12px; background:var(--panel); border-left-width:3px; }
 .exRow.up{ border-left-color:var(--green,#2ebd85); } .exRow.down{ border-left-color:var(--red,#f6465d); }
 .exRowPnl{ font-family:var(--font-mono); text-align:right; font-size:13px; } .exRowPnl small{ color:var(--dim); }
 .exEmpty{ padding:20px; text-align:center; color:var(--dim); }
