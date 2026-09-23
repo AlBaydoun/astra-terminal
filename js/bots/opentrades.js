@@ -175,7 +175,7 @@ const OpenTrades = {
         <span><label>Held</label><b data-f="held">${l.held}</b></span>
       </div>
 
-      ${ui ? `<div class="wsPriceMap">${ui.priceMap(p,l)}</div>
+      ${ui ? `<div class="wsPriceMap">${ui.priceMap(p,l,{k})}</div>
         <div class="wsTradeLinks"><button data-ws-chart="${esc(p.sym)}">${icon('chart')} Chart · ${esc(p.sym)}</button>
         <button data-ws-bot="${esc(row.bot)}">${icon('bot')} View bot</button></div>` : ''}
 
@@ -274,7 +274,9 @@ const OpenTrades = {
       }
       this.recalc(card,row.bot+':'+p.id);
       const map = card.querySelector('.wsPriceMap');
-      if (map && typeof WorkspaceUI !== 'undefined') map.innerHTML = WorkspaceUI.priceMap(p,l);
+      /* never rebuild the rail under a hand that is dragging one of its handles */
+      if (map && typeof WorkspaceUI !== 'undefined' && !(typeof PriceRail !== 'undefined' && PriceRail.busy(map)))
+        map.innerHTML = WorkspaceUI.priceMap(p, l, { k: row.bot + ':' + p.id });
       const cb = card.querySelector('[data-f="closebtn"]:not([data-armed="1"])');
       if (cb) cb.textContent = 'Close at market · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal);
       card.className = 'otCard ' + (l.unreal >= 0 ? 'up' : 'down');

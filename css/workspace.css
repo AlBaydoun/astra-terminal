@@ -152,9 +152,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .wsPriceTitle { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim); }
 .wsPriceTitle span { margin-left:auto; font-size:10px; }
 .wsPriceTitle .wsIcon { width:14px; height:14px; }
-.wsPriceRail { height:4px; background:var(--border); border-radius:3px; margin:19px 0 14px; position:relative; }
-.wsPriceRail i { position:absolute; top:-4px; width:3px; height:12px; background:currentColor; }
-.wsPriceRail i.current { border:2px solid var(--field); height:13px; width:13px; border-radius:50%; background:var(--ws-tint); transform:translateX(-50%); z-index:1; }
+.wsPriceRail { height:6px; background:var(--border); border-radius:4px; margin:26px 0 30px; position:relative; }
+.wsPriceRail.live { height:8px; margin:30px 0 34px; cursor:default; }
+.wsZone { position:absolute; top:0; height:100%; border-radius:4px; }
+.wsZone.risk { background:rgba(246,70,93,.35); }
+.wsZone.reward { background:rgba(46,189,133,.35); }
+.wsMark { position:absolute; top:-5px; width:3px; height:16px; background:var(--dim); border-radius:2px; transform:translateX(-50%); }
+.wsMark.entry { background:#8fa3c8; }
+.wsMark.current { width:13px; height:13px; top:-3px; border-radius:50%; border:2px solid var(--field); background:var(--ws-tint); z-index:2; }
+.wsGrip { position:absolute; top:50%; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center;
+  height:26px; padding:0 8px; border-radius:7px; border:1px solid currentColor; background:rgba(8,13,28,.92);
+  font-family:var(--font-mono); font-size:10.5px; white-space:nowrap; cursor:grab; z-index:3; touch-action:none; }
+.wsGrip::after { content:''; position:absolute; left:50%; top:-7px; width:2px; height:40px; transform:translateX(-50%); background:currentColor; opacity:.45; z-index:-1; }
+.wsGrip.sl { color:#ff8fa0; } .wsGrip.tp { color:#5be8cf; }
+.wsGrip.empty { color:var(--dim); border-style:dashed; opacity:.75; }
+.wsGrip:hover, .wsGrip:focus-visible { background:rgba(8,13,28,1); box-shadow:0 0 0 2px currentColor inset; outline:none; }
+.wsPriceRail.dragging .wsGrip { cursor:grabbing; }
+body.railDrag { user-select:none; cursor:grabbing; }
+.wsRailTip { position:absolute; bottom:22px; transform:translateX(-50%); padding:5px 9px; border-radius:7px; z-index:4;
+  background:rgba(8,13,28,.96); border:1px solid rgba(0,229,255,.4); font-family:var(--font-mono); font-size:11px; white-space:nowrap; pointer-events:none; }
+.wsRailTip small { display:block; font-size:9.5px; color:var(--dim); margin-top:2px; }
+.wsRailTip em { font-style:normal; }
+.wsPriceLegend em { font-style:normal; font-family:var(--font-mono); margin-left:3px; }
 .wsPriceLegend { display:flex; flex-wrap:wrap; gap:8px 16px; font-size:10px; color:var(--dim); }
 .wsPriceLegend b { font-family:var(--font-mono); font-size:10px; font-weight:400; color:var(--text); }
 .wsPriceLegend .current { color:var(--ws-tint); }

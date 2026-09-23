@@ -211,15 +211,54 @@ const WorkspaceUI = {
       <path d="M8 76H592M8 42H592M8 12H592" class="wsGridLine"/><polyline points="${xy}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
       <span>Low ${esc(fmtNum(lo))} <i>High ${esc(fmtNum(hi))}</i></span></div></section>`;
   },
-  priceMap(p, l){
-    const marks = [{label:'Stop',v:p.sl,c:'down'},{label:'Entry',v:p.entry,c:''},{label:l.stale?'Last / fallback':'Now',v:l.px,c:'current'},{label:'Target',v:p.tp,c:'up'}]
-      .filter(m => Number.isFinite(m.v) && m.v > 0);
-    if (marks.length < 2) return '';
-    const low = Math.min(...marks.map(m=>m.v)), high = Math.max(...marks.map(m=>m.v));
-    // Saved levels only; editing the form must not imply a stop was already applied.
-    return `<div class="wsPriceTitle">${this.icon('target')} Saved price levels <span>${l.stale?'Awaiting fresh quote':'Current quote'}</span></div>
-      <div class="wsPriceRail" role="img" aria-label="${esc(marks.map(m=>m.label+' '+fmtPrice(m.v)).join(', '))}">${marks.map(m=>
-      `<i class="${m.c}" title="${esc(m.label)} ${fmtPrice(m.v)}" style="left:${high===low?50:4+(m.v-low)/(high-low)*92}%"></i>`).join('')}</div>
-      <div class="wsPriceLegend">${marks.map(m=>`<span class="${m.c}"><i></i>${esc(m.label)} <b>${fmtPrice(m.v)}</b></span>`).join('')}</div>`;
+  /* The price rail. Read-only when nobody says which trade it belongs to;
+     with `opts` ({k:'bot:id'} for a paper trade, {ticket} for a real one) the
+     stop and the target become handles you can drag, and what you drag is
+     applied to the trade — the same rules as the boxes below it. */
+  priceMap(p, l, opts){
+    opts = opts || {};
+    const dir = p.dir > 0 ? 1 : -1;
+    const px = l.px, sl = Number.isFinite(p.sl) && p.sl > 0 ? p.sl : null, tp = Number.isFinite(p.tp) && p.tp > 0 ? p.tp : null;
+    const vals = [p.entry, px, sl, tp].filter(v => Number.isFinite(v) && v > 0);
+    if (vals.length < 2) return '';
+    const low = Math.min(...vals), high = Math.max(...vals);
+    const span = (high - low) || (p.entry * 0.01) || 1;
+    /* room on both sides, so a level can be dragged further out than it is now */
+    const lo = low - span * 0.45, hi = high + span * 0.45;
+    const pos = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+    const live = !!(opts.k || opts.ticket);
+    const rate = opts.rate != null ? opts.rate : (typeof BotEngine !== 'undefined' ? BotEngine.cashRate(p, true) : 1);
+    const fees = opts.fees != null ? opts.fees : (p.fees || 0);
+    const money = v => (v - p.entry) * dir * (p.qty || 0) * rate - fees;
+    const m = v => (v >= 0 ? '+' : '') + fmtNum(v);
+    const zone = (from, to, cls) => from == null ? '' :
+      `<i class="wsZone ${cls}" style="left:${Math.min(pos(from), pos(to))}%;width:${Math.abs(pos(to) - pos(from))}%"></i>`;
+    const grip = (kind, v) => {
+      const label = kind === 'sl' ? 'Stop' : 'Target';
+      if (v == null){
+        if (!live) return '';
+        const at = p.entry + (kind === 'sl' ? -dir : dir) * span * 0.3;
+        return `<button class="wsGrip ${kind} empty" data-grip="${kind}" tabindex="0" style="left:${pos(at)}%"
+          title="${esc('No ' + label.toLowerCase() + ' yet — drag this to set one')}"><span>${label}: none</span></button>`;
+      }
+      return `<button class="wsGrip ${kind}" data-grip="${kind}" tabindex="0" style="left:${pos(v)}%"
+        title="${esc(label + ' ' + fmtPrice(v) + ' · ' + m(money(v)) + (live ? ' — drag to move it, arrow keys nudge, Delete clears' : ''))}"><span>${label} ${fmtPrice(v)}</span></button>`;
+    };
+    return `<div class="wsPriceTitle">${this.icon('target')} ${live ? 'Stop &amp; target — drag them' : 'Saved price levels'}
+        <span>${l.stale ? 'Awaiting fresh quote' : 'Current quote'}</span></div>
+      <div class="wsPriceRail${live ? ' live' : ''}" ${live ? `data-railk="${esc(opts.k || '')}" data-railticket="${esc(String(opts.ticket || ''))}"` : ''}
+        data-lo="${lo}" data-hi="${hi}" data-dir="${dir}" data-entry="${p.entry}" data-px="${px}" data-qty="${p.qty || 0}" data-rate="${rate}" data-fees="${fees}"
+        role="img" aria-label="${esc([['Stop', sl], ['Entry', p.entry], ['Now', px], ['Target', tp]].filter(x => x[1]).map(x => x[0] + ' ' + fmtPrice(x[1])).join(', '))}">
+        ${zone(sl, p.entry, 'risk')}${zone(tp, p.entry, 'reward')}
+        <i class="wsMark entry" style="left:${pos(p.entry)}%" title="${esc('Entry ' + fmtPrice(p.entry))}"></i>
+        <i class="wsMark current" style="left:${pos(px)}%" title="${esc('Now ' + fmtPrice(px))}"></i>
+        ${grip('sl', sl)}${grip('tp', tp)}
+      </div>
+      <div class="wsPriceLegend">
+        ${sl ? `<span class="down"><i></i>Stop <b data-rl="sl">${fmtPrice(sl)}</b> <em data-rlm="sl">${m(money(sl))}</em></span>` : ''}
+        <span><i></i>Entry <b>${fmtPrice(p.entry)}</b></span>
+        <span class="current"><i></i>${l.stale ? 'Last' : 'Now'} <b>${fmtPrice(px)}</b> <em class="${pctClass(l.unreal)}">${m(l.unreal)}</em></span>
+        ${tp ? `<span class="up"><i></i>Target <b data-rl="tp">${fmtPrice(tp)}</b> <em data-rlm="tp">${m(money(tp))}</em></span>` : ''}
+      </div>`;
   },
 };

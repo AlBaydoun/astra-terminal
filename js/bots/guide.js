@@ -160,6 +160,7 @@ const BotGuide = {
         ['🎚', 'Stop & target', 'Type a price, or use the % ladder (0.30 / 0.50 / 1.00 %). The calculator shows the money at stake at each level before you confirm.'],
         ['🪜', 'Trailing stop', 'Start (how far in profit before it engages) and gap (how far behind price it follows). Per position — it overrides the bot’s own trail.'],
         ['✂️', 'Take some off', 'Close 25% or half; the rest keeps running.'],
+        ['🎚️', 'The price rail', 'Stop · entry · price now · target on one bar. Drag the red or the green handle: the price, the money and the reward-to-risk move with your hand, and letting go sets the level (the same rules as the boxes below). Arrow keys nudge, Delete clears a target, Esc cancels.'],
         ['⚡', 'Close at market', 'Out now at the live price, with the P/L shown on the button.'],
       ],
       settings: [

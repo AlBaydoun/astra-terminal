@@ -1281,6 +1281,7 @@ const LiveDesk = {
         <span class="mbCell"><label>Target is worth</label><b class="up">${atTp == null ? 'no target' : money(atTp)}</b></span>
         <span class="mbCell"><label>Held</label><b>${esc(l.held)}</b></span>
       </div>
+      <div class="wsPriceMap">${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.priceMap(p, l, { ticket: raw.ticket, rate: fx, fees: 0 }) : ''}</div>
       ${pl ? `<div class="ldPlan"><i>${pl.locked ? '🔒' : pl.trailOn ? '🧭' : '⏳'}</i><span>${esc(pl.next)}</span>${pl.t && pl.t.moves ? `<small>stop moved ${pl.t.moves}×</small>` : ''}<small>best ${fmtPrice(pl.best)} (${pl.bestPct >= 0 ? '+' : ''}${pl.bestPct.toFixed(2)}%)</small>${this.progress(pl)}</div>` : '<div class="ldPlan dim"><i>✋</i><span>not a desk trade — the desk leaves its stop and target alone</span></div>'}
       <div class="otEdit">
         <label>Stop <input type="number" step="any" data-ldsl="${raw.ticket}" value="${p.sl || ''}"></label>
@@ -1302,6 +1303,7 @@ const LiveDesk = {
     if (!host) return;
     if (host.contains(document.activeElement) && document.activeElement.matches('input')) return;
     if (host.querySelector('[data-ldclose][data-armed="1"]')) return;
+    if (typeof PriceRail !== 'undefined' && PriceRail.busy(host)) return;      /* a handle is being dragged */
     host.innerHTML = this.positionsView();
     this.bindPositions(host);
   },
