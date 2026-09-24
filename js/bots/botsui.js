@@ -154,7 +154,8 @@ Object.assign(Bots, {
       LiveManual.status(); return;
     }
 
-    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;   /* the Deep Dive redraws only on your clicks */
+    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;
+    if (b.checker && host.dataset.bot === b.id && host.querySelector('.ckWrap') && !Checker.dirty){ Checker.renderStatus(); return; }   /* the checker redraws on your clicks and after each study */   /* the Deep Dive redraws only on your clicks */
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults')){
       TradeAnalysis.refresh();
       return;
@@ -209,6 +210,7 @@ Object.assign(Bots, {
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
         : b.explorer ? Explorer.view()
+        : b.checker ? Checker.view()
         : b.analysis ? TradeAnalysis.view()
         : b.trades ? OpenTrades.view()
         : b.fit ? this.fitView()
@@ -986,7 +988,7 @@ Object.assign(Bots, {
         if (act === 'enable') Bots.setDisabled(id, false);
       }));
     }
-    if (b.explorer) Explorer.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
+    if (b.explorer) Explorer.bind(host); else if (b.checker) Checker.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.liveManual) LiveManual.bind(host);

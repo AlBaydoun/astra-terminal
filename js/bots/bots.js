@@ -283,6 +283,7 @@ const Bots = {
   init(){
     /* bots the Strategy Lab has published come back before anything is wired */
     if (typeof StratLab !== 'undefined') try { StratLab.init(); } catch(e){}
+    if (typeof Checker !== 'undefined') try { Checker.mountAll(); } catch(e){ console.warn('ASTRA checker bots:', e.message); }
     for (const b of BOTS){
       this.ledgers[b.id] = BotEngine.load(b.id);
       this.cfgs[b.id] = Object.assign({}, b.defaults, lsGet('astra_botcfg_' + b.id, {}));
@@ -298,6 +299,7 @@ const Bots = {
     this.timer = setInterval(() => this.tick(), 30000);
     if (typeof Auto !== 'undefined') Auto.init();
     if (typeof LiveDesk !== 'undefined') LiveDesk.init();
+    if (typeof Checker !== 'undefined') Checker.init();
     if (typeof ConfluenceScanner !== 'undefined') ConfluenceScanner.start();
     setTimeout(() => this.tick(), 8000);
   },

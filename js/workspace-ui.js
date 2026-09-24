@@ -27,6 +27,7 @@ const WorkspaceUI = {
   },
   name(b){ return b.name.replace(/^[▦★◎●◈]\s*/, ''); },
   group(b){
+    if (b.checker) return 'Scanners & research';
     if (b.dash || b.trades || b.report || b.analysis) return 'Overview';
     if (b.manual || b.liveManual || b.id === 'confluence') return 'Trading desk';
     if (b.scan || b.confluenceScanner || b.fit || b.brain) return 'Scanners & research';
@@ -35,7 +36,7 @@ const WorkspaceUI = {
   },
   botIcon(b){
     return b.dash ? 'dashboard' : b.trades ? 'positions' : b.manual ? 'manual'
-      : b.scan || b.confluenceScanner ? 'scanner' : b.explorer ? 'layers' : b.report || b.fit || b.analysis ? 'report'
+      : b.scan || b.confluenceScanner || b.checker ? 'scanner' : b.explorer ? 'layers' : b.report || b.fit || b.analysis ? 'report'
       : b.live || b.id === 'permissions' ? 'shield' : b.id === 'botsettings' ? 'manual' : 'bot';
   },
   nav(active){

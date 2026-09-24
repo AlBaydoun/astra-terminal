@@ -69,6 +69,27 @@ const BotGuide = {
       use: ['Start here every morning: which bot made money yesterday, which pair keeps losing.', 'Click a bot row, then read its per-instrument table — that is where you find a pair worth prohibiting.', 'Everything is paper. The real account has its own page (Live connection & safety).'],
       honest: 'Numbers here are simulated: real spreads and slippage from MetaTrader, but no real fills. Treat them as evidence, not as profit.' },
 
+    checker: { icon: '🔬', art: 'split', tagline: 'Every signal ASTRA knows, measured on real history: how often it reached each target before the stop, how fast, how far it kept going — and whether it did better than a random entry.',
+      tags: ['44 signals + your bots', 'Every market', 'Matryoshka', 'Brain', 'Paper bots'],
+      steps: [
+        ['📡', 'What it measures', 'Candle patterns (Hammer, Bullish/Bearish Engulfing, stars, soldiers, tweezers, inside bars, Heikin-Ashi), indicator events (RSI, MACD, EMA crosses, Bollinger, Stochastic, SuperTrend, SAR, breakouts, CCI, Williams %R, DI, Ichimoku, RSI divergence) and every bot you run — new bots join by themselves.'],
+        ['⏱️', 'How, honestly', 'A signal is read on a closed candle and the trade starts at the next candle’s open. Then it watches up to 96 candles (15m), 72 (1h), 60 (4h): did +0.1 … +3 % come before −0.2 … −2 %? Target and stop inside the same candle = a fail. Costs are the JustMarkets spread and commission of that pair.'],
+        ['🎲', 'Better than random?', 'Every result is compared with entering at ANY candle in the same pairs and direction. A market that only went up makes every buy look good — a signal only counts if it beats that.'],
+        ['🛡️', 'The cautious end', 'A result on few cases is shrunk towards the worst it could plausibly be, and it must have made money in both halves of the history. The best target/stop is chosen on that cautious figure, so a lucky corner cannot win.'],
+        ['🪆', 'The dolls', 'Start with everything, press a signal, a market, a pair, a timeframe, a side, an hour, a weekday or a context — every number on the page follows. The breadcrumbs take you back.'],
+        ['🎯', 'Target × stop map', 'Every target against every stop: big number = how often the target came first, small number = what one signal was worth after costs. Press a cell to use it everywhere.'],
+        ['🧠', 'The brain', 'After every study it takes one signal and tries it with each market context and every pair of contexts (171 mixes, e.g. “MACD cross while RSI under 30”). It keeps a mix only with twice the cases, profit in both halves, and a clear lead over the signal alone and over random.'],
+        ['🤖', 'Paper bots', '“make a paper bot” turns a finding into a bot that trades exactly that signal, market and timeframe with the measured target and stop. Such a bot re-tunes its target and stop as new history comes in (switch it off per bot). Paper only — like every bot it has to earn a live seat.'],
+      ],
+      settings: [
+        ['Target / Stop', 'What “won” and “failed” mean on the whole page.', 'Try your own numbers; the map shows all of them at once.'],
+        ['Easy win · %', 'The biggest target reached in at least this share of cases.', 'The “Hammer always reaches 0.30 %” question.'],
+        ['Trust a result from', 'The fewest cases a finding needs.', 'Below it, rows are faded and never recommended.'],
+        ['Markets to study · replay my bots · speed', 'What the brain studies next and how often.', 'Studies run in the background; a pair is refreshed every 3–24 h depending on its timeframe.'],
+      ],
+      use: ['Open the first recommendation, then its pairs and hours — a finding that only works on one pair is a finding about that pair.', 'Use “Firing now” as a short list to look at, not as orders.', 'Before any money: make a paper bot from it and let it trade on paper for weeks.'],
+      honest: 'History does not repeat exactly. A signal that beat random over the last months can stop doing so when the market changes. ASTRA cannot browse the internet by itself — new strategies are added when you ask Claude to research them, and the brain starts measuring them on the next study.' },
+
     explorer: { icon: '🪆', art: 'split', tagline: 'Every trade, opened like a Russian doll — press anything to see what is inside it.',
       tags: ['Overview', 'Drill-down', 'Read only'],
       steps: [
@@ -443,7 +464,7 @@ const BotGuide = {
 
   /* ---------- rendering ---------- */
   guideFor(bot){
-    const g = this.G[bot.id] || (bot.lab || /^lab/.test(bot.id) ? this.G._lab : null);
+    const g = this.G[bot.id] || bot.guide || (bot.lab || /^lab/.test(bot.id) ? this.G._lab : null);
     return g || { icon: '🤖', tagline: bot.blurb || '', tags: [], steps: [], settings: [], use: [], honest: '' };
   },
   isTrading(bot){ return typeof Bots !== 'undefined' && !Bots.isPage(bot) && !bot.manual && !bot.liveManual && bot.id !== 'permissions'; },

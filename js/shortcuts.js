@@ -14,6 +14,7 @@ const Shortcuts = {
     { id: 'chart',    label: 'The chart (fold the lower panel)', def: 'F6',  run: () => { if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.openChart(); } },
     { id: 'open',     label: 'Open Trades',                      def: 'F7',  run: () => Shortcuts.bot('open') },
     { id: 'explorer', label: 'Deep Dive',                        def: 'F8',  run: () => Shortcuts.bot('explorer') },
+    { id: 'checker',  label: 'Strategy Checker',                 def: 'Shift+F8', run: () => Shortcuts.bot('checker') },
     { id: 'live',     label: 'Live connection & safety (the desk)', def: 'F9', run: () => Shortcuts.bot('live') },
     { id: 'max',      label: 'Maximise / restore the chart',     def: 'F10', run: () => { if (typeof App !== 'undefined' && App.setMax) App.setMax(document.documentElement.dataset.chartmax !== '1'); } },
     { id: 'dash',     label: 'Bots dashboard',                   def: 'Ctrl+F8', run: () => Shortcuts.bot('dash') },
