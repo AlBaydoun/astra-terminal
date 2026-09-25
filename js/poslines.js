@@ -85,8 +85,55 @@ const PosLines = {
     const btn = document.getElementById('posLinesBtn');
     if (btn) btn.classList.toggle('on', this.on);
     const want = this.on && this.rows().length > 0;
+    this.panel();
     if (want && !this.timer) this.timer = setInterval(() => { if (!this.drag && typeof Draw !== 'undefined') Draw.redraw(); }, 1500);
     if (!want && this.timer){ clearInterval(this.timer); this.timer = null; }
+  },
+
+  /* ---------- the "on this chart" panel ----------
+     A real HTML strip in the chart's corner with one row per open trade on
+     this instrument and a big "Close at market" button. The small ✕ drawn on
+     the canvas can hide under candle labels or another trade's label; this
+     one is always on top and always clickable. */
+  panelFold: lsGet('astra_pospanel_fold', false) === true,
+  panel(){
+    const wrap = document.getElementById('mainWrap');
+    if (!wrap) return;
+    let el = document.getElementById('posPanel');
+    const rows = this.on ? this.rows() : [];
+    if (!rows.length){ if (el) el.remove(); return; }
+    if (!el){
+      wrap.insertAdjacentHTML('beforeend', '<div id="posPanel" class="posPanel"></div>');
+      el = document.getElementById('posPanel');
+      /* the chart underneath must not pan or start a drawing from a click here */
+      ['mousedown', 'pointerdown', 'wheel', 'dblclick'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+      el.addEventListener('click', e => {
+        const b = e.target.closest('[data-ppclose],[data-ppfold],[data-ppfocus]');
+        if (!b) return;
+        if (b.hasAttribute('data-ppfold')){ this.panelFold = !this.panelFold; lsSet('astra_pospanel_fold', this.panelFold); this._panelSig = ''; return this.panel(); }
+        const [bot, id] = (b.dataset.ppclose || b.dataset.ppfocus).split('|');
+        const pid = /^T/.test(id) ? id : +id;
+        if (b.hasAttribute('data-ppclose')) return this.confirmClose(bot, pid);
+        this.focus = bot + ':' + pid; if (typeof Draw !== 'undefined') Draw.redraw();
+        setTimeout(() => { if (this.focus === bot + ':' + pid){ this.focus = null; if (typeof Draw !== 'undefined') Draw.redraw(); } }, 8000);
+      });
+    }
+    const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
+    /* the focused trade (opened from Open Trades) comes first */
+    const sorted = rows.slice().sort((a, b) => (this.focus === b.bot + ':' + b.p.id) - (this.focus === a.bot + ':' + a.p.id));
+    const items = sorted.map(r => {
+      const p = r.p, l = this.liveOf(r) || { unreal: 0 };
+      const key = r.bot + '|' + p.id, hot = this.focus === r.bot + ':' + p.id;
+      return { key, hot, html: `<div class="ppRow${r.live ? ' real' : ''}${hot ? ' hot' : ''}">
+        <button class="ppWho" data-ppfocus="${esc(key)}" title="Highlight this trade on the chart">
+          <b class="${p.dir > 0 ? 'up' : 'down'}">${r.live ? 'REAL ' : ''}${p.dir > 0 ? 'BUY' : 'SELL'}</b> ${esc(p.lots ? p.lots + ' lot' : fmtNum(p.qty))} · <span>${esc(r.botName || r.bot)}</span></button>
+        <i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i>
+        <button class="ppClose" data-ppclose="${esc(key)}" title="Close this trade at the market price now — you confirm first">✕ Close at market</button>
+      </div>` };
+    });
+    const head = `<div class="ppHead"><span>${rows.length} open trade${rows.length > 1 ? 's' : ''} on this chart</span><button data-ppfold title="${this.panelFold ? 'Show' : 'Fold'}">${this.panelFold ? '▸' : '▾'}</button></div>`;
+    const html = head + (this.panelFold ? '' : items.map(i => i.html).join(''));
+    if (html !== this._panelSig){ el.innerHTML = html; this._panelSig = html; }
   },
 
   /* ---------- drawing ---------- */
@@ -312,6 +359,7 @@ PosLines.confirmClose = function(bot, id){
   const wrap = document.getElementById('mainWrap');
   const y = Chart.priceSeries.priceToCoordinate(p.entry) || 0;
   const botName = (BOT_BY_ID[bot] || {}).name || bot;
+  if (!wrap) return;
   wrap.insertAdjacentHTML('beforeend', `<div id="posConfirm" class="posConfirm" style="top:${Math.max(8, Math.min(wrap.clientHeight - 120, y + 10))}px">
     <b>${real ? 'Close the REAL position · ' : 'Close at market · '}${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))} <small>${esc(botName)}</small></b>
     <div class="pcRow"><span>Size</span><i>${p.lots ? p.lots + ' lot' : fmtNum(p.qty)}</i><em></em><i></i></div>
@@ -325,7 +373,11 @@ PosLines.confirmClose = function(bot, id){
   box.querySelector('[data-pcclose]').addEventListener('click', async () => {
     box.remove();
     if (real) await LiveDesk.closeTicket(found.row.ticket, 'closed from the chart');
-    else await Bots.closePos(bot, id);
+    else {
+      await Bots.closePos(bot, id);
+      if (!this.posOf(bot, id)) toast((p.dir > 0 ? 'BUY ' : 'SELL ') + baseAsset(p.sym) + ' closed at the market · ' + fmtC(l.unreal), l.unreal >= 0 ? 'ok' : 'warn');
+    }
+    this._panelSig = ''; this.panel();
     Draw.redraw();
   });
   box.querySelector('[data-pccancel]').addEventListener('click', () => this.cancelPending());

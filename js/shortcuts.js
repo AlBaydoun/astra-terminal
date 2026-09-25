@@ -8,6 +8,7 @@ const Shortcuts = {
   KEY: 'astra_keys',
   ACTIONS: [
     { id: 'help',     label: 'This list of shortcuts',           def: 'F1',  run: () => Shortcuts.open() },
+    { id: 'back',     label: 'Back one step (also the ← Back button, bottom-left)', def: 'Alt+ArrowLeft', run: () => { if (typeof Nav !== 'undefined') Nav.back(); } },
     { id: 'clock',    label: 'Market Clock',                     def: 'F2',  run: () => Shortcuts.obs('clock', 'marketClockBtn') },
     { id: 'replay',   label: 'Trade Replay',                     def: 'F3',  run: () => Shortcuts.obs('replay', 'tradeReviewBtn') },
     { id: 'screener', label: 'Screener',                         def: 'F4',  run: () => Shortcuts.tab('screener') },
