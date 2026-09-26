@@ -296,6 +296,8 @@ const LiveDesk = {
     }
     if (p.pairsOff.length) all = all.filter(s => !p.pairsOff.includes(s));
     if (S.pairs.blocked.length) all = all.filter(s => !S.pairs.blocked.includes(s));
+    /* a NO given on the bot itself (Bots → Markets) counts here too */
+    if (Bots.refuses) all = all.filter(s => !Bots.refuses(bot.id, s));
     /* the bot's own ★ preferred pairs still go first */
     const cfg = Bots.cfg(bot.id) || {};
     if (cfg.preferred && cfg.preferred.length){
@@ -1384,6 +1386,15 @@ const LiveDesk = {
       const next = el.checked ? (cur.includes(g) ? cur : cur.concat([g])) : cur.filter(x => x !== g);
       if (!next.length){ toast('A bot needs at least one market', 'warn'); el.checked = true; return; }
       p.markets = next; if (!el.checked && p.openMarket === g) p.openMarket = null;
+      /* one setting, not two: a market you tick here is switched on in the bot's own
+         Markets card as well, or the bot's own NO would silently win */
+      if (el.checked){
+        const cfg = Bots.cfg(id);
+        if (cfg && cfg.groups && cfg.groups.length && !cfg.groups.includes(g)){
+          cfg.groups = cfg.groups.concat([g]); Bots.saveCfg(id);
+          toast(((this.groups()[g] || {}).label || g) + ' is now also switched on in ' + ((BOT_BY_ID[id] || {}).name || id) + '’s own Markets card', 'info');
+        }
+      }
       this.save(); this.rerender();
     }));
     host.querySelectorAll('[data-ldpbpairs]').forEach(el => el.addEventListener('click', () => {

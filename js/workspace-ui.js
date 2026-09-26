@@ -63,6 +63,16 @@ const WorkspaceUI = {
       Bots.moveBot(b.dataset.mvid, +b.dataset.mv, b.dataset.mvgroup.split(','));
     }));
     this.filterNav(nav);
+    this.markNotes();
+  },
+  /* a small 📝 beside every bot you have written notes on */
+  markNotes(){
+    const all = typeof BotNotes !== 'undefined' ? BotNotes.all() : {};
+    document.querySelectorAll('#botNav [data-bot]').forEach(b => {
+      const has = !!all[b.dataset.bot];
+      b.classList.toggle('hasNotes', has);
+      if (has) b.setAttribute('data-notes', '📝'); else b.removeAttribute('data-notes');
+    });
   },
   filterNav(nav){
     const q = this.query.trim().toLowerCase();

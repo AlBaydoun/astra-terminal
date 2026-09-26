@@ -183,6 +183,8 @@ Object.assign(Bots, {
       if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
       return;
     }
+    /* never rebuild the page under your hand while you are writing a note */
+    if (host.dataset.bot === b.id && typeof BotNotes !== 'undefined' && BotNotes.typing(host)) return;
     if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
     const keep = b.manual ? this.manualDraft : null;
     /* the live desk: never rebuild under a hand that is typing, and carry the
@@ -207,6 +209,7 @@ Object.assign(Bots, {
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
        </div>` +
+      (typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '') +
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
         : b.explorer ? Explorer.view()
@@ -224,6 +227,7 @@ Object.assign(Bots, {
         : this.botView(b, L, st));
 
     this.bind(b);
+    if (typeof BotNotes !== 'undefined') BotNotes.bind(host, b.id);
     this.restoreForm(keep);
     if (ldSnap) LiveDesk.restore(host, ldSnap);
     if (b.id === 'live' && typeof LiveDesk !== 'undefined'){ LiveDesk._builtAt = Date.now(); LiveDesk._force = false; }
@@ -1238,7 +1242,7 @@ Object.assign(Bots, {
     }));
     host.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => {
       const [bot, id] = el.dataset.close.split(':');
-      this.closePos(bot, +id);
+      this.closePos(bot, +id, 'the bot page');
     }));
   },
 });

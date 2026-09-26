@@ -280,7 +280,9 @@ const Feed = {
       const r = await fetch(this.BRIDGE_URL + '/specs?symbols=' + encodeURIComponent(Object.keys(back).join(',')));
       if (!r.ok) throw new Error('Broker specifications HTTP ' + r.status);
       const j = await r.json();
+      if (j.account) this.account = j.account;
       for (const [brokerSym, spec] of Object.entries(j.specs || {})){
+        this.fixSpec(spec);
         this.specs[brokerSym] = spec;
         for (const sym of back[brokerSym] || []) this.specs[sym] = spec;
       }
@@ -290,6 +292,28 @@ const Feed = {
     return this.specs;
   },
   specFor(sym){ return this.specs[sym] || this.specs[this.brokerName(sym)] || null; },
+  /* Some share CFDs report a contract size (100) and a tick value (0.01 per 0.01)
+     that contradict each other: one says a lot is 100 shares, the other 1 share.
+     The bridge now also asks MetaTrader's own profit calculator what one lot earns
+     per 1.0 of price (pointValue). For a contract priced in the account's own
+     currency that number IS the contract size in money terms, so both fields are
+     set from it and every part of ASTRA — bots, the Live Desk, the manual ticket,
+     real-order sizing — values the trade the way the broker will. The raw
+     figures are kept in spec.raw. A contract in another currency is left alone:
+     it needs a currency conversion, which the bots still refuse. */
+  fixSpec(spec){
+    if (!spec || !(spec.pointValue > 0) || !(spec.tickSize > 0) || !(spec.contractSize > 0)) return spec;
+    const acct = this.account && this.account.currency;
+    if (!acct || !spec.currency || spec.currency !== acct) return spec;
+    const byContract = spec.contractSize, byTick = spec.tickValue / spec.tickSize;
+    const agree = v => Math.abs(v / spec.pointValue - 1) < 0.01;
+    if (agree(byContract) && agree(byTick)) return spec;
+    spec.raw = { contractSize: spec.contractSize, tickValue: spec.tickValue };
+    spec.contractSize = spec.pointValue;
+    spec.tickValue = spec.pointValue * spec.tickSize;
+    spec.fixed = 'MetaTrader values one lot at ' + spec.pointValue + ' ' + acct + ' per 1.0 of price (it reported contract ' + byContract + ', tick value ' + spec.raw.tickValue + ')';
+    return spec;
+  },
 
   async search(q){
     if (typeof MarketSources !== 'undefined') return [];

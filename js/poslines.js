@@ -374,7 +374,7 @@ PosLines.confirmClose = function(bot, id){
     box.remove();
     if (real) await LiveDesk.closeTicket(found.row.ticket, 'closed from the chart');
     else {
-      await Bots.closePos(bot, id);
+      await Bots.closePos(bot, id, 'the chart');
       if (!this.posOf(bot, id)) toast((p.dir > 0 ? 'BUY ' : 'SELL ') + baseAsset(p.sym) + ' closed at the market · ' + fmtC(l.unreal), l.unreal >= 0 ? 'ok' : 'warn');
     }
     this._panelSig = ''; this.panel();

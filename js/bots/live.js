@@ -249,6 +249,14 @@ const Live = {
     if (!spec || !(spec.tickSize > 0) || !(spec.tickValue > 0))
       return { ok: false, why: 'the contract size for ' + baseAsset(sig.sym) +
         ' is not known — the MT5 bridge has to be running so the specifications load' };
+    /* the broker's contract size and tick value must tell the same story (or
+       MetaTrader's own profit calculator must have settled it) before real
+       money is sized on them — a contradiction can mean 100× the intended size */
+    if (!(spec.pointValue > 0) && spec.contractSize > 0 && Math.abs(spec.tickValue / spec.tickSize / spec.contractSize - 1) > 0.01){
+      const acct = typeof Feed !== 'undefined' && Feed.account && Feed.account.currency;
+      if (acct && spec.currency === acct)
+        return { ok: false, why: baseAsset(sig.sym) + ': contract size and tick value disagree — restart the MT5 bridge so MetaTrader’s own value per lot is known' };
+    }
 
     const riskPerLot = (stopDist / spec.tickSize) * spec.tickValue;
     if (!(riskPerLot > 0)) return { ok: false, why: 'the contract value could not be worked out' };
@@ -290,6 +298,11 @@ const Live = {
     /* a bot the live desk armed is judged by the desk's own choices — its
        markets, pairs, timeframes and the bots' own pool of money. Everything
        below (hours, ceilings, loss limits, kill switch) still applies on top. */
+    /* the bot's own market choices and the Prohibited list — for real money too */
+    if (typeof Bots !== 'undefined' && Bots.refuses){
+      const no = Bots.refuses(bot.id, sig.sym);
+      if (no) return { ok: false, reason: no, stage: 'markets' };
+    }
     const desk = (typeof LiveDesk !== 'undefined' && a.desk) ? LiveDesk.gate(bot, sig) : null;
     if (desk && !desk.ok) return { ok: false, reason: desk.why, stage: 'desk', quiet: !!desk.quiet };
     if (!desk && !C.instruments.includes(sig.sym))

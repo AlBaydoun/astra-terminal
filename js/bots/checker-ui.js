@@ -7,7 +7,7 @@ Object.assign(Checker, {
   dirty: true, path: null, _model: null, _modelKey: '',
 
   DIMS: [
-    { id: 'family', label: 'Kind', of: (r) => Checker.sigMeta(Checker.sigList[r.sig]).family, name: v => ({ candles: 'Candle patterns', indicators: 'Indicator signals', research: 'Strategies from research', bots: 'Your bots' })[v] || v },
+    { id: 'family', label: 'Kind', of: (r) => Checker.sigMeta(Checker.sigList[r.sig]).family, name: v => ({ candles: 'Candle patterns', indicators: 'Indicator signals', research: 'Strategies from research', usstocks: 'US stock strategies', bots: 'Your bots' })[v] || v },
     { id: 'sig', label: 'Signal', of: r => Checker.sigList[r.sig], name: v => Checker.sigMeta(v).label },
     { id: 'market', label: 'Market', of: r => r.market, name: v => Checker.marketLabel(v) },
     { id: 'sym', label: 'Pair', of: r => r.sym, name: v => (typeof BotMarkets !== 'undefined' ? BotMarkets.short(v) : baseAsset(v)) },
@@ -289,6 +289,7 @@ Object.assign(Checker, {
       <div><h5>Candle patterns (${E.filter(e => e.family === 'candles').length})</h5>${fam('candles')}</div>
       <div><h5>Indicator signals (${E.filter(e => e.family === 'indicators').length})</h5>${fam('indicators')}</div>
       <div><h5>Strategies from research (${E.filter(e => e.family === 'research').length})</h5>${fam('research')}</div>
+      <div><h5>US stock strategies (${E.filter(e => e.family === 'usstocks').length})</h5>${fam('usstocks')}</div>
       <div><h5>Your bots — replayed on their own timeframe and pairs, new bots join by themselves</h5>${bots}</div>
       <div><h5>Market contexts the brain mixes in</h5>${this.FILTERS.map(f => `<span class="ckLib">${esc(f[1])}</span>`).join('')}</div>
     </div>

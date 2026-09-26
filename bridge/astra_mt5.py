@@ -683,12 +683,31 @@ class Handler(BaseHTTPRequestHandler):
                         i = mt5.symbol_info(s)
                     if i is None:
                         continue
+                    # What ONE lot gains, in the account currency, when the price rises
+                    # by 1.0 — from MetaTrader's own profit calculator. Read only: it
+                    # places nothing. Some share CFDs report a contract size and a tick
+                    # value that contradict each other; this number settles it.
+                    point_value = None
+                    try:
+                        with _lock:
+                            t = mt5.symbol_info_tick(s)
+                            px = (t.ask or t.bid or t.last) if t else 0
+                            if not px:
+                                px = i.ask or i.bid or i.last or 0
+                            if px and px > 0:
+                                pv = mt5.order_calc_profit(mt5.ORDER_TYPE_BUY, s, 1.0, px, px + 1.0)
+                                if pv is not None and pv > 0:
+                                    point_value = float(pv)
+                    except Exception:
+                        point_value = None
                     out[s] = {
                         "volumeMin": i.volume_min, "volumeMax": i.volume_max, "volumeStep": i.volume_step,
                         "contractSize": i.trade_contract_size,
                         "tickSize": i.trade_tick_size, "tickValue": i.trade_tick_value,
                         "digits": i.digits, "stopsLevel": i.trade_stops_level,
                         "currency": i.currency_profit,
+                        "pointValue": point_value,
+                        "calcMode": getattr(i, "trade_calc_mode", None),
                     }
                 acc = mt5.account_info()
                 return self._send({"specs": out,

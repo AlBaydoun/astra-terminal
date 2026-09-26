@@ -546,3 +546,40 @@ html[data-panel] .botsWrap { padding:0; }
 .ckLibGrid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
 .ckLib{ display:inline-block; margin:0 5px 5px 0; padding:3px 8px; border-radius:6px; border:1px solid var(--border-soft); font-size:11px; }
 .ckLib.up{ color:#5be8cf; } .ckLib.down{ color:#ff8fa0; }
+
+/* Deep Dive — every number in the top section opens its own trades */
+.exHero .exAct{ cursor:pointer; }
+.exHero .exKpi.exAct{ transition:background .15s, border-color .15s, transform .15s; }
+.exHero .exKpi.exAct:hover{ background:rgba(0,229,255,.08); border-color:rgba(0,229,255,.45); transform:translateY(-1px); }
+.exHero .exKpi.exAct::after{ content:'›'; position:absolute; right:8px; top:6px; color:var(--dim); font-size:14px; }
+.exHero .exKpi{ position:relative; }
+.exHero .exBig.exAct:hover b{ text-decoration:underline; text-underline-offset:4px; }
+.exDoor{ cursor:pointer; border-bottom:1px dotted currentColor; color:inherit; text-decoration:none; padding:0 1px; border-radius:3px; }
+.exDoor:hover{ background:rgba(0,229,255,.14); color:#fff; }
+.exDoor.up{ color:var(--green,#2ebd85); } .exDoor.down{ color:var(--red,#f6465d); }
+.exDonutLegend .exDoor{ border-bottom:0; }
+.exDonut .exAct:hover{ filter:brightness(1.35); }
+.exDonut circle.exAct{ pointer-events:visibleStroke; }
+.exSec.exFlash{ animation:exFlash 1.5s ease; }
+@keyframes exFlash{ 0%,60%{ box-shadow:0 0 0 2px rgba(0,229,255,.8), 0 0 24px rgba(0,229,255,.35); } 100%{ box-shadow:none; } }
+.exKpi b span, .exKpi small span, .exKpi .exDoor span{ display:inline; font-size:inherit; letter-spacing:normal; text-transform:none; color:inherit; }
+.exKpi b span.up{ color:var(--green,#2ebd85); } .exKpi b span.down{ color:var(--red,#f6465d); }
+.exHero .exKpi{ padding:6px 8px; margin:-6px -8px; border:1px solid transparent; border-radius:8px; }
+
+/* Deep Dive — trades you closed by hand */
+.exHand{ color:#ffd166; font-weight:600; }
+.exWi{ font-size:10.5px; padding:1px 6px; border-radius:6px; margin-left:4px; white-space:nowrap; }
+.exWi.up{ background:rgba(46,189,133,.14); color:var(--green,#2ebd85); } .exWi.down{ background:rgba(246,70,93,.14); color:var(--red,#f6465d); }
+.exHandTop{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:10px; }
+.exHandTop div{ padding:8px 10px; border-radius:8px; background:rgba(255,209,102,.06); border:1px solid rgba(255,209,102,.22); }
+.exHandTop span{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); }
+.exHandTop b{ display:block; font-family:var(--font-mono); font-size:17px; font-weight:500; margin:2px 0; }
+.exHandTop b.up{ color:var(--green,#2ebd85); } .exHandTop b.down{ color:var(--red,#f6465d); }
+.exHandTop small{ color:var(--dim); font-size:11px; }
+.exHandList{ margin-top:10px; display:flex; flex-direction:column; gap:2px; }
+.exHandRow{ display:grid; grid-template-columns:minmax(110px,auto) minmax(110px,1fr) minmax(170px,1.4fr) auto minmax(150px,1.2fr) auto; gap:10px; align-items:center; padding:6px 8px; border-radius:6px; background:rgba(255,255,255,.025); font-size:12px; }
+.exHandRow .up{ color:var(--green,#2ebd85); } .exHandRow .down{ color:var(--red,#f6465d); }
+.exHandIf i{ font-style:normal; font-weight:600; }
+.exHandWhy{ padding:0 8px 6px 18px; font-size:11px; }
+.exHandNote{ margin-top:8px; font-size:11px; }
+@media (max-width:900px){ .exHandRow{ grid-template-columns:1fr 1fr; } }

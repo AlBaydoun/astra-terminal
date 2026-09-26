@@ -444,7 +444,7 @@ const OpenTrades = {
       const { bot, id } = this.split(el.dataset.otclose);
       if (el.dataset.armed === '1'){
         el.dataset.armed = ''; clearTimeout(el._disarm);
-        Bots.closePos(bot, id);
+        Bots.closePos(bot, id, 'Open Trades');
         return;
       }
       el.dataset.armed = '1';

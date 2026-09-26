@@ -2528,3 +2528,20 @@ html[data-panel="replay"] #obsMax .obsMaxBar [data-obsact]{ display:none; }
 #navBack:hover:not(:disabled) small::before{ content:'→ '; }
 #navBack:disabled{ opacity:.38; cursor:default; }
 [data-theme=light] #navBack{ background:#e3f7fb; color:#0b5563; border-color:#4cc3d6; }
+
+/* your own notes on each bot */
+.bnWrap{ margin:8px 0 10px; border:1px solid rgba(255,209,102,.28); border-radius:10px; background:rgba(255,209,102,.05); }
+.bnWrap.has{ border-color:rgba(255,209,102,.5); }
+.bnHead{ display:flex; align-items:center; gap:8px; width:100%; padding:7px 11px; background:none; border:0; color:inherit; cursor:pointer; text-align:left; font:inherit; }
+.bnHead b{ color:#ffd166; font-family:var(--font-head); letter-spacing:.3px; white-space:nowrap; }
+.bnPrev{ flex:1; min-width:0; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
+.bnWrap.has .bnPrev{ color:var(--text, #dfe8f6); }
+.bnSaved{ color:var(--dim); font-size:10.5px; white-space:nowrap; }
+.bnHead i{ font-style:normal; color:var(--dim); }
+.bnBody{ padding:0 11px 9px; }
+.bnText{ width:100%; box-sizing:border-box; min-height:84px; resize:vertical; padding:8px 10px; border-radius:8px; font:13px/1.5 var(--font-body, inherit);
+  background:rgba(8,13,28,.6); color:inherit; border:1px solid rgba(255,209,102,.3); }
+.bnText:focus{ outline:none; border-color:#ffd166; box-shadow:0 0 0 2px rgba(255,209,102,.18); }
+.bnFoot{ display:flex; align-items:center; gap:8px; margin-top:5px; font-size:11px; } .bnFoot span{ flex:1; }
+[data-theme=light] .bnText{ background:#fffdf5; }
+#botNav [data-bot].hasNotes::after{ content:attr(data-notes); margin-left:auto; font-size:11px; opacity:.85; }

@@ -159,6 +159,12 @@ const BotEngine = {
 
   check(ledger, cfg, sig, quote){
     if (this.unsaved.has(ledger)) return { ok: false, reason: 'Save failed — new entries are blocked until this ledger is saved' };
+    /* your market choices for this bot, checked right before every entry, whichever
+       route the signal came by (a backtest replays history and is not judged here) */
+    if (!this.replays.has(ledger) && ledger.id && typeof Bots !== 'undefined' && Bots.refuses){
+      const no = Bots.refuses(ledger.id, sig.sym);
+      if (no) return { ok: false, reason: no };
+    }
     const R = this.rules(cfg);
     /* In a backtest "now" is the time of the bar being replayed, not the real
        clock. Without this the daily-loss lock was set to tonight's real midnight
@@ -300,8 +306,12 @@ const BotEngine = {
       if(sig.manual && typeof ManualTicket!=='undefined'){
         fx=ManualTicket.fx(sig.sym);
         if(!fx)return {ok:false,reason:'Waiting for a fresh broker currency-conversion quote'};
-      }else if (Math.abs(cashPerPoint / contract - 1) > 0.000001)
+      }else if (Math.abs(cashPerPoint / contract - 1) > 0.000001){
+        const acct = typeof Feed !== 'undefined' && Feed.account && Feed.account.currency;
+        if (acct && spec.currency === acct && !(spec.pointValue > 0))
+          return { ok: false, reason: baseAsset(sig.sym) + ': the broker’s contract size and tick value disagree — restart the MT5 bridge so it can report MetaTrader’s own value per lot' };
         return { ok: false, reason: 'This contract needs account-currency conversion; paper sizing cannot safely value ' + baseAsset(sig.sym) };
+      }
     }
     const cashRate=fx?.loss??1;
     lossPerUnit*=cashRate;

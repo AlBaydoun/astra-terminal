@@ -794,6 +794,49 @@ const Bots = {
     return null;
   },
 
+  /* the group of a symbol, also when it is spelled differently from the group
+     list (XAUUSD.s at the broker, XAUUSD.m in the list: the same gold) */
+  groupOfAny(sym){
+    const g = this.groupOf(sym); if (g) return g;
+    if (typeof Feed === 'undefined' || !Feed.brokerName) return null;
+    const k = Feed.brokerName(sym);
+    for (const [id, grp] of Object.entries(this.marketGroups())) if ((grp.syms || []).some(s => Feed.brokerName(s) === k)) return id;
+    return null;
+  },
+
+  /* ONE answer to "may this bot open a trade on this instrument?", asked at
+     the last moment before ANY entry — the normal bot cycle, the Confluence
+     scanner, the Live Desk, Market Fit and brain modes alike. Returns the
+     reason it may not, or null. Every NO you have given counts:
+       · the Prohibited list
+       · pairs blocked for this bot (Bots → Markets, ✕)
+       · a pair list the bot is narrowed to
+       · markets switched off for this bot
+     Your own hand-made trades (manual tickets) are not judged here. */
+  refuses(botId, sym){
+    const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[botId] : null;
+    if (!b || b.manual || b.liveManual || !sym) return null;
+    const cfg = this.cfg(botId) || {};
+    const key = s => (typeof Feed !== 'undefined' && Feed.brokerName) ? Feed.brokerName(s) : s;
+    const k = key(sym), same = s => s === sym || key(s) === k;
+    const name = baseAsset(sym);
+    if (typeof PairRules !== 'undefined' && PairRules.blocked(sym))
+      return name + ' is on the Prohibited list' + (PairRules.verdict(sym).source === 'your decision' ? ' (your decision)' : ' (blocked automatically by its losing record)');
+    if ((cfg.blocked || []).some(same)) return name + ' is blocked for this bot (its Markets card)';
+    if (cfg.instruments && cfg.instruments.length && !cfg.instruments.some(same)) return name + ' is not one of the pairs this bot is limited to';
+    const mode = cfg.marketMode || 'manual';
+    const groups = (cfg.groups && cfg.groups.length) ? cfg.groups
+      : mode === 'manual' ? Object.keys(this.marketGroups()).filter(g => g !== 'stocks' && g !== 'other') : null;
+    if (groups){
+      const g = this.groupOfAny(sym);
+      if (!g || !groups.includes(g)){
+        const label = g ? ((this.marketGroups()[g] || {}).label || g) : 'a market outside its list';
+        return name + ' is in ' + label + ' — a market switched off for this bot';
+      }
+    }
+    return null;
+  },
+
   /* what the study says this bot should trade — null when it has no verdict */
   fitSymbolsFor(botId){
     if (typeof MarketFit === 'undefined' || !MarketFit.plan) return null;
@@ -830,6 +873,12 @@ const Bots = {
       /* with no finished trades there is nothing to learn from — trade the lot
          until there is */
       if (good.length) all = all.filter(s => good.includes(s));
+    }
+    if (mode === 'fit' || mode === 'brain'){
+      /* the study and the brain choose WITHIN your choice, never beyond it:
+         markets you switched off and a pair list you set still count */
+      if (cfg.groups && cfg.groups.length){ const pool = this.groupSymbols(cfg.groups); all = all.filter(s => pool.includes(s) || cfg.groups.includes(this.groupOfAny(s))); }
+      if (cfg.instruments && cfg.instruments.length) all = all.filter(s => cfg.instruments.includes(s));
     } else {
       /* "every market" means every market a trading bot was built for —
          share CFDs are only traded when a bot is switched onto them by hand */
@@ -1382,13 +1431,18 @@ const Bots = {
     this.render();
   },
 
-  closePos(botId, posId){
+  closePos(botId, posId, via){
     const L = this.ledgers[botId];
     const pos = L.open.find(p => p.id === posId);
     if (!pos) return;
     const q = this.quoteFor(pos.sym) || null;
     if (!q) return toast('No price to close ' + baseAsset(pos.sym) + ' against — check the bridge', 'warn');
     BotEngine.close(L, this.cfg(botId), pos, q.price, 'closed by operator');
+    /* remember that YOU closed it, from where, and what the stop and target were
+       at that moment — the Deep Dive uses this to show what would have happened */
+    const rec = L.closed[0];
+    if (rec && rec.id === pos.id && rec.reason === 'closed by operator')
+      rec.closedBy = { via: via || 'ASTRA', at: Date.now(), price: q.price, sl: pos.sl, tp: pos.tp, barsHeld: pos.barsHeld, timeLimitBars: pos.timeLimitBars };
     BotEngine.save(botId, L);
     this.render();
   },
