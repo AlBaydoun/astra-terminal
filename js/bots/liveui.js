@@ -5,7 +5,7 @@
    Live results shown here come from MetaTrader's own record, not from ASTRA. */
 Object.assign(Bots, {
 
-  liveView(){
+  liveView(notes){
     const S = Live.load();
     const st = Live.status();
     const B = Live.bridge;
@@ -13,12 +13,15 @@ Object.assign(Bots, {
     const armed = Live.armedList();
 
     const handArmed = armed.some(id => !(S.armed[id] || {}).desk);
-    return `<div class="lvWrap">
-      <div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · manual orders</button></div>
-      ${this.lvBanner(st, B, armed)}
-      ${this.lvStep1(S, B)}
-      ${typeof LiveDesk !== 'undefined' ? LiveDesk.view() : ''}
-      <details class="lvClassic"${handArmed ? ' open' : ''}>
+    /* the page in parts for ⚙ Layout; a part you switch off is only hidden,
+       every check and refresh behind it keeps running */
+    const parts = {
+      notes: notes || '',
+      links: `<div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · manual orders</button></div>`,
+      banner: this.lvBanner(st, B, armed),
+      connect: this.lvStep1(S, B),
+      desk: typeof LiveDesk !== 'undefined' ? LiveDesk.view() : '',
+      classic: `<details class="lvClassic"${handArmed ? ' open' : ''}>
         <summary><i>⚙</i> Hard ceilings every real order obeys · and the classic way: arm one bot by name</summary>
         <div class="lvClassicBody">
           <p class="dim2">The desk above works inside these ceilings — it can never go past them. Arming a single bot by its name is still here for a bot you want to run on its own allow-list, outside the desk’s choices.</p>
@@ -26,12 +29,13 @@ Object.assign(Bots, {
           ${this.lvStep3(S)}
           ${armed.length ? this.lvArmed(S) : ''}
         </div>
-      </details>
-      ${this.lvAccount(stats, B)}
-      ${this.lvAudit(S)}
-      <div class="botNote warn">Live results here are read back from MetaTrader itself. Paper and live are kept
-        completely apart — nothing on this page touches the paper ledgers, and nothing there affects this.</div>
-    </div>`;
+      </details>`,
+      account: this.lvAccount(stats, B),
+      audit: this.lvAudit(S),
+      note: `<div class="botNote warn">Live results here are read back from MetaTrader itself. Paper and live are kept
+        completely apart — nothing on this page touches the paper ledgers, and nothing there affects this.</div>`,
+    };
+    return `<div class="lvWrap">${typeof BotLayout !== 'undefined' ? BotLayout.compose('live', parts, true) : Object.values(parts).join('')}</div>`;
   },
 
   lvBanner(st, B, armed){

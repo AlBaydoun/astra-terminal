@@ -85,17 +85,29 @@ function makeWindow(url, key, opts){
   if (saved && saved.maximized) win.maximize();
   win.loadURL(url);
 
-  /* a torn-off panel becomes a real window of its own */
+  /* A torn-off panel becomes a real window of its own. Chart windows are
+     numbered (?chart=w2), and each NUMBER remembers its own size and place — so
+     "the chart window on the left monitor" opens on the left monitor again, and
+     a second chart window never lands exactly on top of the first. */
+  const winKey = u => {
+    const panel = (u.match(/[?&]panel=([a-z0-9_]+)/i) || [])[1] || 'panel';
+    const slot = (u.match(/[?&]chart=(w[0-9]{1,2})/i) || [])[1];
+    return 'panel:' + panel + (slot ? ':' + slot.toLowerCase() : '');
+  };
   win.webContents.setWindowOpenHandler(({ url: target, features }) => {
-    const panel = (target.match(/[?&]panel=([a-z0-9_]+)/i) || [])[1] || 'panel';
     const num = n => { const m = features && features.match(new RegExp(n + '=(\\d+)')); return m ? +m[1] : undefined; };
-    const bounds = usableBounds(loadBounds()['panel:' + panel]) || {};
+    const bounds = usableBounds(loadBounds()[winKey(target)]) || {};
+    const slot = +((target.match(/[?&]chart=w([0-9]{1,2})/i) || [])[1] || 0);
+    /* with no remembered place yet, each further window steps down and to the
+       right instead of every one landing on the same spot */
+    const step = bounds.x == null && slot > 1 ? (slot - 1) * 36 : 0;
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
         width: bounds.width || num('width') || 1280,
         height: bounds.height || num('height') || 860,
-        x: bounds.x, y: bounds.y,
+        x: bounds.x != null ? bounds.x : (num('left') != null ? num('left') + step : undefined),
+        y: bounds.y != null ? bounds.y : (num('top') != null ? num('top') + step : undefined),
         backgroundColor: '#070b18',
         autoHideMenuBar: true,
         webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true,
@@ -105,9 +117,9 @@ function makeWindow(url, key, opts){
   });
 
   win.webContents.on('did-create-window', (child, details) => {
-    const panel = (details.url.match(/[?&]panel=([a-z0-9_]+)/i) || [])[1] || 'panel';
+    const key = winKey(details.url);
     extraWins.add(child);
-    const remember = () => saveBounds('panel:' + panel, child);
+    const remember = () => saveBounds(key, child);
     child.on('moved', remember);
     child.on('resize', remember);
     child.on('closed', () => extraWins.delete(child));

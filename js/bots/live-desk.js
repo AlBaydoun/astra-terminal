@@ -768,6 +768,11 @@ const LiveDesk = {
 
   /* ================= UI ================= */
   SECTIONS: ['pulse', 'money', 'exit', 'bots', 'where', 'matrix', 'fit', 'arm', 'positions', 'log'],
+  /* the arming card always shows: you must always see whether real trading is armed */
+  ALWAYS: ['arm'],
+  SEC_LABEL: { pulse: 'What is happening (the live picture)', money: 'Bot money', exit: 'Exit rules', bots: 'Which bots', where: 'Where — the desk’s defaults',
+    matrix: 'The matrix (bots × markets)', fit: 'What fits the money', arm: 'Arm the desk', positions: 'Real open trades', log: 'The desk’s log' },
+  SEC_ICON: { pulse: '💓', money: '💰', exit: '🚪', bots: '🤖', where: '🌍', matrix: '▦', fit: '📐', arm: '🔐', positions: '📂', log: '📜' },
   order(){
     const S = this.load();
     const o = (S.ui.order || []).filter(k => this.SECTIONS.includes(k));
@@ -791,7 +796,9 @@ const LiveDesk = {
   card(key, title, icon, body, hint, id, cls){
     const S = this.load();
     const folded = !!(S.ui.folded || {})[key], half = !!(S.ui.half || {})[key];
-    return `<section class="ldCard ${cls || ''}${folded ? ' folded' : ''}${half ? ' half' : ''}" data-ldsec="${key}" ${id ? 'id="' + id + '"' : ''}>
+    /* switched off in ⚙ Layout: hidden, never removed — its live refresh keeps working */
+    const off = !!(S.ui.hidden || {})[key] && !this.ALWAYS.includes(key);
+    return `<section class="ldCard ${cls || ''}${folded ? ' folded' : ''}${half ? ' half' : ''}" data-ldsec="${key}" ${id ? 'id="' + id + '"' : ''}${off ? ' hidden' : ''}>
       <div class="ldCardHead" draggable="true" data-lddrag="${key}" title="Drag to move this section">
         <i>${icon}</i><b>${esc(title)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}
         <span class="ldSecTools">

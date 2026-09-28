@@ -172,7 +172,7 @@ const BotDash = {
   },
 
   /* ---- Bots on / off (Settings & safety) ---- */
-  botSettingsView(){
+  botSettingsView(withNotes){
     const all = BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.liveManual);
     const row = b => {
       const off = Bots.disabled(b.id), cfg = Bots.cfg(b.id) || {}, L = Bots.ledger(b.id);
@@ -189,11 +189,14 @@ const BotDash = {
           <button class="botGuideBtn" data-guide="${esc(b.id)}" title="How this bot works">?</button>
         </span></div>`;
     };
-    return `<div class="bsWrap">
-      <p class="dim2">Untick a bot to switch it off: it leaves the sidebar, the Dashboard, the Manual bot's signal list and the Live page, and opens nothing new. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. A bot that still holds a position keeps managing it to its stop or target.</p>
-      <div class="botCtl"><button class="bMini go" data-bsall="on">Switch all on</button><button class="bMini go" data-bsall="unpause">▶ Unpause all</button><button class="bMini danger" data-bsall="resetlocked">↺ Reset every locked bot</button></div>
-      ${Bots.ordered(all).map(row).join('')}
-    </div>`;
+    const P = {
+      intro: `<p class="dim2">Untick a bot to switch it off: it leaves the sidebar, the Dashboard, the Manual bot's signal list and the Live page, and opens nothing new. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. A bot that still holds a position keeps managing it to its stop or target.</p>`,
+      actions: `<div class="botCtl"><button class="bMini go" data-bsall="on">Switch all on</button><button class="bMini go" data-bsall="unpause">▶ Unpause all</button><button class="bMini danger" data-bsall="resetlocked">↺ Reset every locked bot</button></div>`,
+      list: `<div class="bsList">${Bots.ordered(all).map(row).join('')}</div>`,
+    };
+    /* ⚙ Layout: the page in your order */
+    if (withNotes != null && typeof BotLayout !== 'undefined') return `<div class="bsWrap">${BotLayout.compose('botsettings', Object.assign({ notes: withNotes }, P), true)}</div>`;
+    return `<div class="bsWrap">${P.intro}${P.actions}${P.list}</div>`;
   },
 
   DEFAULT_ORDER: ['money', 'bots', 'instruments', 'breakdowns', 'days', 'open', 'log', 'pairs'],
@@ -216,6 +219,7 @@ const BotDash = {
      arrow did nothing at all. The hidden ids keep their place in the saved
      order, so they come back where they belong. */
   moveSec(id, dir){
+    if (typeof BotLayout !== 'undefined'){ BotLayout.move('dash', id, dir, BotLayout.visible('dash')); return; }
     const full = this.secOrder(this._secIds || this.DEFAULT_ORDER).slice();
     const shownIds = this._shownIds || full;
     const shown = full.filter(x => shownIds.indexOf(x) !== -1);
@@ -246,7 +250,7 @@ const BotDash = {
   },
 
   /* ---------- the page ---------- */
-  view(){
+  view(extras){
     const all = this.allTrades();
     const shown = all.filter(t => this.match(t));
     const open = this.allOpen().filter(p => this.f.bot === 'all' || p.bot === this.f.bot);
@@ -297,10 +301,26 @@ const BotDash = {
     this._shownIds = rendered.map(x => x.id);
     const anyShut = this._shownIds.some(id => this.folded[id]);
 
+    /* ⚙ Layout: the whole page in your order — the top as well as the sections */
+    if (extras && typeof BotLayout !== 'undefined'){
+      const P = { notes: extras.notes || '', intro: extras.intro || '', health: this.healthView(open.length),
+        links: '<div class="wsTradeLinks"><button data-ws-bot="analysis">▥ Buy / Sell Analysis</button></div>',
+        filter: this.filterBar(all), stats: '', secbar: '', note: '' };
+      const full = this._legacyView(S, open, days, bestDay, worstDay, anyShut, rendered);
+      const t = document.createElement('div'); t.innerHTML = full;
+      P.stats = (t.querySelector('.botStats') || {}).outerHTML || '';
+      P.secbar = (t.querySelector('.dashSecBar') || {}).outerHTML || '';
+      P.note = (t.querySelector(':scope > .dashWrap > .botNote.warn') || {}).outerHTML || '';
+      for (const x of rendered) P[x.id] = x.html;
+      return `<div class="dashWrap">${BotLayout.compose('dash', P, true)}</div>`;
+    }
+    return this._legacyView(S, open, days, bestDay, worstDay, anyShut, rendered, all);
+  },
+  _legacyView(S, open, days, bestDay, worstDay, anyShut, rendered, all){
     return `<div class="dashWrap">
-      ${this.healthView(open.length)}
-      <div class="wsTradeLinks"><button data-ws-bot="analysis">▥ Buy / Sell Analysis</button></div>
-      ${this.filterBar(all)}
+      ${all ? this.healthView(open.length) : ''}
+      ${all ? '<div class="wsTradeLinks"><button data-ws-bot="analysis">▥ Buy / Sell Analysis</button></div>' : ''}
+      ${all ? this.filterBar(all) : ''}
       <div class="botStats">
         ${Bots.stat('TRADES', S.n)}
         ${Bots.stat('WON', S.won + ' \u00B7 ' + Math.round(S.winRate) + '%', S.won ? 1 : 0)}
@@ -699,26 +719,26 @@ const BotDash = {
         ? '<button class="bMini" data-act="prreset">Clear my own choices</button>' : '');
   },
 
-  pairRulesView(){
+  pairRulesView(){ const P = this.pairRulesParts(); return P.search + P.columns + P.note; },
+  /* the Instrument permissions page in named parts, for ⚙ Layout */
+  pairRulesParts(){
     const c = PairRules.columns('');
     const auto = PairRules.autoOn();
-    return `<div class="prBar">
+    return { search: `<div class="prBar">
       <input type="text" id="prSearch" aria-label="Find a pair" placeholder="Find a pair to block or allow — ETH, EURUSD, DAX…"
         value="${esc(this.pairQ)}" spellcheck="false" autocomplete="off">
       <button class="bMini" data-act="prclear">Clear search</button>
       <span class="prHint">${c.untested} instrument${c.untested === 1 ? '' : 's'} with no record are allowed by
         default — search to find and prohibit one.</span>
-    </div>
-
-    <div class="prCols" id="prCols">${this.pairColumns()}</div>
-
-    <div class="botNote"><b id="prAutoStatus"></b><br>A pair is prohibited automatically once it has
+    </div>`,
+    columns: `<div class="prCols" id="prCols">${this.pairColumns()}</div>`,
+    note: `<div class="botNote"><b id="prAutoStatus"></b><br>A pair is prohibited automatically once it has
       <b>${PairRules.MIN_TRADES} or more finished trades and is down by more than ${fmtNum(PairRules.minLoss())}</b> (half a percent of one virtual account) — the rule that catches
       EUR/USD. Anything you prohibit or allow by hand always wins and is never overturned by a later good day.
       The block applies to every bot in every mode, including Follow Market Fit; it refuses <b>new</b> entries only,
       so a position already open still runs to its own stop or target.
       Use <b>Allow pair</b> to remove a block and keep the pair allowed. Use <b>Back to automatic</b>
-      to remove your override. Choices are saved and apply to aliases of the same pair.</div>`;
+      to remove your override. Choices are saved and apply to aliases of the same pair.</div>` };
   },
 
   /* ---------- small breakdowns ---------- */

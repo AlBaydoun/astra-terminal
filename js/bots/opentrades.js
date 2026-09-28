@@ -91,7 +91,10 @@ const OpenTrades = {
   },
 
   /* ---------- the page ---------- */
-  view(bot=null,summaryOnly=false){
+  view(bot=null,summaryOnly=false,extras=null){
+    /* the Open Trades page itself comes out in your ⚙ Layout order; a part you
+       switch off stays on the page hidden, so the live refresh still finds it */
+    if (!bot && !summaryOnly && extras && typeof BotLayout !== 'undefined') return BotLayout.compose('open', Object.assign({ notes: extras.notes || '', intro: extras.intro || '' }, this.parts()), true);
     const rows = this.all().filter(r => !bot || r.bot === bot);
     const tot = rows.reduce((a, r) => {
       const l = this.live(r);
@@ -155,7 +158,7 @@ const OpenTrades = {
 
       <div class="otHead">
         <b class="${p.dir > 0 ? 'up' : 'down'}">${p.dir > 0 ? 'BUY' : 'SELL'} ${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(p.sym):esc(baseAsset(p.sym))}</b>
-        <span class="otTag">${esc(row.botName)}</span>
+        <button type="button" class="otTag otBotLink" data-otdive="${esc(row.bot)}" title="Go to ${esc(row.botName)} — its page, its net result and its open trades">${esc(row.botName)} ↗</button>
         <span class="otTag dim">${esc(p.tf || '')}${p.model ? ' · ' + esc(p.model) : ''}${p.riskMult > 1 ? ' · size ×' + p.riskMult.toFixed(1) : ''}</span>
         <span class="otTag warn" data-f="adjusted" ${p.touched?'':'hidden'} title="stop, target or size was changed by hand">adjusted</span>
         <span class="otTag on" data-f="trailing" ${trailOn?'':'hidden'}>trailing</span>
@@ -220,6 +223,50 @@ const OpenTrades = {
       ${p.edits && p.edits.length ? `<div class="otEdits">${
         p.edits.slice(-4).map(e => `<i>${esc(BotDash.clock(e.at))} — ${esc(e.what)}</i>`).join('')}</div>` : ''}
     </div>`;
+  },
+
+  /* the page's parts, for ⚙ Layout */
+  parts(){
+    const rows = this.all();
+    const tot = rows.reduce((a, r) => {
+      const l = this.live(r);
+      a.unreal += l.unreal; a.value += l.value;
+      a.risk += Math.max(0, l.toStop) * r.p.qty * BotEngine.cashRate(r.p,true);
+      if (l.unreal >= 0) a.up++; else a.down++;
+      return a;
+    }, { unreal: 0, value: 0, risk: 0, up: 0, down: 0 });
+    const sorted = rows.slice().sort((a, b) => {
+      if (this.sortKey === 'unreal') return this.live(b).unreal - this.live(a).unreal;
+      if (this.sortKey === 'sym') return a.p.sym.localeCompare(b.p.sym);
+      if (this.sortKey === 'bot') return a.botName.localeCompare(b.botName);
+      return b.p.entryTime - a.p.entryTime;
+    });
+    const sortBtn = (k, label) => `<button class="bMini${this.sortKey === k ? ' on' : ''}" data-otsort="${k}">${esc(label)}</button>`;
+    return {
+      real: typeof LiveDesk !== 'undefined' ? '<div id="ldRealHost">' + LiveDesk.positionsView() + '</div>' : '',
+      stats: rows.length ? `<div class="botStats">
+        ${Bots.stat('OPEN NOW', rows.length)}
+        ${Bots.stat('IN PROFIT', tot.up, tot.up ? 1 : 0)}
+        ${Bots.stat('IN LOSS', tot.down, -1)}
+        ${Bots.stat('UNREALISED', (tot.unreal >= 0 ? '+' : '') + fmtNum(tot.unreal), tot.unreal)}
+        ${Bots.stat('VALUE HELD', fmtNum(tot.value))}
+        ${Bots.stat('STILL AT RISK', fmtNum(tot.risk), -1)}
+      </div>` : `<div class="botStats">${Bots.stat('OPEN NOW', 0)}</div>`,
+      sort: rows.length ? `<div class="otBar">
+        <span class="insLbl">Order</span>
+        ${sortBtn('entryTime', 'Newest')}${sortBtn('unreal', 'Best first')}
+        ${sortBtn('sym', 'Instrument')}${sortBtn('bot', 'Bot')}
+        <span class="otHint">Live figures refresh every second. Anything you type is left alone.</span>
+      </div>` : '',
+      filter: rows.length ? this.botFilterBar(rows) : '',
+      list: `<div class="otList">${sorted.map(r => this.card(r)).join('')}</div>
+      <div class="empty otFilterEmpty" hidden>No open trade from that bot right now.</div>` +
+        (rows.length ? '' : '<div class="empty otEmpty">Nothing is open. New positions appear here automatically.</div>'),
+      note: `<div class="botNote">Adjusting a bot's trade is allowed — it is your money. The trade is marked
+        <b>adjusted</b> and stays marked when it closes, so a bot's record never quietly counts a trade
+        the strategy did not run on its own. The original risk is never rewritten, so its R still measures
+        what was staked when it opened.</div>`,
+    };
   },
 
   /* ---------- the live half, rewritten in place ----------

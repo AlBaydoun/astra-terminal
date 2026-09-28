@@ -3,6 +3,51 @@ const Port = {
   state: lsGet('astra_port', { balance: 100000, positions: {}, history: [] }),
   FEE: 0.001,
 
+  /* ⚙ the Paper panel your way: the blocks in any order, on or off, positions sorted, history length */
+  CFG_KEY: 'astra_portcfg',
+  PARTS: { stats: 'Cash, equity and total P&L', ticket: 'Buy / sell ticket', positions: 'Open positions', history: 'Trade history', reset: 'Reset paper account button' },
+  cfg(){ const c = lsGet(this.CFG_KEY, {}) || {}; const ids = Object.keys(this.PARTS); const order = (c.order || []).filter(x => ids.includes(x)); for (const id of ids) if (!order.includes(id)) order.push(id);
+    return { order, hidden: c.hidden || [], posSort: c.posSort || 'none', histN: c.histN || 15 }; },
+  saveCfg(c){ lsSet(this.CFG_KEY, c); this.applyCfg(); this.render(); this.cfgView(); },
+  wrapParts(){
+    const panel = document.getElementById('tab-portfolio'); if (!panel || panel.querySelector('.ptPart')) return;
+    const titles = [...panel.querySelectorAll(':scope > .secTitle')];
+    const groups = {
+      stats: [panel.querySelector(':scope > .ptStats')], ticket: [panel.querySelector(':scope > .ticket')],
+      positions: [titles[0], document.getElementById('ptPositions')], history: [titles[1], document.getElementById('ptHistory')],
+      reset: [document.getElementById('ptReset')],
+    };
+    const top = document.createElement('div'); top.className = 'sideHead ptTop';
+    top.innerHTML = '<span>PAPER</span><button id="portCfgBtn" title="Arrange the Paper panel">⚙</button>';
+    const box = document.createElement('div'); box.id = 'portCfgBox'; box.hidden = true;
+    panel.prepend(top, box);
+    for (const [k, els] of Object.entries(groups)){ const w = document.createElement('div'); w.className = 'ptPart'; w.dataset.pt = k; for (const el of els) if (el) w.appendChild(el); panel.appendChild(w); }
+    top.querySelector('#portCfgBtn').addEventListener('click', () => { this.cfgOpen = !this.cfgOpen; this.cfgView(); });
+    box.addEventListener('click', e => { const m = e.target.closest('[data-ptmv]'); if (!m) return; const c = this.cfg(), [k, d] = m.dataset.ptmv.split('|'), i = c.order.indexOf(k), j = i + +d; if (i < 0 || j < 0 || j >= c.order.length) return; c.order.splice(i, 1); c.order.splice(j, 0, k); this.saveCfg(c); });
+    box.addEventListener('change', e => {
+      const t = e.target, c = this.cfg();
+      if (t.dataset.pton) c.hidden = t.checked ? c.hidden.filter(x => x !== t.dataset.pton) : c.hidden.concat([t.dataset.pton]);
+      else if (t.dataset.ptsort) c.posSort = t.value; else if (t.dataset.pthist) c.histN = +t.value; else return;
+      this.saveCfg(c);
+    });
+    this.applyCfg();
+  },
+  applyCfg(){
+    const panel = document.getElementById('tab-portfolio'); if (!panel) return;
+    const c = this.cfg();
+    for (const k of c.order){ const el = panel.querySelector(':scope > .ptPart[data-pt="' + k + '"]'); if (el){ panel.appendChild(el); el.hidden = c.hidden.includes(k); } }
+  },
+  cfgView(){
+    const box = document.getElementById('portCfgBox'), btn = document.getElementById('portCfgBtn'); if (!box) return;
+    box.hidden = !this.cfgOpen; if (btn) btn.classList.toggle('on', !!this.cfgOpen);
+    if (!this.cfgOpen){ box.innerHTML = ''; return; }
+    const c = this.cfg(), n = c.order.length;
+    box.innerHTML = `<div class="bkRows">${c.order.map((k, i) => `<div class="bkRow"><label><input type="checkbox" data-pton="${k}" ${c.hidden.includes(k) ? '' : 'checked'}> ${esc(this.PARTS[k])}</label>
+        <span><button data-ptmv="${k}|-1" ${i === 0 ? 'disabled' : ''}>▲</button><button data-ptmv="${k}|1" ${i === n - 1 ? 'disabled' : ''}>▼</button></span></div>`).join('')}</div>
+      <label>Positions <select data-ptsort="1">${[['none', 'As opened'], ['value', 'Largest value first'], ['pnl', 'Best result first'], ['worst', 'Worst result first'], ['az', 'A → Z']].map(([v, t]) => `<option value="${v}"${v === c.posSort ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label>History rows <select data-pthist="1">${[5, 15, 30, 50].map(v => `<option${v === c.histN ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`;
+  },
+
   init(){
     document.getElementById('ptBuy').addEventListener('click', () => this.trade('buy'));
     document.getElementById('ptSell').addEventListener('click', () => this.trade('sell'));
@@ -27,6 +72,7 @@ const Port = {
     }, 1500);
     this.updateTicket();
     this.render();
+    this.wrapParts();
   },
 
   price(sym){ const t = STORE.tickers.get(sym); return t ? t.last : 0; },
@@ -90,7 +136,13 @@ const Port = {
     pe.className = 'ptv ' + pctClass(pnlTotal);
 
     const posHost = document.getElementById('ptPositions');
+    const C = this.cfg();
     const entries = Object.entries(st.positions);
+    const pnlOf = ([s, p]) => (this.price(s) - p.avg) * p.qty, valOf = ([s, p]) => p.qty * this.price(s);
+    if (C.posSort === 'value') entries.sort((a, b) => valOf(b) - valOf(a));
+    else if (C.posSort === 'pnl') entries.sort((a, b) => pnlOf(b) - pnlOf(a));
+    else if (C.posSort === 'worst') entries.sort((a, b) => pnlOf(a) - pnlOf(b));
+    else if (C.posSort === 'az') entries.sort((a, b) => baseAsset(a[0]).localeCompare(baseAsset(b[0])));
     if (!entries.length) posHost.innerHTML = '<div class="empty">No open positions</div>';
     else posHost.innerHTML = entries.map(([s, p]) => {
       const px = this.price(s);
@@ -105,7 +157,7 @@ const Port = {
 
     const hist = document.getElementById('ptHistory');
     if (!st.history.length) hist.innerHTML = '<div class="empty">No trades yet</div>';
-    else hist.innerHTML = st.history.slice(0, 15).map(h =>
+    else hist.innerHTML = st.history.slice(0, C.histN).map(h =>
       `<div class="histrow"><span class="${h.side === 'buy' ? 'up' : 'down'}">${h.side.toUpperCase()}</span>` +
       `<span>${typeof WorkspaceUI!=='undefined'?WorkspaceUI.pair(h.sym):esc(baseAsset(h.sym))}</span><span>${+h.qty.toPrecision(5)}</span><span>@ ${fmtPrice(h.px)}</span>` +
       `<span class="${h.pnl != null ? pctClass(h.pnl) : ''}">${h.pnl != null ? (h.pnl >= 0 ? '+' : '') + fmtNum(h.pnl) : ''}</span></div>`).join('');

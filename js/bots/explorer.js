@@ -198,26 +198,38 @@ const Explorer = {
 
   /* ---------- sections: fold, maximise, move, resize — all remembered ---------- */
   SEC_KEY: 'astra_explorer_secs',
-  secState(){ return lsGet(this.SEC_KEY, { order: [], fold: {}, max: null, h: {} }) || { order: [], fold: {}, max: null, h: {} }; },
+  secState(){
+    const st = lsGet(this.SEC_KEY, null) || { order: [], fold: {}, max: null, h: {} };
+    st.h = st.h || {}; st.fold = st.fold || {}; st.order = st.order || [];
+    /* widths used to be counted in 6 columns; now 12, so a drag can be finer */
+    if (!st.g12){ if (st.w) for (const k of Object.keys(st.w)) st.w[k] = Math.min(12, st.w[k] * 2);
+      /* heights saved automatically before (not by your hand) are dropped: the new bottom handle sets them */
+      st.h = {}; st.g12 = true; lsSet(this.SEC_KEY, st); }
+    return st;
+  },
   saveSec(st){ lsSet(this.SEC_KEY, st); },
-  DEFAULT_SPAN: { hero: 6, curve: 6, list: 6 },
+  DEFAULT_SPAN: { hero: 12, curve: 12, list: 12, notes: 12 },
   section(id, title, sub, body, cls){
     const st = this.secState();
     const folded = !!st.fold[id], maxed = st.max === id;
-    const h = st.h[id] ? `style="height:${st.h[id]}px"` : '';
-    const span = (st.w && st.w[id]) || this.DEFAULT_SPAN[id] || 2;
-    return `<section class="exSec ${cls || 'exCard'}${folded ? ' folded' : ''}${maxed ? ' maxed' : ''}" data-exsec="${esc(id)}" style="grid-column:span ${span}">
+    const h = st.h[id] && !maxed ? `style="height:${st.h[id]}px"` : '';
+    const own = !!(st.w && st.w[id]);
+    const span = own ? st.w[id] : (this.DEFAULT_SPAN[id] || 4);
+    const scroll = !!(st.scroll && st.scroll[id]);
+    return `<section class="exSec ${cls || 'exCard'}${folded ? ' folded' : ''}${maxed ? ' maxed' : ''}" data-exsec="${esc(id)}" style="grid-column:span ${span}"${own ? ' data-w="1"' : ''}>
       <div class="exSecHead">
         <b>${title}</b><span>${esc(sub || '')}</span>
         <span class="paneCtl exSecCtl">
           <button data-exs="left" title="Move left (earlier)">◂</button><button data-exs="right" title="Move right (later)">▸</button>
           <button data-exs="narrow" title="Narrower">−</button><button data-exs="wide" title="Wider">+</button>
+          ${st.h[id] ? `<button data-exs="fit" class="${scroll ? '' : 'on'}" title="${scroll ? 'The content scrolls inside this box — press to shrink it to fit instead' : 'The content shrinks to fit this box — press to let it scroll instead'}">${scroll ? '↕' : '⤢'}</button>` : ''}
           <button data-exs="fold" title="${folded ? 'Open' : 'Fold'}">${folded ? '▢' : '_'}</button>
           <button data-exs="max" class="${maxed ? 'on' : ''}" title="${maxed ? 'Back to normal' : 'Maximise'}">⛶</button>
         </span>
       </div>
-      ${folded ? '' : `<div class="exSecBody" ${h}>${body}</div>`}
-      <div class="exColGrip" data-exgrip="${esc(id)}" title="Drag to change the width, like a column in Excel"></div>
+      ${folded ? '' : `<div class="exSecBody${st.h[id] && !maxed ? ' fixed' : ''}${scroll ? ' scroll' : ''}" ${h}><div class="exFit">${body}</div></div>`}
+      <div class="exColGrip" data-exgrip="${esc(id)}" title="Drag to change the width, like a column in Excel · double-click: back to its normal width"></div>
+      ${folded ? '' : `<div class="exRowGrip" data-exhgrip="${esc(id)}" title="Drag to change the height, like a row in Excel · double-click: back to its natural height"></div>`}
     </section>`;
   },
   ordered(list){
@@ -230,14 +242,17 @@ const Explorer = {
       return a.i - b.i;
     }).map(o => o.x);
   },
-  secAction(id, what, ids){
+  secAction(id, what, ids, visible){
     const st = this.secState();
     if (what === 'fold'){ st.fold[id] = !st.fold[id]; if (st.fold[id] && st.max === id) st.max = null; }
     else if (what === 'max'){ st.max = st.max === id ? null : id; delete st.fold[id]; }
+    else if (what === 'fit'){ st.scroll = st.scroll || {}; if (st.scroll[id]) delete st.scroll[id]; else st.scroll[id] = true; }
     else if (what === 'left' || what === 'right' || what === 'up' || what === 'down'){
       const cur = this.ordered(ids.map(i => ({ id: i }))).map(o => o.id);
       const i = cur.indexOf(id); if (i < 0) return;
-      const j = what === 'left' || what === 'up' ? i - 1 : i + 1;
+      const step = what === 'left' || what === 'up' ? -1 : 1;
+      /* step over sections that are hidden or not on this doll, so a press always moves it past a section you can see */
+      let j = i + step; while (visible && j >= 0 && j < cur.length && !visible.includes(cur[j])) j += step;
       if (j < 0 || j >= cur.length) return;
       cur.splice(i, 1); cur.splice(j, 0, id);
       st.order = st.order.filter(x => !cur.includes(x)).concat(cur);
@@ -245,9 +260,109 @@ const Explorer = {
     else if (what === 'narrow' || what === 'wide' || typeof what === 'number'){
       st.w = st.w || {};
       const cur = st.w[id] || this.DEFAULT_SPAN[id] || 2;
-      st.w[id] = Math.max(1, Math.min(6, typeof what === 'number' ? what : cur + (what === 'wide' ? 1 : -1)));
+      st.w[id] = Math.max(2, Math.min(12, typeof what === 'number' ? what : cur + (what === 'wide' ? 1 : -1)));
     }
     this.saveSec(st); this.dirty = true; Bots.render();
+  },
+
+  /* ---------- ⚙ Layout: every section, in your order, on or off ----------
+     The same order the ◂ ▸ buttons change; "off" hides a section on every doll. */
+  layoutOpen: false,
+  layoutList(){
+    return [
+      { id: 'hero', label: 'The picture — net result, won · lost, today…', icon: '◎' },
+      { id: 'notes', label: '📝 Notes on these results (dated)', icon: '📝' },
+      { id: 'curve', label: 'The curve', icon: '📈' },
+      { id: 'pnl', label: 'Result per trade', icon: '▥' },
+      { id: 'rdist', label: 'R per trade', icon: '▤' },
+      { id: 'hand', label: '✋ Your hand closes (when there are any)', icon: '✋' },
+      { id: 'hours', label: 'Hour of the day', icon: '🕘' },
+    ].concat(this.DIMS.map(d => ({ id: 'split:' + d.id, label: 'Split by: ' + d.label, icon: '▦' })))
+     .concat([{ id: 'list', label: 'The trades themselves (the list)', icon: '☰' }]);
+  },
+  layoutIds(){ return this.ordered(this.layoutList()).map(x => x.id); },
+  layoutPanel(){
+    const st = this.secState(), hid = st.hidden || {}, list = this.ordered(this.layoutList()), n = list.length;
+    return `<div class="blPanel exLayout">
+      <div class="blHead"><b>⚙ Deep Dive layout</b><span class="dim2">top to bottom · untick to hide a section on every doll · a split card appears only when it has something to split</span>
+        <button class="bMini" data-exlayout="1">Done</button></div>
+      <div class="blRows">${list.map((p, i) => { const on = !hid[p.id];
+        return `<div class="blRow${on ? '' : ' off'}"><span class="blIco">${p.icon}</span>
+          <label><input type="checkbox" data-exlon="${esc(p.id)}" ${on ? 'checked' : ''}> ${esc(p.label)}</label>
+          <span class="blMove"><button data-exlmv="${esc(p.id)}|-1" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button data-exlmv="${esc(p.id)}|1" ${i === n - 1 ? 'disabled' : ''} title="Move down">▼</button></span></div>`; }).join('')}</div>
+      <div class="blFoot"><label>Line height <select data-exdens="1">${this.DENSITY.map(([v, t]) => `<option value="${v}"${v === (st.dens || 'normal') ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <button class="bMini" data-exlreset="1" title="Original order, every section on, normal widths and heights">↺ Reset to the original</button>
+        <span class="dim2">Drag a box’s right edge for its width and its bottom edge for its height, like Excel; double-click an edge to undo.</span></div>
+    </div>`;
+  },
+  /* shrink a box's content until it fits the height you gave the box (never below 35 %).
+     A zoomed box keeps its full width, so the smaller content re-flows into it by itself. */
+  fit(body){
+    const inner = body && body.querySelector(':scope > .exFit'); if (!inner) return;
+    inner.style.zoom = ''; inner.style.width = ''; body.classList.remove('overflowing');
+    if (!body.classList.contains('fixed') || body.classList.contains('scroll')) return;
+    const room = body.clientHeight, need = inner.scrollHeight;
+    if (!(room > 0) || need <= room + 1) return;
+    let s = Math.max(0.35, room / need);
+    for (let k = 0; k < 4; k++){       /* widening lets the text re-flow into fewer lines — measure again */
+      inner.style.zoom = String(s);
+      const got = inner.getBoundingClientRect().height; if (got <= room + 1 || s <= 0.35) break;
+      s = Math.max(0.35, s * room / got);
+    }
+    /* still too tall at the smallest readable size: let it scroll rather than cut it off */
+    if (inner.getBoundingClientRect().height > room + 1) body.classList.add('overflowing');
+  },
+  fitAll(host){ (host || document).querySelectorAll('.exSecBody.fixed').forEach(b => this.fit(b)); },
+  DENSITY: [['compact', 'Compact'], ['normal', 'Normal'], ['roomy', 'Roomy']],
+
+  layoutMove(id, d){ this.secAction(id, d < 0 ? 'up' : 'down', this.layoutIds()); },
+  layoutToggle(id, on){ const st = this.secState(); st.hidden = st.hidden || {}; if (on) delete st.hidden[id]; else st.hidden[id] = true; this.saveSec(st); this.dirty = true; Bots.render(); },
+  layoutReset(){ this.saveSec({ order: [], fold: {}, max: null, h: {}, hidden: {}, g12: true }); this.dirty = true; Bots.render(); toast('Deep Dive layout back to the original', 'info'); },
+
+  /* ---------- notes on the results, per bot, dated ----------
+     A note belongs to the bot that is open in the doll (or to "all bots" at the
+     top). It remembers the day it was written, the doll it was written in
+     (e.g. Bot › Market: Crypto) and the figures at that moment, so you can read
+     back later: "until this day, on crypto only, it was +312 over 46 trades". */
+  NOTES_KEY: 'astra_divenotes',
+  notesAll(){ const v = lsGet(this.NOTES_KEY, []); return Array.isArray(v) ? v : []; },
+  notesSave(list){ lsSet(this.NOTES_KEY, list); },
+  notesBot(){ const f = this.path.find(x => x.dim === 'bot'); return f ? f.value : null; },
+  botName(id){ return id ? (BOT_BY_ID[id] ? WorkspaceUI.name(BOT_BY_ID[id]) : id) : 'All bots'; },
+  notesTitle(){ const b = this.notesBot(); const n = this.notesAll().filter(x => !b || x.bot === b).length; return (b ? 'Notes on ' + this.botName(b) : 'Notes on the results — every bot') + (n ? ' (' + n + ')' : ''); },
+  notesView(rows, st){
+    const b = this.notesBot(), list = this.notesAll().filter(x => !b || x.bot === b).sort((x, y) => y.at - x.at);
+    const day = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const span = st.ordered.length ? day(st.ordered[0].entryTime) + ' → ' + day(st.ordered[st.ordered.length - 1].exitTime || st.ordered[st.ordered.length - 1].entryTime) : '';
+    const where = this.path.filter(f => f.dim !== 'bot').map(f => f.label);
+    const compose = `<div class="dnCompose">
+        <div class="dnNow"><b>${esc(this.botName(b))}</b>${where.map(w => ` <i class="dnChip">${esc(w)}</i>`).join('')}
+          <span>${st.n} trades · <em class="${st.net >= 0 ? 'up' : 'down'}">${this.money(st.net)}</em> · ${Math.round(st.winPct)}% won${span ? ' · ' + esc(span) : ''}</span></div>
+        <textarea class="dnText" rows="2" placeholder="e.g. Until today it trades only crypto and is ${st.net >= 0 ? 'up' : 'down'} ${esc(fmtNum(Math.abs(st.net)))} over ${st.n} trades — ${st.net >= 0 ? 'keep watching' : 'switch it off if it goes on like this'}…"></textarea>
+        <div class="dnBar"><small>Saved with today’s date and the figures above. Ctrl+Enter saves.</small><button class="bMini go" data-dnsave="1">Save note</button></div>
+      </div>`;
+    let lastDay = '', html = '';
+    for (const n of list){
+      const d = day(n.at);
+      if (d !== lastDay){ html += `<div class="dnDay">${esc(d)}</div>`; lastDay = d; }
+      const s = n.snap || {};
+      html += `<div class="dnNote" data-dnid="${n.id}">
+        <div class="dnHead"><span class="dim2">${new Date(n.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+          ${!b ? `<b>${esc(this.botName(n.bot))}</b>` : ''}${(n.where || []).map(w => `<i class="dnChip">${esc(w)}</i>`).join('')}
+          <span class="dnSnap">${s.n != null ? s.n + ' trades · <em class="' + (s.net >= 0 ? 'up' : 'down') + '">' + this.money(s.net) + '</em> · ' + Math.round(s.winPct || 0) + '% won' + (s.span ? ' · ' + esc(s.span) : '') : ''}</span>
+          ${n.path && n.path.length ? `<button class="bMini" data-dnopen="${n.id}" title="Open the Deep Dive exactly as it was when you wrote this">↗ open that view</button>` : ''}
+          <button class="dnDel" data-dndel="${n.id}" title="Delete this note">×</button></div>
+        <div class="dnBody" contenteditable="true" spellcheck="true" data-dnedit="${n.id}">${esc(n.text)}</div></div>`;
+    }
+    return compose + (html || `<div class="empty">No notes${b ? ' on ' + esc(this.botName(b)) : ''} yet. Write what you see — the date and today’s figures are kept with it.</div>`);
+  },
+  notesAdd(text){
+    const rows = this.filtered(), st = this.stats(rows), day = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const span = st.ordered.length ? day(st.ordered[0].entryTime) + ' → ' + day(st.ordered[st.ordered.length - 1].exitTime || st.ordered[st.ordered.length - 1].entryTime) : '';
+    const list = this.notesAll();
+    list.push({ id: Date.now(), at: Date.now(), bot: this.notesBot(), path: this.path.slice(), where: this.path.filter(f => f.dim !== 'bot').map(f => f.label),
+      snap: { n: st.n, net: +st.net.toFixed(2), winPct: +st.winPct.toFixed(1), span }, text });
+    this.notesSave(list); this.dirty = true; Bots.render(); toast('Note saved with today’s date', 'ok');
   },
 
   kpi(label, value, cls, sub, act, tip){
@@ -285,6 +400,30 @@ const Explorer = {
     this._focus = id; this.dirty = true; Bots.render();
   },
 
+  /* the top "net result" picture of a set of trades — the Deep Dive uses it,
+     and so does every bot page (its own trades) */
+  hero(rows, st, open){
+    const pfTxt = st.pf === Infinity ? '∞' : st.pf.toFixed(2);
+    return `<div class="exHero">
+        <div class="exHeroLeft">
+          <div class="exBig ${st.net >= 0 ? 'up' : 'down'} exAct" data-exact="list" role="button" tabindex="0" title="Open every trade behind this number"><span>net result</span><b data-count="${st.net.toFixed(2)}">${this.money(st.net)}</b></div>
+          <div class="exKpis">
+            ${this.kpi('Trades', st.n, '', esc(this.fmtDur(st.span)) + ' of history', 'list', 'Open all ' + st.n + ' trades, newest first')}
+            ${this.kpi('Won · lost', this.door(st.wins ? 'res:won' : '', '<span class="up">' + st.wins + '</span>', 'Open the ' + st.wins + ' winners') + ' · ' + this.door(st.losses ? 'res:lost' : '', '<span class="down">' + st.losses + '</span>', 'Open the ' + st.losses + ' losers'), '', Math.round(st.winPct) + '% win rate')}
+            ${this.kpi('Profit factor', pfTxt, st.pf >= 1 ? 'up' : 'down', this.door(st.wins ? 'res:won' : '', 'won ' + fmtNum(st.gp), 'Open the winners') + ' vs ' + this.door(st.losses ? 'res:lost' : '', 'lost ' + fmtNum(st.gl), 'Open the losers'), 'sec:split:result', 'Winners against losers, side by side')}
+            ${this.kpi('Average R', (st.avgR >= 0 ? '+' : '') + st.avgR.toFixed(2) + 'R', st.avgR >= 0 ? 'up' : 'down', 'avg win ' + fmtNum(st.avgWin) + ' · avg loss ' + fmtNum(st.avgLoss), 'sec:rdist', 'Show how R is spread — press a bar to open those trades')}
+            ${this.kpi('Time in trades', this.fmtDur(st.avgHold), '', 'average · ' + this.door(this.tradeAct(st.longT), 'longest ' + esc(this.fmtDur(st.longest)), 'Open the longest trade: ' + this.tradeName(st.longT)) + ' · total ' + esc(this.fmtDur(st.totalHold)), 'sec:split:hold', 'Trades by how long they ran')}
+            ${this.kpi('Today', st.today + ' trade' + (st.today === 1 ? '' : 's'), st.todayNet >= 0 ? 'up' : 'down', this.money(st.todayNet) + ' today · ' + this.door('open', open.length + ' open now', 'Go to Open Trades'), st.today ? 'today' : '', 'Open today’s ' + st.today + ' trades')}
+            ${this.kpi('Best · worst', this.door(this.tradeAct(st.bestT), '<span class="up">' + this.money(st.best) + '</span>', 'Open the best trade: ' + this.tradeName(st.bestT)) + ' · ' + this.door(this.tradeAct(st.worstT), '<span class="down">' + this.money(st.worst) + '</span>', 'Open the worst trade: ' + this.tradeName(st.worstT)), '',
+              'runs: ' + this.door(st.bestSpan ? 'time:' + st.bestSpan.join('|') + '|' + st.bestRun + ' wins in a row' : '', st.bestRun + ' wins', 'Open that winning streak') + ', ' + this.door(st.worstSpan ? 'time:' + st.worstSpan.join('|') + '|' + st.worstRun + ' losses in a row' : '', st.worstRun + ' losses', 'Open that losing streak') + ' in a row')}
+            ${(() => { const h = rows.filter(t => this.byHand(t)); const hn = h.reduce((a, t) => a + t.pnl, 0);
+                return this.kpi('Closed by you', '✋ ' + h.length, h.length ? (hn >= 0 ? 'up' : 'down') : '', h.length ? this.money(hn) + ' on those · ' + this.whatIfLine(h) : 'you have not closed any of these by hand', h.length ? 'hand' : '', 'Open the trades you closed yourself — and what would have happened had you waited'); })()}
+            ${this.kpi('Deepest dip', '−' + fmtNum(st.maxDD), st.maxDD > Math.abs(st.net) ? 'down' : '', 'from the highest point of the curve · fees ' + fmtNum(st.fees), st.ddSpan ? 'time:' + st.ddSpan.join('|') + '|the deepest dip' : '', 'Open the trades that made this dip — from the top of the curve to its bottom')}
+          </div>
+        </div>
+        <div class="exHeroRight">${this.donut(st)}<div class="exDonutLegend">${this.door(st.wins ? 'res:won' : '', '■ ' + st.wins + ' won', 'Open the winners', 'up')}${this.door(st.losses ? 'res:lost' : '', '■ ' + st.losses + ' lost', 'Open the losers', 'down')}</div></div>
+      </div>`;
+  },
   dirty: false,
   view(){
     this.dirty = false;
@@ -308,27 +447,10 @@ const Explorer = {
           <button class="bMini exReplay" data-exreplay="${esc(t.bot)}|${t.entryTime}|${t.exitTime || 0}|${esc(t.sym)}" title="Open this trade in Trade Replay: the candles around it, entry, stop, target and exit, candle by candle">▷ Replay</button></div>`).join('')}</div>` +
         (rows.length > listMax ? `<button class="bMini exMoreBtn" data-exlistmore="1">Show ${Math.min(this.LIST_STEP, rows.length - listMax)} more (${rows.length - listMax} not shown)</button>` : '')
       : rows.length ? `<div class="dim2 exMore">${rows.length} trades. <button class="bMini" data-exact="list">Show them all, newest first</button> — or open a smaller doll (a pair, a day…).</div>` : '';
-    const hero = `<div class="exHero">
-        <div class="exHeroLeft">
-          <div class="exBig ${st.net >= 0 ? 'up' : 'down'} exAct" data-exact="list" role="button" tabindex="0" title="Open every trade behind this number"><span>net result</span><b data-count="${st.net.toFixed(2)}">${this.money(st.net)}</b></div>
-          <div class="exKpis">
-            ${this.kpi('Trades', st.n, '', esc(this.fmtDur(st.span)) + ' of history', 'list', 'Open all ' + st.n + ' trades, newest first')}
-            ${this.kpi('Won · lost', this.door(st.wins ? 'res:won' : '', '<span class="up">' + st.wins + '</span>', 'Open the ' + st.wins + ' winners') + ' · ' + this.door(st.losses ? 'res:lost' : '', '<span class="down">' + st.losses + '</span>', 'Open the ' + st.losses + ' losers'), '', Math.round(st.winPct) + '% win rate')}
-            ${this.kpi('Profit factor', pfTxt, st.pf >= 1 ? 'up' : 'down', this.door(st.wins ? 'res:won' : '', 'won ' + fmtNum(st.gp), 'Open the winners') + ' vs ' + this.door(st.losses ? 'res:lost' : '', 'lost ' + fmtNum(st.gl), 'Open the losers'), 'sec:split:result', 'Winners against losers, side by side')}
-            ${this.kpi('Average R', (st.avgR >= 0 ? '+' : '') + st.avgR.toFixed(2) + 'R', st.avgR >= 0 ? 'up' : 'down', 'avg win ' + fmtNum(st.avgWin) + ' · avg loss ' + fmtNum(st.avgLoss), 'sec:rdist', 'Show how R is spread — press a bar to open those trades')}
-            ${this.kpi('Time in trades', this.fmtDur(st.avgHold), '', 'average · ' + this.door(this.tradeAct(st.longT), 'longest ' + esc(this.fmtDur(st.longest)), 'Open the longest trade: ' + this.tradeName(st.longT)) + ' · total ' + esc(this.fmtDur(st.totalHold)), 'sec:split:hold', 'Trades by how long they ran')}
-            ${this.kpi('Today', st.today + ' trade' + (st.today === 1 ? '' : 's'), st.todayNet >= 0 ? 'up' : 'down', this.money(st.todayNet) + ' today · ' + this.door('open', open.length + ' open now', 'Go to Open Trades'), st.today ? 'today' : '', 'Open today’s ' + st.today + ' trades')}
-            ${this.kpi('Best · worst', this.door(this.tradeAct(st.bestT), '<span class="up">' + this.money(st.best) + '</span>', 'Open the best trade: ' + this.tradeName(st.bestT)) + ' · ' + this.door(this.tradeAct(st.worstT), '<span class="down">' + this.money(st.worst) + '</span>', 'Open the worst trade: ' + this.tradeName(st.worstT)), '',
-              'runs: ' + this.door(st.bestSpan ? 'time:' + st.bestSpan.join('|') + '|' + st.bestRun + ' wins in a row' : '', st.bestRun + ' wins', 'Open that winning streak') + ', ' + this.door(st.worstSpan ? 'time:' + st.worstSpan.join('|') + '|' + st.worstRun + ' losses in a row' : '', st.worstRun + ' losses', 'Open that losing streak') + ' in a row')}
-            ${(() => { const h = rows.filter(t => this.byHand(t)); const hn = h.reduce((a, t) => a + t.pnl, 0);
-                return this.kpi('Closed by you', '✋ ' + h.length, h.length ? (hn >= 0 ? 'up' : 'down') : '', h.length ? this.money(hn) + ' on those · ' + this.whatIfLine(h) : 'you have not closed any of these by hand', h.length ? 'hand' : '', 'Open the trades you closed yourself — and what would have happened had you waited'); })()}
-            ${this.kpi('Deepest dip', '−' + fmtNum(st.maxDD), st.maxDD > Math.abs(st.net) ? 'down' : '', 'from the highest point of the curve · fees ' + fmtNum(st.fees), st.ddSpan ? 'time:' + st.ddSpan.join('|') + '|the deepest dip' : '', 'Open the trades that made this dip — from the top of the curve to its bottom')}
-          </div>
-        </div>
-        <div class="exHeroRight">${this.donut(st)}<div class="exDonutLegend">${this.door(st.wins ? 'res:won' : '', '■ ' + st.wins + ' won', 'Open the winners', 'up')}${this.door(st.losses ? 'res:lost' : '', '■ ' + st.losses + ' lost', 'Open the losers', 'down')}</div></div>
-      </div>`;
+    const hero = this.hero(rows, st, open);
     const secs = this.ordered([
       { id: 'hero',  html: this.section('hero', 'The picture', 'what this doll holds', hero, 'exHeroSec') },
+      { id: 'notes', html: this.section('notes', '📝 ' + this.notesTitle(), 'your notes on these results, by the date you wrote them — each one keeps the figures of that day', this.notesView(rows, st)) },
       { id: 'curve', html: this.section('curve', 'The curve', 'every trade added up, in time order', this.curveSvg(st)) },
       { id: 'pnl',   html: this.section('pnl', 'Result per trade', 'how the wins and losses are spread', this.histogram(rows.map(t => t.pnl), 16, v => fmtNum(v), 'pnl')) },
       { id: 'rdist', html: this.section('rdist', 'R per trade', 'reward against the risk taken', this.histogram(rows.map(t => t.r).filter(Number.isFinite), 16, v => v.toFixed(1) + 'R', 'r')) },
@@ -337,9 +459,15 @@ const Explorer = {
     ].concat(splitSecs).concat(list ? [{ id: 'list', html: this.section('list', 'The trades themselves', rows.length <= 80 ? rows.length + ' — newest first' : rows.length + ' trades', list) }] : []));
     const maxed = this.secState().max;
     this._secIds = secs.map(x => x.id);
-    return `<div class="exWrap${maxed ? ' hasMax' : ''}">
-      <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}</div>
-      ${rows.length ? `<div class="exSecs">${secs.map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${this.path.length ? ' Try a wider doll.' : ''}</div>`}
+    const hidden = this.secState().hidden || {};
+    const shownSecs = secs.filter(x => !hidden[x.id]);
+    this._shownIds = shownSecs.map(x => x.id);
+    const offN = this.layoutIds().filter(id => hidden[id]).length;
+    return `<div class="exWrap${maxed ? ' hasMax' : ''} dens-${this.secState().dens || 'normal'}">
+      <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
+        <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
+      ${this.layoutOpen ? this.layoutPanel() : ''}
+      ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>`}
     </div>`;
   },
 
@@ -443,6 +571,16 @@ const Explorer = {
       `<p class="dim2 exHandNote">“Had you waited” uses the stop and target the trade had at the moment you closed it and the candles that followed (both in one candle counts as the stop). Real exits can differ by spread and slippage.</p>`;
   },
 
+  /* straight into one bot's doll (from Open Trades: press a bot's name) */
+  openBot(botId){
+    const b = BOT_BY_ID[botId];
+    this.path = [{ dim: 'bot', value: botId, label: b ? WorkspaceUI.name(b) : botId }];
+    this.excludes = {}; this.listAll = false; this._listN = 0;
+    lsSet('astra_explorer_path', this.path); lsSet('astra_explorer_excl', {});
+    this.dirty = true;
+    WorkspaceUI.openBot('explorer'); WorkspaceUI.expand(true);
+  },
+
   drill(dimId, value){
     const d = this.dim(dimId);
     this.path.push({ dim: dimId, value, label: d.name(value) });
@@ -473,6 +611,31 @@ const Explorer = {
     }
     host.querySelectorAll('.exMore [data-exact]').forEach(b => b.addEventListener('click', () => this.act(b.dataset.exact)));
     host.querySelectorAll('[data-exwhatif]').forEach(b => b.addEventListener('click', () => this.checkAll(this.filtered().filter(t => this.byHand(t)))));
+    const dn = host.querySelector('.dnCompose');
+    if (dn){
+      const ta = dn.querySelector('.dnText'), save = () => { const v = ta.value.trim(); if (!v) return toast('Write something first', 'warn'); this.notesAdd(v); };
+      dn.querySelector('[data-dnsave]').addEventListener('click', save);
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); save(); } });
+    }
+    host.querySelectorAll('[data-dndel]').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('Delete this note?')) return;
+      this.notesSave(this.notesAll().filter(n => n.id !== +b.dataset.dndel)); this.dirty = true; Bots.render();
+    }));
+    host.querySelectorAll('[data-dnedit]').forEach(el => el.addEventListener('blur', () => {
+      const list = this.notesAll(), n = list.find(x => x.id === +el.dataset.dnedit); if (!n) return;
+      const v = el.textContent.trim(); if (!v){ el.textContent = n.text; return; }
+      if (v !== n.text){ n.text = v; n.edited = Date.now(); this.notesSave(list); toast('Note updated', 'ok'); }
+    }));
+    host.querySelectorAll('[data-dnopen]').forEach(b => b.addEventListener('click', () => {
+      const n = this.notesAll().find(x => x.id === +b.dataset.dnopen); if (!n) return;
+      this.path = n.path.slice(); lsSet('astra_explorer_path', this.path); this.dirty = true; Bots.render();
+    }));
+    host.querySelectorAll('[data-exlayout]').forEach(b => b.addEventListener('click', () => { this.layoutOpen = !this.layoutOpen; this.dirty = true; Bots.render(); }));
+    host.querySelectorAll('[data-exlmv]').forEach(b => b.addEventListener('click', () => { const [id, d] = b.dataset.exlmv.split('|'); this.layoutMove(id, +d); }));
+    host.querySelectorAll('[data-exlon]').forEach(c => c.addEventListener('change', () => this.layoutToggle(c.dataset.exlon, c.checked)));
+    host.querySelectorAll('[data-exdens]').forEach(s => s.addEventListener('change', () => { const st = this.secState(); st.dens = s.value; this.saveSec(st); this.dirty = true; Bots.render(); }));
+    host.querySelectorAll('[data-exlreset]').forEach(b => b.addEventListener('click', () => this.layoutReset()));
+    host.querySelectorAll('[data-exopen]').forEach(b => b.addEventListener('click', () => WorkspaceUI.openBot('open')));
     host.querySelectorAll('[data-exlistmore]').forEach(b => b.addEventListener('click', () => { this._listN = (this._listN || this.LIST_STEP) + this.LIST_STEP; this.dirty = true; Bots.render(); }));
     if (this._focus){
       const id = this._focus; this._focus = null;
@@ -501,31 +664,43 @@ const Explorer = {
     host.querySelectorAll('[data-exgrip]').forEach(g => g.addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
       const sec = g.closest('.exSec'), grid = sec.parentElement, id = g.dataset.exgrip;
-      const colW = grid.getBoundingClientRect().width / 6, startX = e.clientX, startW = sec.getBoundingClientRect().width;
+      const colW = grid.getBoundingClientRect().width / 12, startX = e.clientX, startW = sec.getBoundingClientRect().width;
       document.body.classList.add('resizing');
-      const move = ev => { const span = Math.max(1, Math.min(6, Math.round((startW + ev.clientX - startX) / colW))); sec.style.gridColumn = 'span ' + span; sec.dataset.span = span; };
+      const move = ev => { const span = Math.max(2, Math.min(12, Math.round((startW + ev.clientX - startX) / colW))); sec.style.gridColumn = 'span ' + span; sec.dataset.span = span; sec.dataset.w = '1'; this.fitAll(host); };
       const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); if (sec.dataset.span) this.secAction(id, +sec.dataset.span, this._secIds || []); };
       window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
     }));
     host.querySelectorAll('[data-exs]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
-      this.secAction(b.closest('[data-exsec]').dataset.exsec, b.dataset.exs, this._secIds || []);
+      this.secAction(b.closest('[data-exsec]').dataset.exsec, b.dataset.exs, this.layoutIds(), this._shownIds || this._secIds || []);
     }));
     /* a folded section opens when its heading is clicked */
     host.querySelectorAll('.exSec.folded .exSecHead').forEach(h => h.addEventListener('click', e => { if (!e.target.closest('[data-exs]')) this.secAction(h.closest('[data-exsec]').dataset.exsec, 'fold', this._secIds || []); }));
     /* drag the bottom-right corner of a section to resize it; the height is remembered */
-    if (window.ResizeObserver){
-      host.querySelectorAll('.exSecBody').forEach(body => {
-        let first = true;
-        const ro = new ResizeObserver(() => {
-          if (first){ first = false; return; }
-          const st = this.secState(); const id = body.closest('[data-exsec]').dataset.exsec;
-          const h = Math.round(body.getBoundingClientRect().height);
-          if (h > 40){ st.h[id] = h; this.saveSec(st); }
-        });
-        ro.observe(body);
+    /* double-click the right edge: the normal width again */
+    host.querySelectorAll('[data-exgrip]').forEach(g => g.addEventListener('dblclick', e => {
+      e.preventDefault(); const st = this.secState(); if (st.w) delete st.w[g.dataset.exgrip]; this.saveSec(st); this.dirty = true; Bots.render();
+    }));
+    /* drag the bottom edge: the height, like a row in Excel; double-click: natural height */
+    host.querySelectorAll('[data-exhgrip]').forEach(g => {
+      g.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const sec = g.closest('.exSec'), body = sec.querySelector(':scope > .exSecBody'), id = g.dataset.exhgrip; if (!body) return;
+        const startY = e.clientY, startH = body.getBoundingClientRect().height;
+        body.classList.add('fixed'); document.body.classList.add('resizing', 'rowResizing');
+        const move = ev => { body.style.height = Math.max(40, Math.round(startH + ev.clientY - startY)) + 'px'; this.fit(body); };
+        const up = () => {
+          window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('resizing', 'rowResizing');
+          const st = this.secState(); st.h[id] = Math.round(body.getBoundingClientRect().height); this.saveSec(st); this.dirty = true; Bots.render();
+        };
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
       });
-    }
+      g.addEventListener('dblclick', e => { e.preventDefault(); const st = this.secState(); delete st.h[g.dataset.exhgrip]; this.saveSec(st); this.dirty = true; Bots.render(); });
+    });
+    /* content reshapes to its box; and again whenever the window changes size */
+    this.fitAll(host);
+    if (window.ResizeObserver && !this._fitRO){ this._fitRO = new ResizeObserver(() => { const h = document.getElementById('botBody'); if (h && h.querySelector('.exWrap')) this.fitAll(h); }); }
+    if (this._fitRO){ this._fitRO.disconnect(); host.querySelectorAll('.exSecBody.fixed').forEach(b => this._fitRO.observe(b)); }
     /* the big number counts up, the bars grow in — a beat after the page is on screen */
     requestAnimationFrame(() => {
       host.querySelectorAll('.exBar i, .exBin i').forEach(el => { const w = el.style.width, h = el.style.height; el.style.transition = 'none'; if (w) el.style.width = '0'; if (h) el.style.height = '0'; void el.offsetWidth; el.style.transition = ''; if (w) el.style.width = w; if (h) el.style.height = h; });
@@ -535,6 +710,23 @@ const Explorer = {
   },
 };
 Explorer.path = lsGet('astra_explorer_path', []) || [];
+/* an older general note written on the Deep Dive page becomes an "all bots" dated note, once */
+try {
+  const old = typeof lsGet === 'function' ? (lsGet('astra_botnotes', {}) || {}).explorer : null;
+  if (old && old.text && !lsGet('astra_divenotes_moved', false)){
+    const list = Explorer.notesAll(); list.push({ id: old.at || Date.now(), at: old.at || Date.now(), bot: null, path: [], where: [], snap: {}, text: old.text });
+    Explorer.notesSave(list); lsSet('astra_divenotes_moved', true);
+  }
+} catch(e){}
+/* a bot's name on an Open Trades card opens its Deep Dive (one listener for every card, rebuilt or not) */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-otdive]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  /* the bot's own page; its Net result panel links on to the Deep Dive */
+  const id = b.dataset.otdive; if (!BOT_BY_ID[id]) return;
+  WorkspaceUI.openBot(id); WorkspaceUI.expand(true);
+  setTimeout(() => { const w = document.querySelector('.brWrap'); if (w) w.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+});
 Explorer.excludes = lsGet('astra_explorer_excl', {}) || {};
 BOTS.push({ id: 'explorer', name: 'Deep Dive', analysis: true, explorer: true,
   blurb: 'Every trade, opened like a Russian doll: start with everything, press a market, then a pair, a bot, a timeframe, a side, a day — and see the whole picture of what is left at every step.',

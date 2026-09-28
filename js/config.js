@@ -20,26 +20,67 @@ const BUS = {
   emit(ev, d){ (this.m[ev] || []).forEach(fn => { try { fn(d); } catch(e){ console.error(e); } }); }
 };
 
+/* ---------------------------------------------------------------------------
+   Extra chart screens.
+
+   A screen is this same page, loaded with ?panel=chart&tile=<n>, so it IS the
+   real chart with every tool — drawings, all indicators, the price rail, the
+   buy/sell buttons — not a small copy of one. To let two screens show two
+   different instruments with two different indicator sets, the handful of keys
+   that describe ONE chart are stored per screen: 'astra_ind' becomes
+   'astra_ind::t3'. Everything else (drawings per symbol, positions, alerts,
+   watchlist, theme) deliberately stays shared, so a line drawn on a screen is
+   the same line the main chart shows.
+   --------------------------------------------------------------------------- */
+const TILE_ID = (() => {
+  const v = new URLSearchParams(location.search).get('tile');
+  return v && /^[0-9a-z]{1,12}$/i.test(v) ? v : null;
+})();
+/* A chart window on another monitor deserves the same independence as a screen
+   on the desk: its own instrument, timeframe and indicators. It carries
+   ?chart=w2, ?chart=w3 … — a SLOT, not a random id, so "the chart window on the
+   left-hand monitor" comes back the way it was left every time it is opened. */
+const CHART_WIN = (() => {
+  const v = new URLSearchParams(location.search).get('chart');
+  return v && /^w[0-9]{1,2}$/.test(v) ? v : null;
+})();
+const CHART_ID = TILE_ID || CHART_WIN;
+const PER_CHART_KEYS = new Set([
+  'astra_ind', 'astra_panestate', 'astra_panemode',
+  'astra_ctype', 'astra_compare', 'astra_symbol', 'astra_tf',
+]);
+/* per-chart key: the plain key in the main window, a suffixed one in a screen */
+function PCK(k){ return CHART_ID && PER_CHART_KEYS.has(k) ? k + '::t' + CHART_ID : k; }
+/* A screen that has never been touched reads the MAIN chart's value, so a new
+   screen opens showing exactly what the main chart shows — which is what you
+   expect when you split the screen. The first change it saves makes it its own. */
+function rawPC(k){
+  const own = localStorage.getItem(PCK(k));
+  return own == null && CHART_ID ? localStorage.getItem(k) : own;
+}
+
 /* central market store */
 const STORE = {
   tickers: new Map(),   // symbol -> {last, open, high, low, vol, quoteVol, pct, count}
   universe: [],         // USDT symbols sorted by quote volume
-  /* a torn-off window is opened with its own symbol in the address, so three
-     monitors can watch three different instruments */
-  symbol: (new URLSearchParams(location.search).get('panel')
-    ? new URLSearchParams(location.search).get('symbol') : null)
+  /* a torn-off window or an extra screen is opened with its own symbol in the
+     address, so three monitors can watch three different instruments */
+  symbol: localStorage.getItem(PCK('astra_symbol'))
+    || (new URLSearchParams(location.search).get('panel')
+      ? new URLSearchParams(location.search).get('symbol') : null)
     || localStorage.getItem('astra_symbol') || CFG.DEFAULT_SYMBOL,
-  tf: (new URLSearchParams(location.search).get('panel')
-    ? new URLSearchParams(location.search).get('tf') : null)
+  tf: localStorage.getItem(PCK('astra_tf'))
+    || (new URLSearchParams(location.search).get('panel')
+      ? new URLSearchParams(location.search).get('tf') : null)
     || localStorage.getItem('astra_tf') || CFG.DEFAULT_TF,
-  chartType: localStorage.getItem('astra_ctype') || 'candles',
+  chartType: rawPC('astra_ctype') || 'candles',
   theme: localStorage.getItem('astra_theme') || 'dark',   // dark is the default
 };
 document.documentElement.dataset.theme = STORE.theme;
 
-function lsGet(k, def){ try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch(e){ return def; } }
+function lsGet(k, def){ try { const v = rawPC(k); return v == null ? def : JSON.parse(v); } catch(e){ return def; } }
 function lsSet(k, v){
-  try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+  try { localStorage.setItem(PCK(k), JSON.stringify(v)); return true; }
   catch(e){
     console.error('ASTRA could not save ' + k + ':', e.message);
     if (!lsSet.warnedAt || Date.now() - lsSet.warnedAt > 30000){

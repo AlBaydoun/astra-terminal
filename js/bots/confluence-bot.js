@@ -169,33 +169,35 @@ const ConfluenceBot = {
       return {...t,pnl,r:pnl/t.meta.initialRisk};
     })};
   },
-  controls(){
+  controls(){const P=this.controlParts();return P.buttons+P.rules;},
+  controlParts(){
     const c=this.config();
-    return `<div class="botCtl"><b>M15 · all ${ConfluenceScanner.catalogue().length} JustMarkets instruments · paper only</b>
+    return {buttons:`<div class="botCtl"><b>M15 · all ${ConfluenceScanner.catalogue().length} JustMarkets instruments · paper only</b>
       <button class="bBtn ${c.paused?'go':'danger'}" data-cf="toggle">${c.paused?'Start paper bot':'Pause paper bot'}</button>
       <button class="bBtn" data-cf="check">Scan all pairs now</button>
       <button class="bBtn" data-cf="chart" title="Opens M15 candles with ASTRA labels and preserves your candle-pattern display">Open indicator chart</button>
-      <a class="bBtn" href="research/confluence.html" target="_blank" rel="noopener">Split-test results &amp; guide</a></div>
-      <form id="cfLimitsForm"><div class="botCtl">${this.limitFields.map(([key,label,min,max,step])=>
+      <a class="bBtn" href="research/confluence.html" target="_blank" rel="noopener">Split-test results &amp; guide</a></div>`,
+      rules:`<form id="cfLimitsForm"><div class="botCtl">${this.limitFields.map(([key,label,min,max,step])=>
         `<label class="bc" for="cfLimit_${key}">${label}<input id="cfLimit_${key}" name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${esc(String(c.limits[key]))}"></label>`).join('')}</div>
       <div class="botCtl"><button class="bBtn go" type="submit">Save trading rules</button>
         <button class="bBtn" type="button" data-cf="maximum">Maximum trade counts</button>
         <button class="bBtn" type="button" data-cf="defaults">Reset defaults</button>
         <span class="bcNote">0 means no count limit in the first four boxes. Percentage budgets still apply. Maximum trade counts changes only those four boxes; press Save to apply.</span></div>
-      <div class="botNote" id="cfSettingsStatus" role="status">Saved rules apply to new trades. Reset defaults does not erase history.</div></form>`;
+      <div class="botNote" id="cfSettingsStatus" role="status">Saved rules apply to new trades. Reset defaults does not erase history.</div></form>`};
   },
   rulesText(){
     const c=this.config(),n=v=>v===0?'no count limit':v;
     return `Open positions: ${n(c.limits.maxOpen)}; per pair: ${n(c.limits.maxPerSymbol)}; related positions: ${n(c.limits.maxCorrelated)}; daily entries per pair: ${n(c.entriesPerDay)}. `+
       `Each position uses at most ${c.perTradeNotionalPct}% of equity and risks at most ${c.risk.riskPct}%. All positions share ${c.risk.maxNotionalPct}% of equity and a ${c.risk.maxDailyLossPct}% daily loss budget. Broker minimum lots can prevent smaller entries.`;
   },
-  view(){
+  view(){return this.statusNote()+ConfluenceScanner.view(true);},
+  statusNote(){
     return `<div class="botNote"><b id="cfBotStatus">${this.config().paused?'PAUSED':'PAPER BOT ON'} · ${esc(this.last?.why||'Waits for a completed candle with all five checks aligned.')}</b><br>
       EMA trend + pullback trigger + ADX strength + RSI momentum + tick activity. Score is checks passed, never a win probability.
       Trades 11:00–17:45 broker time. Stop 2 ATR; target 4 ATR; maximum hold 3 hours. Repeat entries need a new completed-candle signal; refreshing cannot duplicate a signal.<br>
       <span id="cfRulesSummary">${esc(this.rulesText())}</span><br>
       Keep the PC, ASTRA and bridge running for paper exits. Saved stops return after restart; they cannot execute while the PC is off.<br>
-      <b>Experimental: not established as profitable.</b> The scanner chooses exact pairs across the broker catalogue. The earlier eight-market study does not establish profitability for this wider portfolio.</div>`+ConfluenceScanner.view(true);
+      <b>Experimental: not established as profitable.</b> The scanner chooses exact pairs across the broker catalogue. The earlier eight-market study does not establish profitability for this wider portfolio.</div>`;
   },
   refresh(){
     ConfluenceScanner.refresh();
@@ -203,6 +205,16 @@ const ConfluenceBot = {
     const toggle=host.querySelector('[data-cf="toggle"]'),paused=this.config().paused;
     if(toggle){toggle.textContent=paused?'Start paper bot':'Pause paper bot';toggle.className='bBtn '+(paused?'go':'danger');}
     const summary=host.querySelector('#cfRulesSummary');if(summary)summary.textContent=this.rulesText();
+    if(host.querySelector('[data-blpage="confluence"]')){
+      const L=this.displayLedger(Bots.ledger('confluence')||BotEngine.blank('confluence'));
+      const P=Bots.ledgerParts('confluence',L,BotEngine.stats(L));
+      for(const k of ['result','stats','equity','history','decisions','lessons','daily']){
+        const el=host.querySelector('[data-blpart="'+k+'"]');
+        if(el&&!(el.contains(document.activeElement)&&document.activeElement.matches('input,select,textarea'))){el.innerHTML=P[k];Bots.bindPositionControls(el);}
+      }
+      Bots.wireCols(host,'confluence');
+      return;
+    }
     const ledger=host.querySelector('#cfLedger');
     if(ledger && !(ledger.contains(document.activeElement)&&document.activeElement.matches('input,select,textarea'))){
       const L=this.displayLedger(Bots.ledger('confluence')||BotEngine.blank('confluence'));

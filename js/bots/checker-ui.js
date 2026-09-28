@@ -73,7 +73,7 @@ Object.assign(Checker, {
   },
 
   /* ================= page ================= */
-  view(){
+  view(extras){
     const S = this.load();
     if (!this.loaded) return '<div class="ckWrap"><div class="empty">Opening the checker’s memory…</div></div>';
     const M = this.model();
@@ -93,6 +93,18 @@ Object.assign(Checker, {
       ['botsMade', '🤖 Paper bots made from findings', 'they re-tune themselves as new history arrives', safe(() => this.botsView())],
       ['lib', '📚 The library', 'every signal the checker knows, and how it is measured', safe(() => this.libView())],
     ];
+    /* ⚙ Layout: the top as well as the sections, in your order */
+    if (extras && typeof BotLayout !== 'undefined'){
+      const parts = {
+        notes: extras.notes || '',
+        status: this.statusView(S),
+        controls: this.controlsView(S),
+        crumbs: `<div class="exCrumbs">${crumbs}${P.length ? `<button class="bMini" data-ckcrumb="-1">✕ clear</button>` : ''}</div>`,
+        hero: M.hero.n ? safe(() => this.heroView(M.hero, S)) : `<div class="empty">${this.chunks.size ? 'Nothing measured in this doll yet — go back a step.' : 'The checker has not measured anything yet. It starts by itself a few seconds after ASTRA opens (the MT5 bridge has to be running) — or press “Study now”.'}</div>`,
+      };
+      for (const [id, t, h, body] of secs) parts[id] = this.sec(id, t, h, body);
+      return `<div class="ckWrap" data-blpage="checker">${BotLayout.compose('checker', parts, true)}</div>`;
+    }
     return `<div class="ckWrap">
       ${this.statusView(S)}
       ${this.controlsView(S)}
@@ -337,7 +349,9 @@ Object.assign(Checker, {
     });
     q('[data-ckfold]', el => { const id = el.dataset.ckfold; S.secs[id] = Object.assign({}, S.secs[id], { fold: !(S.secs[id] || {}).fold }); this.save(); this.dirty = true; Bots.render(); });
     q('[data-ckmove]', el => {
-      const [id, d] = el.dataset.ckmove.split('|'); const secs = [...host.querySelectorAll('[data-cksec]')];
+      const [id, d] = el.dataset.ckmove.split('|');
+      if (typeof BotLayout !== 'undefined' && host.querySelector('[data-blpage="checker"]')){ BotLayout.move('checker', id, +d, BotLayout.visible('checker')); return; }
+      const secs = [...host.querySelectorAll('[data-cksec]')];
       const i = secs.findIndex(x => x.dataset.cksec === id), j = i + +d; if (j < 0 || j >= secs.length) return;
       if (+d < 0) secs[j].before(secs[i]); else secs[j].after(secs[i]);
       S.order = [...host.querySelectorAll('[data-cksec]')].map(x => x.dataset.cksec); this.save();
@@ -367,7 +381,7 @@ Object.assign(Checker, {
       this.dirty = true; Bots.render();
     });
     /* keep the section order the way it was left */
-    if (S.order && S.order.length){ const wrap = host.querySelector('.ckWrap'); for (const id of S.order){ const el = host.querySelector('[data-cksec="' + id + '"]'); if (el) wrap.appendChild(el); } }
+    if (S.order && S.order.length && !host.querySelector('[data-blpage="checker"]')){ const wrap = host.querySelector('.ckWrap'); for (const id of S.order){ const el = host.querySelector('[data-cksec="' + id + '"]'); if (el) wrap.appendChild(el); } }
     this.dirty = false;
   },
 });

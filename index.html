@@ -240,7 +240,9 @@
             <div class="scrHead">
               <input id="scrSearch" type="text" placeholder="Filter pairs… e.g. SOL" spellcheck="false">
               <span id="scrCount"></span>
+              <button id="scrCfg" class="bMini" title="Columns: order, show / hide">⚙ Columns</button>
             </div>
+            <div id="scrCfgBox" hidden></div>
             <div class="scrWrap">
               <table id="scrTable">
                 <thead><tr>
@@ -262,6 +264,8 @@
               <canvas id="heatCanvas"></canvas>
               <div id="heatTip"></div>
               <span id="heatSrc"></span>
+              <button id="heatCfg" class="bMini" title="Order of the tiles, which markets, how many">⚙ Arrange</button>
+              <div id="heatCfgBox" hidden></div>
             </div>
           </div>
           <div id="bot-observer" class="botPanel">
@@ -332,7 +336,8 @@
       <div class="sideBody">
 
         <div id="tab-watch" class="sidePanel active">
-          <div class="sideHead"><span>WATCHLIST</span><button id="watchAdd" title="Add symbol">+</button></div>
+          <div class="sideHead"><span>WATCHLIST</span><button id="watchCfg" title="Order of the watchlist and what each row shows">⚙</button><button id="watchAdd" title="Add symbol">+</button></div>
+          <div id="watchCfgBox" hidden></div>
           <div id="watchBody"></div>
         </div>
 
@@ -346,7 +351,8 @@
         </div>
 
         <div id="tab-alerts" class="sidePanel">
-          <div class="sideHead"><span>PRICE ALERTS</span><button id="alertNew" title="New alert">+</button></div>
+          <div class="sideHead"><span>PRICE ALERTS</span><button id="alertCfg" title="Order of the alerts and what is shown">⚙</button><button id="alertNew" title="New alert">+</button></div>
+          <div id="alertCfgBox" hidden></div>
           <div id="alertsBody"></div>
         </div>
 
@@ -602,6 +608,9 @@
 <script src="js/intel.js"></script>
 <script src="js/brain.js"></script>
 <script src="js/obchat.js"></script>
+<script src="js/side-layout.js"></script>
+<script src="js/observer-layout.js"></script>
+<script src="js/page-zoom.js"></script>
 <script src="js/bots/context.js"></script>
 <script src="js/bots/brainml.js"></script>
 <script src="js/bots/engine.js"></script>
@@ -624,6 +633,8 @@
 <script src="js/bots/research.js"></script>
 <script src="js/bots/us-stocks.js"></script>
 <script src="js/bots/bot-notes.js"></script>
+<script src="js/bots/bot-result.js"></script>
+<script src="js/bots/bot-layout.js"></script>
 <script src="js/bots/opentrades.js"></script>
 <script src="js/bots/live.js"></script>
 <script src="js/bots/live-desk.js"></script>
@@ -645,6 +656,7 @@
 <script src="js/windows.js"></script>
 <script src="js/account.js"></script>
 <script src="js/popout.js"></script>
+<script src="js/chartscreens.js"></script>
 <script src="js/market-ticker.js"></script>
 <script src="js/market-news.js"></script>
 <script src="js/market-clock.js"></script>

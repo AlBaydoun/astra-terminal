@@ -12,30 +12,38 @@ const LiveManual = {
     if(host.querySelector('#mbAmt'))this.draft.amount=host.querySelector('#mbAmt').value;
   },
   invalidate(){this.revision++;this.preview=null;this.status();},
-  view(){
+  view(notes){
     const last=Live.loadBook().orders.find(o=>o.bot===this.id);
     if(last?.brokerSaid?.startsWith('UNCERTAIN:'))this.uncertain=true;
     const d=this.draft,syms=this.symbols();if(!syms.includes(d.sym))d.sym=syms.includes(Feed.brokerName(STORE.symbol))?Feed.brokerName(STORE.symbol):syms[0]||'';
     const S=Live.load(),C=S.caps;
     const field=(key,label,value,step='any')=>`<label class="bc">${label}<input data-lm="${key}" type="number" min="0" step="${step}" value="${esc(value)}"></label>`;
-    return `<div id="lmDesk" class="lmDesk"><div class="lmBanner"><div><b>LIVE Trading Bot</b><p>Real JustMarkets account · every Buy or Sell here can move real money once armed.</p></div><button class="bBtn" data-ws-bot="manual">↩ Manual Trading Bot · paper</button></div>
-      <div id="lmState" class="botNote"></div>
-      <details class="wsTradeSection"><summary>Connection &amp; unlock · expand when ready</summary><p>The live bridge, session code, named arming and “TRADE REAL MONEY” confirmation are all required. Each page load starts this ticket locked.</p>
+    /* the page in parts, so ⚙ Layout can put them in your order. Every part stays
+       inside #lmDesk and a part you switch off is only HIDDEN — every status line,
+       button and safety check keeps working exactly as before. */
+    const parts={
+      notes: notes||'',
+      banner:`<div class="lmBanner"><div><b>LIVE Trading Bot</b><p>Real JustMarkets account · every Buy or Sell here can move real money once armed.</p></div><button class="bBtn" data-ws-bot="manual">↩ Manual Trading Bot · paper</button></div>`,
+      state:`<div id="lmState" class="botNote"></div>`,
+      connection:`<details class="wsTradeSection"><summary>Connection &amp; unlock · expand when ready</summary><p>The live bridge, session code, named arming and “TRADE REAL MONEY” confirmation are all required. Each page load starts this ticket locked.</p>
       <div class="lmActions"><button class="bBtn" data-ws-bot="live">Live connection &amp; account limits</button><button class="bBtn" data-lm-act="refresh">↻ Refresh account</button><button class="bBtn danger" data-lm-act="lock">Lock this ticket</button></div>
-      <div class="lmActions"><label class="bc">Type LIVE trading bot<input id="lmArmName" autocomplete="off" placeholder="LIVE trading bot"></label><button class="bBtn" data-lm-act="arm">Arm in shadow</button><label class="bc">Confirm real trading<input id="lmRealPhrase" autocomplete="off" placeholder="TRADE REAL MONEY"></label><button class="bBtn danger" data-lm-act="live">Unlock real orders for this session</button></div></details>
-      <section class="wsTradeSection"><h3>2 · Your market order</h3><p id="lmQuote"></p><div class="lmForm">
+      <div class="lmActions"><label class="bc">Type LIVE trading bot<input id="lmArmName" autocomplete="off" placeholder="LIVE trading bot"></label><button class="bBtn" data-lm-act="arm">Arm in shadow</button><label class="bc">Confirm real trading<input id="lmRealPhrase" autocomplete="off" placeholder="TRADE REAL MONEY"></label><button class="bBtn danger" data-lm-act="live">Unlock real orders for this session</button></div></details>`,
+      order:`<section class="wsTradeSection"><h3>2 · Your market order</h3><p id="lmQuote"></p><div class="lmForm">
       </div>${Bots.manualTicketView(true)}
       <div hidden><input id="lmSearch"><select data-lm="sym">${syms.map(s=>`<option value="${esc(s)}"${s===d.sym?' selected':''}>${esc(s)}</option>`).join('')}</select><select data-lm="side"><option value="buy">buy</option><option value="sell">sell</option></select>${field('lots','Lots',d.lots)}${field('sl','Stop',d.sl)}${field('tp','Target',d.tp)}</div>
-      <details><summary>Live account rules and position budgets</summary><p>Risk, lot, count and loss limits are shared with the existing Live Trading controls. Position-value and correlation ceilings below apply to this manual ticket for this session.</p><div class="lmForm">
+      <div class="lmActions"><button class="bBtn" data-lm-act="chart">Open pair chart ↗</button></div></section>`,
+      rules:`<details class="wsTradeSection"><summary>Live account rules and position budgets</summary><p>Risk, lot, count and loss limits are shared with the existing Live Trading controls. Position-value and correlation ceilings below apply to this manual ticket for this session.</p><div class="lmForm">
       ${['riskPct','maxLots','maxOpen','maxDailyLossPct','maxTotalLossPct'].map((k,i)=>field(k,['Risk per trade · % equity','Maximum lots','Maximum real positions','Daily loss · % equity (UTC)','Total loss · % since linking'][i],C[k])).join('')}
       ${field('maxNotionalPct','Total position value · % equity',d.maxNotionalPct)}${field('maxCorrelated','Positions sharing a currency',d.maxCorrelated,'1')}${field('maxPerSymbol','Positions per pair · hedging account',d.maxPerSymbol??1,'1')}
-      </div><button class="bBtn" data-lm-act="save">Save shared limits &amp; allow selected pair</button><p id="lmAllowed"></p></details>
-      <div class="lmActions"><button class="bBtn" data-lm-act="chart">Open pair chart ↗</button></div>
-      <div id="lmPreview" class="lmPreview" hidden></div>
+      </div><button class="bBtn" data-lm-act="save">Save shared limits &amp; allow selected pair</button><p id="lmAllowed"></p></details>`,
+      confirm:`<section class="wsTradeSection"><div id="lmPreview" class="lmPreview" hidden></div>
       <div class="lmActions"><button class="bBtn danger" id="lmSend" data-lm-act="send" disabled>Confirm real market order</button><button class="bBtn" id="lmReviewed" data-lm-act="reviewed" hidden>I checked the uncertain outcome in MT5</button></div><p id="lmMessage" role="status"></p>
-      <p>Accepted SL/TP levels are held by the broker and remain active with your PC off. Gaps can fill beyond a stop. Pending orders, trailing stops and stop edits are managed in MetaTrader. Automatic market entries have their own Start control below.</p></section>
-      ${typeof ManualAuto!=='undefined'?this.automation().view():''}
-      <section class="wsTradeSection"><h3>3 · Real open trades</h3><div id="lmPositions"></div><p>These are broker positions across the account. Close buttons appear only for trades opened by this LIVE Trading Bot. Manage stop/target changes and other positions directly in MT5.</p></section></div>`;
+      <p>Accepted SL/TP levels are held by the broker and remain active with your PC off. Gaps can fill beyond a stop. Pending orders, trailing stops and stop edits are managed in MetaTrader. Automatic market entries have their own Start control below.</p></section>`,
+      auto: typeof ManualAuto!=='undefined'?this.automation().view():'',
+      positions:`<section class="wsTradeSection"><h3>3 · Real open trades</h3><div id="lmPositions"></div><p>These are broker positions across the account. Close buttons appear only for trades opened by this LIVE Trading Bot. Manage stop/target changes and other positions directly in MT5.</p></section>`,
+    };
+    const body=typeof BotLayout!=='undefined'?BotLayout.compose(this.id,parts,true):Object.values(parts).join('');
+    return `<div id="lmDesk" class="lmDesk">${body}</div>`;
   },
   unlocked:false,
   stateGate(){

@@ -4,6 +4,40 @@ const Heat = {
   src: '',
   rects: [],
   timer: null,
+  /* ⚙ the heatmap your way: tile order, which markets, how many tiles, tile size */
+  CFG_KEY: 'astra_heatcfg',
+  SORTS: [['move', 'Biggest moves first'], ['best', 'Best → worst'], ['worst', 'Worst → best'], ['az', 'A → Z'], ['group', 'Grouped by market']],
+  cfg(){ const c = lsGet(this.CFG_KEY, {}) || {}; return { sort: c.sort || 'move', groups: c.groups || null, watchOnly: !!c.watchOnly, count: c.count || 60, size: c.size || 'equal' }; },
+  saveCfg(c){ lsSet(this.CFG_KEY, c); this.draw(); this.cfgView(); },
+  groupOf(name){ try { return (typeof Bots !== 'undefined' && Bots.groupOfAny) ? (Bots.groupOfAny(name) || 'other') : 'other'; } catch(e){ return 'other'; } },
+  groups(){ try { return typeof Bots !== 'undefined' ? Bots.marketGroups() : {}; } catch(e){ return {}; } },
+  /* the tiles to draw, in your order (the treemap fills from the top-left in this order) */
+  arranged(){
+    const c = this.cfg(), broker = typeof MarketSources !== 'undefined' && !MarketSources.binanceOn();
+    let L = this.data.slice();
+    if (broker){
+      if (c.watchOnly && typeof Watch !== 'undefined'){ const w = new Set(Watch.list.map(s => Feed.brokerName ? Feed.brokerName(s) : s)); L = L.filter(i => w.has(i.name) || w.has(Feed.brokerName ? Feed.brokerName(i.name) : i.name)); }
+      if (c.groups) L = L.filter(i => c.groups.includes(this.groupOf(i.name)));
+      L.forEach(i => { i.w = c.size === 'move' ? 0.25 + Math.min(8, Math.abs(i.pct || 0)) : 1; });
+    }
+    const by = { move: (a, b) => Math.abs(b.pct) - Math.abs(a.pct), best: (a, b) => b.pct - a.pct, worst: (a, b) => a.pct - b.pct, az: (a, b) => a.name.localeCompare(b.name) };
+    if (c.sort === 'group'){ const G = this.groups(), keys = Object.keys(G); L.sort((a, b) => keys.indexOf(this.groupOf(a.name)) - keys.indexOf(this.groupOf(b.name)) || Math.abs(b.pct) - Math.abs(a.pct)); }
+    else if (by[c.sort] && (broker || c.sort !== 'move')) L.sort(by[c.sort]);
+    return L.slice(0, c.count);
+  },
+  cfgView(){
+    const box = document.getElementById('heatCfgBox'), btn = document.getElementById('heatCfg'); if (!box) return;
+    box.hidden = !this.cfgOpen; if (btn) btn.classList.toggle('on', !!this.cfgOpen);
+    if (!this.cfgOpen){ box.innerHTML = ''; return; }
+    const c = this.cfg(), G = this.groups(), broker = typeof MarketSources !== 'undefined' && !MarketSources.binanceOn();
+    const opt = (L, v) => L.map(([k, t]) => `<option value="${k}"${String(k) === String(v) ? ' selected' : ''}>${t}</option>`).join('');
+    box.innerHTML = `<label>Order <select data-hsort="1">${opt(this.SORTS, c.sort)}</select></label>
+      <label>Tiles <select data-hcount="1">${opt([[30, '30'], [60, '60'], [100, '100'], [200, '200']], c.count)}</select></label>
+      ${broker ? `<label>Size <select data-hsize="1">${opt([['equal', 'All equal'], ['move', 'Bigger move = bigger tile']], c.size)}</select></label>
+      <label><input type="checkbox" data-hwatch="1" ${c.watchOnly ? 'checked' : ''}> Only my watchlist</label>
+      <div class="hGroups">Markets ${Object.entries(G).map(([id, g]) => `<label><input type="checkbox" data-hgroup="${id}" ${!c.groups || c.groups.includes(id) ? 'checked' : ''}> ${esc(g.label)}</label>`).join('')}</div>` : ''}
+      <button class="bMini" data-hreset="1">↺ Reset</button>`;
+  },
 
   async load(){
     const revision = typeof MarketSources !== 'undefined' ? MarketSources.revision : 0;
@@ -54,13 +88,14 @@ const Heat = {
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const items = this.data.slice(0, 60);
+    const items = this.arranged();
+    if (!items.length){ this.rects = []; const s = document.getElementById('heatSrc'); if (s) s.textContent = 'Nothing to show with these ⚙ choices'; return; }
     const total = items.reduce((a, b) => a + b.w, 0);
     this.rects = [];
     this.split(items.map(i => ({ ...i, area: i.w / total * W * H })), 0, 0, W, H);
     for (const r of this.rects) this.cell(ctx, r);
     const srcEl = document.getElementById('heatSrc');
-    if (srcEl) srcEl.textContent = this.src;
+    if (srcEl){ const c = this.cfg(); srcEl.textContent = this.src + ' · ' + items.length + ' tiles · ' + (this.SORTS.find(x => x[0] === c.sort) || [, ''])[1].toLowerCase(); }
   },
 
   /* recursive weighted binary split treemap */
@@ -111,6 +146,17 @@ const Heat = {
   },
 
   wire(){
+    document.getElementById('heatCfg')?.addEventListener('click', () => { this.cfgOpen = !this.cfgOpen; this.cfgView(); });
+    const box = document.getElementById('heatCfgBox');
+    box?.addEventListener('change', e => {
+      const t = e.target, c = this.cfg();
+      if (t.dataset.hsort) c.sort = t.value; else if (t.dataset.hcount) c.count = +t.value; else if (t.dataset.hsize) c.size = t.value;
+      else if (t.dataset.hwatch) c.watchOnly = t.checked;
+      else if (t.dataset.hgroup){ const all = Object.keys(this.groups()); let g = c.groups || all.slice(); g = t.checked ? g.concat([t.dataset.hgroup]) : g.filter(x => x !== t.dataset.hgroup); c.groups = g.length === all.length ? null : g; }
+      else return;
+      this.saveCfg(c);
+    });
+    box?.addEventListener('click', e => { if (e.target.closest('[data-hreset]')){ lsSet(this.CFG_KEY, {}); this.draw(); this.cfgView(); } });
     const cv = document.getElementById('heatCanvas');
     const tip = document.getElementById('heatTip');
     cv.addEventListener('mousemove', e => {

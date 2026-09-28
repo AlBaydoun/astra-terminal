@@ -9,6 +9,10 @@
    Prohibited list still has the last word over everything here. */
 const BotMarkets = {
   q: {},                                  // search text per bot
+  /* the Markets section folded or open, per bot — remembered */
+  FOLD_KEY: 'astra_mkfold',
+  folded(id){ const f = lsGet(this.FOLD_KEY, {}) || {}; return !!f[id]; },
+  toggleFold(id){ const f = lsGet(this.FOLD_KEY, {}) || {}; if (f[id]) delete f[id]; else f[id] = true; lsSet(this.FOLD_KEY, f); Bots.render(); },
   short(sym){ const b = baseAsset(sym); const i = b.lastIndexOf('.'); return i > 0 && b.length - i <= 5 ? b.slice(0, i) : b; },
 
   /* the pairs a bot's old whitelist (instruments) excluded count as blocked */
@@ -126,3 +130,9 @@ const BotMarkets = {
     if (search) search.addEventListener('input', () => { this.q[b.id] = search.value; Bots.render(); const s2 = document.querySelector('[data-mksearch]'); if (s2){ s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } });
   },
 };
+
+/* the fold button on every bot's Markets section (one listener, the page is rebuilt often) */
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-mkfold]');
+  if (b){ e.preventDefault(); BotMarkets.toggleFold(b.dataset.mkfold); }
+});

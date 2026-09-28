@@ -893,7 +893,7 @@ const Chart = {
       if (route.kind === 'proxy'){
         toast(baseAsset(STORE.symbol) + ' has no second-by-second data from the public feed — showing 1 minute. Run the MT5 bridge for seconds.', 'warn');
         STORE.tf = '1m';
-        localStorage.setItem('astra_tf', STORE.tf);
+        localStorage.setItem(PCK('astra_tf'), STORE.tf);
         App.renderTfPills();
       }
     }

@@ -18,7 +18,7 @@ Object.assign(Bots, {
     const st = this.colState();
     host.querySelectorAll('.botGrid').forEach(grid => {
       let anyMax = false;
-      grid.querySelectorAll(':scope > .botCol').forEach(col => {
+      grid.querySelectorAll(':scope > .botCol, :scope > .blCell > .botCol').forEach(col => {
         const h = col.querySelector(':scope > .botH');
         if (!h) return;
         const key = botId + '|' + h.textContent.replace(/[^A-Za-z]/g, '').slice(0, 24).toUpperCase();
@@ -119,11 +119,19 @@ Object.assign(Bots, {
     if (this.active === 'permissions'){
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
       OpenTrades.stop();
-      if (host.dataset.bot !== 'permissions'){
+      /* a ⚙ Layout change rebuilds the page once; otherwise it is built once and only its lists refresh */
+      const layoutForce = typeof BotLayout !== 'undefined' && BotLayout._force;
+      if (host.dataset.bot !== 'permissions' || layoutForce){
+        if (layoutForce) BotLayout._force = false;
         host.dataset.bot = 'permissions';
-        host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Instrument permissions <button class="botGuideBtn" data-guide="permissions" title="How this page works">?</button></b>
-          <span>Control which pairs may open new trades across the bots.</span></div></div>
-          <div class="botCtl" id="prTools"></div>${BotDash.pairRulesView()}`;
+        const head = `<div class="botHead"><div class="botTitle"><b>Instrument permissions <button class="botGuideBtn" data-guide="permissions" title="How this page works">?</button></b>
+          <span>Control which pairs may open new trades across the bots.</span></div>${typeof BotLayout !== 'undefined' ? BotLayout.button('permissions') : ''}</div>`;
+        host.innerHTML = typeof BotLayout !== 'undefined'
+          ? head + BotLayout.panel('permissions') + BotLayout.compose('permissions', Object.assign({
+              notes: typeof BotNotes !== 'undefined' ? BotNotes.view('permissions') : '',
+              tools: '<div class="botCtl" id="prTools"></div>' }, BotDash.pairRulesParts()), true)
+          : head + `<div class="botCtl" id="prTools"></div>${BotDash.pairRulesView()}`;
+        if (typeof BotNotes !== 'undefined') BotNotes.bind(host, 'permissions');
         host.querySelector('#prSearch').addEventListener('input', e => {
           BotDash.pairQ = e.target.value; this.refreshPermissions(host);
         });
@@ -138,9 +146,12 @@ Object.assign(Bots, {
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
       OpenTrades.stop();
       host.dataset.bot = 'botsettings';
+      if (typeof BotLayout !== 'undefined') BotLayout._force = false;
       host.innerHTML = `<div class="botHead"><div class="botTitle"><b>Bots on / off</b>
-        <span>Switch bots on or off, pause and unpause them, and reset a locked paper account.</span></div></div>` + BotDash.botSettingsView();
+        <span>Switch bots on or off, pause and unpause them, and reset a locked paper account.</span></div>${typeof BotLayout !== 'undefined' ? BotLayout.button('botsettings') : ''}</div>` +
+        (typeof BotLayout !== 'undefined' ? BotLayout.panel('botsettings') + BotDash.botSettingsView(typeof BotNotes !== 'undefined' ? BotNotes.view('botsettings') : '') : BotDash.botSettingsView());
       this.bindBotSettings(host);
+      if (typeof BotNotes !== 'undefined') BotNotes.bind(host, 'botsettings');
       return;
     }
     const b = BOT_BY_ID[this.active] || BOTS[0];
@@ -150,22 +161,22 @@ Object.assign(Bots, {
     const cfg = this.cfg(b.id) || Object.assign({}, b.defaults);
     const L = this.ledger(b.id) || BotEngine.blank(b.id);
     const st = BotEngine.stats(L);
-    if (b.liveManual && host.dataset.bot === b.id && host.querySelector('#lmDesk')){
+    if (b.liveManual && host.dataset.bot === b.id && host.querySelector('#lmDesk') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       LiveManual.status(); return;
     }
 
     if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;
     if (b.checker && host.dataset.bot === b.id && host.querySelector('.ckWrap') && !Checker.dirty){ Checker.renderStatus(); return; }   /* the checker redraws on your clicks and after each study */   /* the Deep Dive redraws only on your clicks */
-    if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults')){
+    if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       TradeAnalysis.refresh();
       return;
     }
 
-    if (b.confluenceScanner && host.dataset.bot === b.id && host.querySelector('#cfScanRows')){
+    if (b.confluenceScanner && host.dataset.bot === b.id && host.querySelector('#cfScanRows') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       ConfluenceScanner.refresh(); // Keep the search field, filter and focus alive during scans.
       return;
     }
-    if (b.id === 'confluence' && host.dataset.bot === b.id && host.querySelector('#cfLimitsForm')){
+    if (b.id === 'confluence' && host.dataset.bot === b.id && host.querySelector('#cfLimitsForm') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       ConfluenceBot.refresh(); // Never rebuild a trading rule while it is being typed.
       return;
     }
@@ -173,7 +184,22 @@ Object.assign(Bots, {
     // Keep the actual controls alive. Restoring text after replacing the DOM
     // still closes pickers, loses a partially typed number and resets selections.
     const manualLedger = host.querySelector('#manualLedger');
-    if (b.manual && host.dataset.bot === b.id && manualLedger){
+    const layoutForce = typeof BotLayout !== 'undefined' && BotLayout._force;
+    if (typeof BotLayout !== 'undefined') BotLayout._force = false;
+    if (b.manual && host.dataset.bot === b.id && !layoutForce && host.querySelector('[data-blpage="manual"]')){
+      /* the laid-out Manual page: refresh the record parts where they stand, never the ticket */
+      const P = this.ledgerParts('manual', L, st);
+      for (const k of ['stats', 'equity', 'history', 'decisions', 'lessons', 'daily']){
+        const el = host.querySelector('[data-blpart="' + k + '"]');
+        if (el && !(el.contains(document.activeElement) && document.activeElement.matches('input,select,textarea'))){ el.innerHTML = P[k]; this.bindPositionControls(el); }
+      }
+      this.wireCols(host, 'manual');
+      this.manualCalc();
+      OpenTrades.refresh();
+      if (typeof ManualOrders !== 'undefined') ManualOrders.refresh();
+      return;
+    }
+    if (b.manual && host.dataset.bot === b.id && manualLedger && !layoutForce){
       if (!manualLedger.contains(document.activeElement) || !document.activeElement.matches('input,select,textarea')){
         manualLedger.innerHTML = this.ledgerView('manual', L, st);
         this.bindPositionControls(manualLedger);
@@ -200,7 +226,7 @@ Object.assign(Bots, {
     /* typed stop/target values on a bot's own position cards survive the rebuild */
     this._otKeep = host.dataset.bot === b.id && typeof OpenTrades !== 'undefined' ? OpenTrades.snapshot(host.querySelector('#botPositions')) : null;
     host.dataset.bot = b.id;
-    host.innerHTML =
+    const head =
       `<div class="botHead">
          ${typeof WorkspaceUI !== 'undefined' ? '<div class="wsHeroIcon">' + WorkspaceUI.icon(WorkspaceUI.botIcon(b)) + '</div>' : ''}
          <div class="botTitle"><b>${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}
@@ -208,8 +234,62 @@ Object.assign(Bots, {
          ${b.live
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
-       </div>` +
-      (typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '') +
+         ${typeof BotLayout !== 'undefined' && BotLayout.hasLayout(b) ? BotLayout.button(b.id) : ''}
+       </div>`;
+    if (typeof BotLayout !== 'undefined' && b.id === 'confluence'){
+      const L2 = ConfluenceBot.displayLedger(L), P = this.ledgerParts(b.id, L2, BotEngine.stats(L2)), C = ConfluenceBot.controlParts();
+      host.innerHTML = head + BotLayout.panel(b.id) + '<div data-blpage="confluence">' + BotLayout.compose(b.id, {
+        notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '',
+        buttons: C.buttons, rules: C.rules, status: ConfluenceBot.statusNote(), scanner: ConfluenceScanner.view(true),
+        result: P.result, stats: P.stats, equity: P.equity, history: P.history, decisions: P.decisions, lessons: P.lessons, daily: P.daily,
+      }, true) + '</div>';
+    } else if (typeof BotLayout !== 'undefined' && b.confluenceScanner){
+      host.innerHTML = head + BotLayout.panel(b.id) + BotLayout.compose(b.id, Object.assign({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', controls: this.controls(b, cfg) }, ConfluenceScanner.parts()), true);
+    } else if (typeof BotLayout !== 'undefined' && b.scan && !b.confluenceScanner){
+      host.innerHTML = head + BotLayout.panel(b.id) + BotLayout.compose(b.id, Object.assign({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', controls: this.controls(b, cfg) }, this.scannerParts()), true);
+    } else if (typeof BotLayout !== 'undefined' && b.brain){
+      host.innerHTML = head + BotLayout.panel(b.id) + BotLayout.compose(b.id, Object.assign({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', controls: this.controls(b, cfg) }, this.brainParts()), true);
+    } else if (typeof BotLayout !== 'undefined' && b.checker){
+      host.innerHTML = head + BotLayout.panel(b.id) + Checker.view({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '' });
+    } else if (typeof BotLayout !== 'undefined' && b.id === 'analysis'){
+      host.innerHTML = head + BotLayout.panel(b.id) + TradeAnalysis.view({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '' });
+    } else if (typeof BotLayout !== 'undefined' && b.report){
+      host.innerHTML = head + BotLayout.panel(b.id) + BotReports.view({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', intro: this.controls(b, cfg) });
+    } else if (typeof BotLayout !== 'undefined' && b.dash){
+      host.innerHTML = head + BotLayout.panel(b.id) + BotDash.view({ notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', intro: this.controls(b, cfg) });
+    } else if (typeof BotLayout !== 'undefined' && b.trades){
+      host.innerHTML = head + BotLayout.panel(b.id) + OpenTrades.view(null, false, { notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '', intro: this.controls(b, cfg) });
+    } else if (typeof BotLayout !== 'undefined' && b.id === 'live'){
+      host.innerHTML = head + BotLayout.panel(b.id) + this.liveView(typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '');
+    } else if (typeof BotLayout !== 'undefined' && b.liveManual){
+      /* a rearranged page must never carry a prepared real order across: review again */
+      if (host.querySelector('#lmDesk') && LiveManual.preview){ LiveManual.preview = null; LiveManual.revision++; }
+      host.innerHTML = head + BotLayout.panel(b.id) + LiveManual.view(typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '');
+    } else if (typeof BotLayout !== 'undefined' && b.manual){
+      const P = this.ledgerParts('manual', L, st);
+      host.innerHTML = head + BotLayout.panel('manual') + '<div data-blpage="manual">' + BotLayout.compose('manual', {
+        notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '',
+        links: `<div class="wsTradeLinks"><button data-ws-bot="manual">PAPER · Manual trading</button><button data-ws-bot="liveManual">REAL · LIVE trading bot</button></div>`,
+        rules: this.controls(b, cfg),
+        ticket: this.manualTicketView(),
+        help: this.manualHelp(),
+        auto: typeof ManualAuto !== 'undefined' ? ManualAuto.view() : '',
+        pending: '<div id="manualPending"></div>',
+        positions: '<section id="manualPositions"><h2 class="botH">Open manual trades</h2>' + OpenTrades.view('manual') + '</section>',
+        stats: P.stats, equity: P.equity, history: P.history, decisions: P.decisions, lessons: P.lessons, daily: P.daily,
+      }) + '</div>';
+    } else if (typeof BotLayout !== 'undefined' && BotLayout.applies(b)){
+      const P = this.ledgerParts(b.id, L, st);
+      host.innerHTML = head + BotLayout.panel(b.id) + BotLayout.compose(b.id, {
+        notes: typeof BotNotes !== 'undefined' ? BotNotes.view(b.id) : '',
+        controls: this.controls(b, cfg, true),
+        markets: this.instrumentBar(b, cfg),
+        result: P.result, stats: P.stats, equity: P.equity,
+        history: P.history, decisions: P.decisions, lessons: P.lessons, daily: P.daily,
+        backtest: this.btView(b.id),
+      });
+    } else host.innerHTML = head +
+      (typeof BotNotes !== 'undefined' && !b.explorer ? BotNotes.view(b.id) : '') +
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
         : b.explorer ? Explorer.view()
@@ -303,7 +383,7 @@ Object.assign(Bots, {
     this.manualCalc();
   },
 
-  controls(b, cfg){
+  controls(b, cfg, noMarkets){
     if (b.analysis) return '';
     if (b.confluenceScanner) return ConfluenceScanner.controls();
     if (b.id === 'confluence') return ConfluenceBot.controls();
@@ -341,7 +421,7 @@ Object.assign(Bots, {
       <button class="bBtn" data-act="run">Run now</button>
       <button class="bBtn" data-act="bt">Backtest</button>
       <button class="bBtn danger" data-act="reset">Reset</button>
-    </div>` + this.instrumentBar(b, cfg);
+    </div>` + (noMarkets ? '' : this.instrumentBar(b, cfg));
   },
 
   /* The Max Assurance bot's own knobs. Risk lives under cfg.risk, so the
@@ -414,8 +494,10 @@ Object.assign(Bots, {
         </div>`;
     }
 
-    return `<div class="mkBar">
+    const folded = typeof BotMarkets !== 'undefined' && BotMarkets.folded(b.id);
+    return `<div class="mkBar${folded ? ' folded' : ''}">
       <div class="mkTop">
+        <button type="button" class="mkFold" data-mkfold="${esc(b.id)}" aria-expanded="${!folded}" title="${folded ? 'Unfold the markets — show the lists and pairs' : 'Fold the markets away — the line with the count stays'}">${folded ? '▸' : '▾'}</button>
         <span class="insLbl">Markets</span>
         ${modeBtn('fit', 'Follow Market Fit', fitHint)}
         ${modeBtn('brain', 'Follow its own record', brainHint)}
@@ -423,9 +505,9 @@ Object.assign(Bots, {
         <span class="mkCount">${resolved.length} instrument${resolved.length === 1 ? '' : 's'}
           ${resolved.length ? '· ' + resolved.slice(0, 6).map(baseAsset).join(', ') + (resolved.length > 6 ? ' …' : '') : ''}</span>
       </div>
-      ${mode === 'fit' ? `<div class="mkNote">${esc(fitHint)}</div>` : ''}
+      ${folded ? '' : `${mode === 'fit' ? `<div class="mkNote">${esc(fitHint)}</div>` : ''}
       ${mode === 'brain' ? `<div class="mkNote">${esc(brainHint)}</div>` : ''}
-      ${body}
+      ${body}`}
     </div>`;
   },
 
@@ -439,8 +521,14 @@ Object.assign(Bots, {
 
   /* ---------------- Market Scanner ---------------- */
   scannerView(){
+    const P = this.scannerParts();
+    return P.active + P.watching + P.note;
+  },
+  /* the Market Scanner in named parts, for ⚙ Layout */
+  scannerParts(){
     const rows = this.scan.rows;
-    if (!rows.length) return '<div class="empty">No scan yet — press “Scan now”.</div>';
+    const note = `<div class="botNote">The scanner ranks and explains. It never opens a trade.</div>`;
+    if (!rows.length) return { active: '<div class="empty">No scan yet — press “Scan now”.</div>', watching: '', note };
     const act = rows.filter(r => r.active), idle = rows.filter(r => !r.active);
     const row = r => {
       const d = r.dir > 0 ? 'up' : r.dir < 0 ? 'down' : 'flat';
@@ -457,20 +545,29 @@ Object.assign(Bots, {
         <td class="scWhy">${esc(why)}</td>
         <td><button class="bMini" data-open="${esc(r.sym)}">Chart</button></td></tr>`;
     };
-    return `<div class="scWrap"><table class="scTable">
-      <thead><tr><th>Instrument</th><th>Direction</th><th>Score</th><th>Price</th><th>Spread</th>
-        <th>Quote age</th><th>Est. move</th><th>TF</th><th>Reason</th><th></th></tr></thead>
-      <tbody>
+    const head = `<thead><tr><th>Instrument</th><th>Direction</th><th>Score</th><th>Price</th><th>Spread</th>
+        <th>Quote age</th><th>Est. move</th><th>TF</th><th>Reason</th><th></th></tr></thead>`;
+    return {
+      active: `<div class="scWrap"><table class="scTable">${head}<tbody>
         <tr class="scSect"><td colspan="10">ACTIVE SETUPS · ${act.length}</td></tr>
         ${act.map(row).join('') || '<tr><td colspan="10" class="empty">Nothing passes the full stack right now — that is normal.</td></tr>'}
+      </tbody></table></div>`,
+      watching: `<div class="scWrap"><table class="scTable">${head}<tbody>
         <tr class="scSect"><td colspan="10">WATCHING · ${idle.length}</td></tr>
         ${idle.slice(0, 60).map(row).join('')}
-      </tbody></table>
-      <div class="botNote">The scanner ranks and explains. It never opens a trade.</div></div>`;
+      </tbody></table></div>`,
+      note,
+    };
   },
 
   /* ---------------- Master Brain ---------------- */
   brainView(){
+    const P = this.brainParts();
+    return P.state + P.live + P.counts + P.coverage + P.needs +
+      (P.score ? `<div class="botGrid">${P.score}${P.calib}${P.weights}${P.log}</div>` : '') + P.warn + P.auto + P.lab;
+  },
+  /* the Master Brain page in named parts, for ⚙ Layout */
+  brainParts(){
     const S = MasterBrain.state || MasterBrain.load();
     const st = MasterBrain.status();
     const m = S.metrics;
@@ -480,8 +577,8 @@ Object.assign(Bots, {
     /* the Brain governs what may reach real money, so its state is shown here too */
     const lv = (typeof Live !== 'undefined') ? Live.status() : null;
     const lvArmed = (typeof Live !== 'undefined') ? Live.armedList().length : 0;
-    const head = `<div class="brainState ${st.cls}"><div class="bsTop"><b>${esc(st.label)}</b><span>${esc(st.text)}</span></div></div>` +
-      (lv ? `<div class="brainLive ${lv.cls}">
+    const state = `<div class="brainState ${st.cls}"><div class="bsTop"><b>${esc(st.label)}</b><span>${esc(st.text)}</span></div></div>`;
+    const live = (lv ? `<div class="brainLive ${lv.cls}">
         <b>LIVE TRADING · ${esc(lv.label)}</b>
         <span>${esc(lv.text)}</span>
         <i>${lvArmed ? lvArmed + ' bot' + (lvArmed > 1 ? 's' : '') + ' armed. ' : ''}Every live signal still passes this Brain’s veto before it is sent.</i>
@@ -501,8 +598,10 @@ Object.assign(Bots, {
       Fear &amp; Greed on <b>${cov.fng.toFixed(0)}%</b>, live news mood on <b>${cov.news.toFixed(0)}%</b>.
       Regime and Fear &amp; Greed can be reconstructed for past trades, so backtests carry them; news has no archive, so only trades taken live carry it.</div>` : '';
 
-    if (!m) return head + counts + covRow +
-      `<div class="botNote">It needs ${MasterBrain.MIN_TRAIN} finished trades before it may train. Press <b>Learn from history</b> to backtest several strategies across a set of instruments — that produces hundreds of labelled examples in one pass.</div>`;
+    const base = { state, live, counts, coverage: covRow, needs: '', score: '', calib: '', weights: '', log: '', warn: '',
+      auto: typeof Auto !== 'undefined' ? Auto.view() : '', lab: this.labView() };
+    if (!m) return Object.assign(base, { needs:
+      `<div class="botNote">It needs ${MasterBrain.MIN_TRAIN} finished trades before it may train. Press <b>Learn from history</b> to backtest several strategies across a set of instruments — that produces hundreds of labelled examples in one pass.</div>`, auto: '', lab: '' });
 
     const of = m.overfit, ofWarn = of != null && of > 12, f = m.filtered;
     const calib = (m.calib || []).map(c =>
@@ -517,9 +616,8 @@ Object.assign(Bots, {
       `<span class="dim2">${x.w > 0 ? 'raises' : 'lowers'} the estimated chance of a win</span></div>`).join('')
       || '<div class="empty">No weight has moved far from zero yet</div>';
 
-    return head + counts + covRow +
-      `<div class="botGrid">
-        <div class="botCol">
+    return Object.assign(base, {
+      score: `<div class="botCol">
           <div class="botH">HONEST SCORE — ON DATA IT NEVER SAW</div>
           <div class="botRow"><b>Out-of-sample accuracy</b>
             <span class="${m.edge > 1 ? 'up' : 'down'}">${m.val ? m.val.acc.toFixed(1) + '%' : '—'} on ${m.val ? m.val.n : 0} trades</span>
@@ -537,17 +635,16 @@ Object.assign(Bots, {
           <div class="botNote${f.avgR > f.avgRAll ? '' : ' warn'}">${f.avgR > f.avgRAll
             ? 'On unseen data the filter improved the average result. Encouraging — not proof.'
             : 'On unseen data the filter did not improve the result. This is exactly why it abstains instead of trading.'}</div>
-        </div>
-        <div class="botCol"><div class="botH">IS IT CALIBRATED?</div>${calib}
-          <div class="botNote">If it says 60% and roughly 60% actually win, the number means something. If not, the number is noise.</div></div>
-        <div class="botCol"><div class="botH">WHAT IT HAS LEARNED TO WEIGH</div>${weights}
-          <div class="botNote">The model is linear, so these weights are the entire explanation — nothing is hidden.</div></div>
-        <div class="botCol"><div class="botH">LEARNING LOG</div>
+        </div>`,
+      calib: `<div class="botCol"><div class="botH">IS IT CALIBRATED?</div>${calib}
+          <div class="botNote">If it says 60% and roughly 60% actually win, the number means something. If not, the number is noise.</div></div>`,
+      weights: `<div class="botCol"><div class="botH">WHAT IT HAS LEARNED TO WEIGH</div>${weights}
+          <div class="botNote">The model is linear, so these weights are the entire explanation — nothing is hidden.</div></div>`,
+      log: `<div class="botCol"><div class="botH">LEARNING LOG</div>
           ${(S.log || []).slice(0, 12).map(l => `<div class="botLog"><span class="dim2">${new Date(l.t).toLocaleString()}</span> ${esc(l.text)}</div>`).join('') || '<div class="empty">Nothing yet</div>'}</div>
-      </div>
-      <div class="botNote warn">A statistical model fitted to past trades — not a forecaster. It may only refuse or shrink a trade, never invent one, and everything it touches is play money.</div>`
-      + (typeof Auto !== 'undefined' ? Auto.view() : '')
-      + this.labView();
+`,
+      warn: `<div class="botNote warn">A statistical model fitted to past trades — not a forecaster. It may only refuse or shrink a trade, never invent one, and everything it touches is play money.</div>`,
+    });
   },
 
   /* ---------------- the Strategy Lab ----------------
@@ -710,6 +807,15 @@ Object.assign(Bots, {
     </div>
 `;
   },
+  manualHelp(){
+    return `<div class="botNote">Market enters now. Limit and Stop entry wait for your price and require an explicit stop-loss.
+      Leave <b>volume</b> empty to size from the risk limit when placing the order. For Market only, leave the
+      <b>stop</b> empty for an automatic stop using your saved ATR multiplier; leave the
+      <b>target</b> empty and the position simply runs until you close it or the stop is hit.
+      Both levels can be changed at any time on the open position below, or on the Open Trades page.
+      Saved stops and targets return after a restart. Paper execution pauses while the PC or browser is off
+      and resumes on fresh prices when ASTRA reopens.</div>`;
+  },
   manualView(L, st){
     return `<div class="wsTradeLinks"><button data-ws-bot="manual">PAPER · Manual trading</button><button data-ws-bot="liveManual">REAL · LIVE trading bot</button></div>`+this.manualTicketView()+`
     <div class="botNote">Market enters now. Limit and Stop entry wait for your price and require an explicit stop-loss.
@@ -848,9 +954,17 @@ Object.assign(Bots, {
   },
 
   ledgerView(id, L, st){
+    const P = this.ledgerParts(id, L, st);
+    return P.result + P.stats + P.equity + `<div class="botGrid">${P.positions}${P.history}${P.decisions}<div class="botCol"><div class="botH">${P.lessonsH}</div>${P.lessonsBody}<div class="botH">${P.dailyH}</div>${P.dailyBody}</div></div>`;
+  },
+  /* the parts of a bot's page, each on its own, so the page can be put in any
+     order and parts switched off (⚙ Layout on every bot page) */
+  ledgerParts(id, L, st){
     const pf = st.profitFactor === Infinity ? '∞' : st.profitFactor.toFixed(2);
     const icon = name => typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon(name) : '';
-    return `<div class="botStats">
+    /* the Deep Dive's net result + the open trades, foldable, on every bot */
+    const result = id !== 'manual' && typeof BotResult !== 'undefined' ? BotResult.view(id, L) : '';
+    const stats = `<div class="botStats">
         ${this.stat('EQUITY', fmtNum(st.equity), st.pnl)}
         ${this.stat('P&L', (st.pnl >= 0 ? '+' : '') + fmtNum(st.pnl) + ' (' + fmtPct(st.pnlPct) + ')', st.pnl)}
         ${this.stat('TRADES', st.trades + ' · ' + Math.round(st.winRate) + '% win')}
@@ -859,15 +973,18 @@ Object.assign(Bots, {
         ${this.stat('MAX DRAWDOWN', '-' + st.maxDD.toFixed(1) + '%', -1)}
         ${this.stat('FEES PAID', fmtNum(st.fees), -1)}
         ${this.stat('WON / LOST', fmtNum(st.winAmount) + ' / ' + fmtNum(st.lossAmount))}
-      </div>
-      ${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.equity(L) : ''}
-      <div class="botGrid">
-        ${id==='manual'?'':`<div class="botCol botColWide"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length} <span class="dim2">— the bot runs them; step in whenever you like</span></div><section id="botPositions">${OpenTrades.view(id)}</section></div>`}
-        <div class="botCol"><div class="botH">${icon('clock')} CLOSED HISTORY</div>${this.closedView(L)}</div>
-        <div class="botCol"><div class="botH">${icon('scanner')} DECISIONS</div>${this.decisionView(L)}</div>
-        <div class="botCol"><div class="botH">${icon('report')} LESSONS FROM LOSSES</div>${this.lessonView(L)}
-          <div class="botH">${icon('chart')} DAILY</div>${this.dailyView(L)}</div>
       </div>`;
+    return {
+      result, stats,
+      equity: typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.equity(L) : '',
+      positions: id==='manual' || typeof BotResult !== 'undefined' ? '' : `<div class="botCol botColWide"><div class="botH">${icon('positions')} OPEN POSITIONS · ${L.open.length} <span class="dim2">— the bot runs them; step in whenever you like</span></div><section id="botPositions">${OpenTrades.view(id)}</section></div>`,
+      history: `<div class="botCol"><div class="botH">${icon('clock')} CLOSED HISTORY</div>${this.closedView(L)}</div>`,
+      decisions: `<div class="botCol"><div class="botH">${icon('scanner')} DECISIONS</div>${this.decisionView(L)}</div>`,
+      lessonsH: icon('report') + ' LESSONS FROM LOSSES', lessonsBody: this.lessonView(L),
+      dailyH: icon('chart') + ' DAILY', dailyBody: this.dailyView(L),
+      lessons: `<div class="botCol"><div class="botH">${icon('report')} LESSONS FROM LOSSES</div>${this.lessonView(L)}</div>`,
+      daily: `<div class="botCol"><div class="botH">${icon('chart')} DAILY</div>${this.dailyView(L)}</div>`,
+    };
   },
 
   stat(label, val, sign){
@@ -1052,7 +1169,7 @@ Object.assign(Bots, {
         lsSet('astra_dashfold', BotDash.folded);
         this.render();
       }
-      if (a === 'dashorderreset'){ BotDash.saveOrder(BotDash.DEFAULT_ORDER.slice()); this.render(); }
+      if (a === 'dashorderreset'){ BotDash.saveOrder(BotDash.DEFAULT_ORDER.slice()); if (typeof BotLayout !== 'undefined') return BotLayout.reset('dash'); this.render(); }
       if (a === 'prclear'){ BotDash.pairQ = ''; this.render(); }
       if (a === 'prreset'){
         if (confirm('Forget every pair you prohibited or allowed by hand, and go back to the record alone?')){

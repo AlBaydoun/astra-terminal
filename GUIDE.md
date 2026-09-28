@@ -94,7 +94,44 @@ skips sync for that device.
 - **Workspaces:** the bookmark button saves your whole screen setup (coin, timeframe, layout, mini charts, indicators, compares) under a name — e.g. "Scalping" or "Overview" — and loads it back with one click.
 - **Top movers strip:** the scrolling band under the top bar shows the day's biggest gainers and losers. Hover to pause, click to open.
 - **Volume profile:** in the Indicators dialog. Shows sideways volume bars on the right — where the most trading happened. The yellow line (POC) marks the busiest price level.
-- **Mini-chart EMA:** each side chart has a small "EMA" button for 20/50 EMA lines.
+
+## Resizing the lower panel
+
+The bar between the charts and the lower panel (Screener, Heatmap, Observer,
+Intel, News & Alerts, and the Market Clock or Trade Replay when they sit in the
+panel) sets how tall that panel is. Drag it up for more panel, down for more
+chart; **double-click** it to fold the panel away and again to bring it back.
+The height is remembered. Market Clock and Trade Replay also have their own
+three sizes — full screen, in the panel, folded — and their tab button cycles
+them; drag the bar once the window is down in the panel.
+
+## More charts on the desk
+
+Next to the 1 / 2 / 4 layout buttons there is **− 1 +**. Press **+** to add
+another chart, as often as you like (up to 16 extra). Every added chart is a
+real chart, not a thumbnail: the same drawing tools, the same indicators, the
+same buy and sell buttons, the same right-click menu.
+
+Each one has a thin header: the instrument it shows, a **follow** tick (show
+whatever the main chart shows), **⛶** to give it the whole desk, and **×** to
+close it. Instrument, timeframe and indicators are kept per chart; drawings,
+positions and alerts are shared, so a line drawn on one chart shows on every
+chart of that instrument. The desk comes back the way you left it.
+
+**On other monitors:** open as many separate chart windows as you like —
+**Windows ▸ ➕ Another chart window**, or **Ctrl+F2** — and drag each one onto
+its monitor. They are numbered, and every number keeps its own instrument,
+timeframe and indicators, and (in the desktop app) its own place on the screen,
+so the same window comes back on the same monitor showing the same thing. The
+Windows menu lists the open ones with what each is showing; click one to bring
+it forward, or its × to close it.
+
+Keys (all rebindable in the **F1** list): **Ctrl+F1** sends the chart screen you
+clicked into its own window, **Ctrl+F2** opens another chart window, **Ctrl+F3**
+opens the Windows menu, **Alt+↑** adds a chart screen and **Alt+↓** closes the
+last one.
+
+Details and the tested limits: `CHART-SCREENS.md`.
 
 ## Markets — what you can chart
 

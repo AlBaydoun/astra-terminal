@@ -96,6 +96,33 @@ const PosLines = {
      the canvas can hide under candle labels or another trade's label; this
      one is always on top and always clickable. */
   panelFold: lsGet('astra_pospanel_fold', false) === true,
+  /* ⚙ the panel your way: the order of the trades, what each row shows, which corner */
+  PP_KEY: 'astra_pospanel',
+  PP_SORTS: [['hand', 'By hand (▲▼ on each row)'], ['newest', 'Newest first'], ['oldest', 'Oldest first'], ['best', 'Best result first'], ['worst', 'Worst result first'], ['bot', 'By bot name']],
+  PP_CORNERS: [['bl', 'Bottom left'], ['br', 'Bottom right'], ['tl', 'Top left'], ['tr', 'Top right']],
+  ppCfg(){ const c = lsGet(this.PP_KEY, {}) || {}; return { sort: c.sort || 'newest', order: c.order || [], show: Object.assign({ bot: true, size: true, pnl: true }, c.show || {}), corner: c.corner || 'bl' }; },
+  ppSave(c){ lsSet(this.PP_KEY, c); this._panelSig = ''; this.panel(); },
+  ppCfgOpen: false,
+  ppSorted(rows){
+    const c = this.ppCfg(), key = r => r.bot + '|' + r.p.id, live = r => (this.liveOf(r) || { unreal: 0 }).unreal;
+    const by = {
+      hand: (a, b) => { const i = c.order.indexOf(key(a)), j = c.order.indexOf(key(b)); return (i < 0 ? 1e9 : i) - (j < 0 ? 1e9 : j) || b.p.entryTime - a.p.entryTime; },
+      newest: (a, b) => b.p.entryTime - a.p.entryTime, oldest: (a, b) => a.p.entryTime - b.p.entryTime,
+      best: (a, b) => live(b) - live(a), worst: (a, b) => live(a) - live(b),
+      bot: (a, b) => String(a.botName || a.bot).localeCompare(String(b.botName || b.bot)) || b.p.entryTime - a.p.entryTime,
+    }[c.sort] || ((a, b) => b.p.entryTime - a.p.entryTime);
+    const out = rows.slice().sort(by);
+    /* the trade you opened from Open Trades still comes first while it is highlighted */
+    const f = out.findIndex(r => this.focus === r.bot + ':' + r.p.id);
+    if (f > 0) out.unshift(out.splice(f, 1)[0]);
+    return out;
+  },
+  ppMove(key, d){
+    const c = this.ppCfg(), rows = this.ppSorted(this.rows()).map(r => r.bot + '|' + r.p.id);
+    const i = rows.indexOf(key), j = i + d; if (i < 0 || j < 0 || j >= rows.length) return;
+    rows.splice(i, 1); rows.splice(j, 0, key);
+    c.order = rows; c.sort = 'hand'; this.ppSave(c);
+  },
   panel(){
     const wrap = document.getElementById('mainWrap');
     if (!wrap) return;
@@ -108,6 +135,11 @@ const PosLines = {
       /* the chart underneath must not pan or start a drawing from a click here */
       ['mousedown', 'pointerdown', 'wheel', 'dblclick'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
       el.addEventListener('click', e => {
+        const s = e.target.closest('[data-ppcfg],[data-ppmv]');
+        if (s){
+          if (s.hasAttribute('data-ppcfg')){ this.ppCfgOpen = !this.ppCfgOpen; this._panelSig = ''; return this.panel(); }
+          const [k, d] = s.dataset.ppmv.split('#'); return this.ppMove(k, +d);
+        }
         const b = e.target.closest('[data-ppclose],[data-ppfold],[data-ppfocus]');
         if (!b) return;
         if (b.hasAttribute('data-ppfold')){ this.panelFold = !this.panelFold; lsSet('astra_pospanel_fold', this.panelFold); this._panelSig = ''; return this.panel(); }
@@ -117,22 +149,42 @@ const PosLines = {
         this.focus = bot + ':' + pid; if (typeof Draw !== 'undefined') Draw.redraw();
         setTimeout(() => { if (this.focus === bot + ':' + pid){ this.focus = null; if (typeof Draw !== 'undefined') Draw.redraw(); } }, 8000);
       });
+      el.addEventListener('change', e => {
+        const t = e.target, c = this.ppCfg();
+        if (t.dataset.ppsort){ c.sort = t.value; if (c.sort === 'hand' && !c.order.length) c.order = this.ppSorted(this.rows()).map(r => r.bot + '|' + r.p.id); }
+        else if (t.dataset.ppcorner) c.corner = t.value;
+        else if (t.dataset.ppshow) c.show[t.dataset.ppshow] = t.checked;
+        else return;
+        this.ppSave(c);
+      });
     }
+    const cfg = this.ppCfg();
+    el.className = 'posPanel pp-' + cfg.corner;
     const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
-    /* the focused trade (opened from Open Trades) comes first */
-    const sorted = rows.slice().sort((a, b) => (this.focus === b.bot + ':' + b.p.id) - (this.focus === a.bot + ':' + a.p.id));
-    const items = sorted.map(r => {
+    const sorted = this.ppSorted(rows), hand = cfg.sort === 'hand', S = cfg.show;
+    const items = sorted.map((r, i) => {
       const p = r.p, l = this.liveOf(r) || { unreal: 0 };
       const key = r.bot + '|' + p.id, hot = this.focus === r.bot + ':' + p.id;
-      return { key, hot, html: `<div class="ppRow${r.live ? ' real' : ''}${hot ? ' hot' : ''}">
+      return { key, hot, html: `<div class="ppRow${r.live ? ' real' : ''}${hot ? ' hot' : ''}${hand ? ' hand' : ''}">
+        ${hand ? `<span class="ppMv"><button data-ppmv="${esc(key)}#-1" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button data-ppmv="${esc(key)}#1" ${i === sorted.length - 1 ? 'disabled' : ''} title="Move down">▼</button></span>` : ''}
         <button class="ppWho" data-ppfocus="${esc(key)}" title="Highlight this trade on the chart">
-          <b class="${p.dir > 0 ? 'up' : 'down'}">${r.live ? 'REAL ' : ''}${p.dir > 0 ? 'BUY' : 'SELL'}</b> ${esc(p.lots ? p.lots + ' lot' : fmtNum(p.qty))} · <span>${esc(r.botName || r.bot)}</span></button>
-        <i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i>
+          <b class="${p.dir > 0 ? 'up' : 'down'}">${r.live ? 'REAL ' : ''}${p.dir > 0 ? 'BUY' : 'SELL'}</b>${S.size ? ' ' + esc(p.lots ? p.lots + ' lot' : fmtNum(p.qty)) : ''}${S.bot ? ' · <span>' + esc(r.botName || r.bot) + '</span>' : ''}</button>
+        ${S.pnl ? `<i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i>` : '<i></i>'}
         <button class="ppClose" data-ppclose="${esc(key)}" title="Close this trade at the market price now — you confirm first">✕ Close at market</button>
       </div>` };
     });
-    const head = `<div class="ppHead"><span>${rows.length} open trade${rows.length > 1 ? 's' : ''} on this chart</span><button data-ppfold title="${this.panelFold ? 'Show' : 'Fold'}">${this.panelFold ? '▸' : '▾'}</button></div>`;
-    const html = head + (this.panelFold ? '' : items.map(i => i.html).join(''));
+    const head = `<div class="ppHead"><span>${rows.length} open trade${rows.length > 1 ? 's' : ''} on this chart</span><button data-ppcfg class="${this.ppCfgOpen ? 'on' : ''}" title="Order of the trades, what each row shows, which corner">⚙</button><button data-ppfold title="${this.panelFold ? 'Show' : 'Fold'}">${this.panelFold ? '▸' : '▾'}</button></div>`;
+    const opt = (list, cur) => list.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
+    const settings = this.ppCfgOpen ? `<div class="ppCfg">
+        <label>Order <select data-ppsort="1">${opt(this.PP_SORTS, cfg.sort)}</select></label>
+        <label>Corner <select data-ppcorner="1">${opt(this.PP_CORNERS, cfg.corner)}</select></label>
+        <span class="ppShow">Show ${[['size', 'size'], ['bot', 'bot'], ['pnl', 'profit']].map(([k, t]) => `<label><input type="checkbox" data-ppshow="${k}" ${S[k] ? 'checked' : ''}> ${t}</label>`).join('')}</span>
+        <small>The ✕ Close at market button is always shown.${hand ? ' Use ▲▼ on each row.' : ''}</small>
+      </div>` : '';
+    const html = head + settings + (this.panelFold ? '' : items.map(i => i.html).join(''));
+    /* never redraw under a hand that is choosing in the ⚙ settings */
+    const a = document.activeElement;
+    if (a && el.contains(a) && a.matches('select,input')) return;
     if (html !== this._panelSig){ el.innerHTML = html; this._panelSig = html; }
   },
 

@@ -78,6 +78,7 @@ const Layouts = {
       minis: Multi.cells.length ? Multi.cells.map(c => ({ sym: c.sym, tf: c.tf, ema: !!c.ema })) : Multi.minis,
       ind: Chart.settings,
       compares: Chart.compares,
+      screens: typeof Screens !== 'undefined' ? Screens.snapshot() : [],
     };
     lsSet('astra_workspaces', this.saved);
     inp.value = '';
@@ -90,18 +91,19 @@ const Layouts = {
     Chart.settings = Object.assign({}, Chart.settings, w.ind || {});
     lsSet('astra_ind', Chart.settings);
     STORE.chartType = w.type || 'candles';
-    localStorage.setItem('astra_ctype', STORE.chartType);
+    localStorage.setItem(PCK('astra_ctype'), STORE.chartType);
     document.getElementById('chartType').value = STORE.chartType;
     Chart.compares = (w.compares || []).filter(s => s !== w.sym);
     lsSet('astra_compare', Chart.compares);
     Multi.minis = w.minis || Multi.minis;
     lsSet('astra_minis', Multi.minis);
     Multi.setLayout(w.layout || 1);
+    if (typeof Screens !== 'undefined' && w.screens) Screens.restore(w.screens);
     STORE.tf = w.tf || STORE.tf;
-    localStorage.setItem('astra_tf', STORE.tf);
+    localStorage.setItem(PCK('astra_tf'), STORE.tf);
     App.renderTfPills();
     STORE.symbol = STORE.tickers.has(w.sym) ? w.sym : STORE.symbol;
-    localStorage.setItem('astra_symbol', STORE.symbol);
+    localStorage.setItem(PCK('astra_symbol'), STORE.symbol);
     App.updateSymBtn();
     Chart.load();
     App.hideModal('layoutModal');
@@ -155,6 +157,7 @@ const App = {
     await Chart.load();
     Screener.build();
     Multi.init();
+    Screens.init();
     Resize.init();
     Strip.init();
     Notes.init();
@@ -183,7 +186,7 @@ const App = {
       (typeof BROKER !== 'undefined' && BROKER.is(sym)) || Feed.bridgeHas(sym);
     if (sym === STORE.symbol || !known) return;
     STORE.symbol = sym;
-    localStorage.setItem('astra_symbol', sym);
+    localStorage.setItem(PCK('astra_symbol'), sym);
     this.updateSymBtn();
     Chart.load();
     BUS.emit('symbol', sym);          // torn-off windows follow this
@@ -191,13 +194,13 @@ const App = {
   setTf(tf){
     if (tf === STORE.tf) return;
     STORE.tf = tf;
-    localStorage.setItem('astra_tf', tf);
+    localStorage.setItem(PCK('astra_tf'), tf);
     this.renderTfPills();
     Chart.load();
   },
   setType(t){
     STORE.chartType = t;
-    localStorage.setItem('astra_ctype', t);
+    localStorage.setItem(PCK('astra_ctype'), t);
     Chart.renderAll();
   },
 

@@ -157,7 +157,7 @@ const BotReports = {
   pf(v){ return v == null ? '—' : (v === Infinity ? '∞' : v.toFixed(2)); },
 
   /* ---------- the page ---------- */
-  view(){
+  view(extras){
     const rows = this.rows();
     const f = this.fleet(rows);
     const best = rows.find(r => r.trades > 0) || null;
@@ -229,6 +229,43 @@ const BotReports = {
       `<div class="botLog"><span class="dim2">${new Date(l.t).toLocaleString()}</span> ${esc(l.text)}</div>`).join('')
       || '<div class="empty">The lab has not run yet</div>';
 
+    /* ⚙ Layout: every part of the report in your order */
+    if (extras && typeof BotLayout !== 'undefined'){
+      const P = {
+        notes: extras.notes || '', intro: extras.intro || '',
+        head: `<div class="rpHead">
+        <div><b>PERFORMANCE REPORT</b><span>${new Date().toLocaleString()} · every figure below is play money</span></div>
+        <div class="rpBtns">
+          <button class="bBtn" data-act="assessAll">Test every bot</button>
+          <button class="bBtn" data-act="xls">Export Excel</button>
+          <button class="bBtn" data-act="pdf">Export PDF</button>
+        </div>
+      </div>`,
+        disclaimer: `<div class="rpLive">This page decides <b>nothing on its own</b>. There is no order path to any broker anywhere in
+        ASTRA — every trade above is virtual. The point of the test is to find which single bot has earned the right to be
+        considered for real money, and that decision stays yours.</div>`,
+        kpis,
+        best: best ? `<div class="rpBest"><span>BEST ON EVIDENCE SO FAR</span><b>${esc(best.name)}</b>
+        <i>${best.trades} trades · ${Math.round(best.winRate)}% win · ${this.pf(best.pf)} profit factor ·
+        ${best.avgR.toFixed(2)}R average · ${best.ready} of ${this.READY.length} live conditions met</i></div>` : '',
+        ranking: `<div class="botH">RANKING — WHICH BOT WOULD YOU TRUST?</div>${table}`,
+        pnl: `<div class="rpCard"><div class="botH">PROFIT AND LOSS BY BOT</div>${pnlBars}</div>`,
+        winrate: `<div class="rpCard"><div class="botH">WIN RATE</div><div class="rpDonuts">${donuts}</div></div>`,
+        curves: `<div class="rpCard"><div class="botH">EQUITY CURVES</div>${curves}</div>`,
+        rmult: `<div class="rpCard"><div class="botH">HOW TRADES FINISHED (R MULTIPLES)</div>${this.rHist(allR)}
+          <div class="botNote">1R is one unit of the risk taken. A strategy can win less than half its trades and still
+          make money if the winners are bigger.</div></div>`,
+        earns: `<div class="rpCard"><div class="botH">WHERE THE FLEET EARNS</div>${insBars}</div>`,
+        lab: `<div class="rpCard"><div class="botH">WHAT THE LAB HAS BEEN DOING</div>${labLog}
+          <div class="botNote">${lab.tried || 0} recipes tested · ${liveLab.length} published as bots</div></div>`,
+        conditions: `<div class="rpCard"><div class="botH">THE SIX CONDITIONS FOR A LIVE SEAT</div>
+        <div class="rpChecks">${this.READY.map(c => `<div class="rpCheck"><b>${esc(c.label)}</b></div>`).join('')}</div>
+        <div class="botNote warn">All six met is not a recommendation to trade real money. It means the bot has stopped
+          being obviously unfit. Live markets slip, gap and fill differently from any test.</div>
+      </div>`,
+      };
+      return `<div class="rpWrap">${BotLayout.compose('report', P, true)}</div>`;
+    }
     return `<div class="rpWrap">
       <div class="rpHead">
         <div><b>PERFORMANCE REPORT</b><span>${new Date().toLocaleString()} · every figure below is play money</span></div>

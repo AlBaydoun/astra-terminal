@@ -139,3 +139,24 @@ const TradeReview = {
   }
 };
 document.addEventListener('DOMContentLoaded',()=>TradeReview.init());
+
+/* ⚙ Layout for the Trade Replay window. The window is built once, so its parts
+   are moved in place and hidden with a class — every button and the replay
+   itself keep working. The title (✕ close) and the replay stage are always on. */
+TradeReview.PARTS={head:'.obsHead',layout:'.trLayoutHost',filters:'#trFilters',stats:'#trStats',list:'.trList',pager:'.trPager',review:'#trReview',foot:'.obsFoot'};
+TradeReview.layoutOpen=false;
+TradeReview.applyLayout=function(){
+  const wrap=this.host;if(!wrap||typeof BotLayout==='undefined')return;
+  const head=wrap.querySelector(':scope > .obsHead');
+  /* the pager toolbar gets a name of its own, the panel a place, the head a ⚙ button */
+  const pager=wrap.querySelector('#trPrev')?.closest('.obsToolbar');if(pager)pager.classList.add('trPager');
+  if(!wrap.querySelector(':scope > .trLayoutHost')&&head)head.insertAdjacentHTML('afterend','<div class="trLayoutHost"></div>');
+  if(head&&!head.querySelector('[data-blopen="replay"]')){const x=head.querySelector('[data-close]');if(x)x.insertAdjacentHTML('beforebegin','<button class="blBtn trLayoutBtn" data-blopen="replay" title="Put the parts of the Trade Replay in your own order, and hide the ones you do not need">⚙ Layout</button>');}
+  const lay=BotLayout.get('replay'),els={};
+  for(const [k,sel] of Object.entries(this.PARTS))els[k]=wrap.querySelector(':scope > '+sel);
+  for(const k of lay.order){const el=els[k];if(!el)continue;wrap.appendChild(el);if(k==='head'&&els.layout)wrap.appendChild(els.layout);
+    const part=BotLayout.REPLAY_PARTS.find(p=>p.id===k);el.classList.toggle('blOff',lay.hidden.includes(k)&&!(part&&part.always));}
+  if(els.layout)els.layout.innerHTML=this.layoutOpen?BotLayout.panel('replay',true):'';
+  const btn=wrap.querySelector('[data-blopen="replay"]');if(btn)btn.classList.toggle('on',this.layoutOpen);
+};
+{const show=TradeReview.show;TradeReview.show=function(...a){const out=show.apply(this,a);try{this.applyLayout();}catch(e){console.warn('ASTRA replay layout:',e.message);}return out;};}

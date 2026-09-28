@@ -60,8 +60,21 @@ const TradeAnalysis = {
     return v>0?side+' earned more net profit':v<0?side+' lost less — both directions lost money':side+' broke even; the other direction lost money';
   },
   select(key,label,items){return `<label>${label}<select data-an-filter="${key}">${items.map(([v,n])=>`<option value="${esc(v)}"${this.f[key]===v?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`;},
-  view(){
+  view(extras){
     const all=this.all(),unique=k=>[...new Set(all.map(x=>x.t[k]).filter(Boolean))].sort().map(v=>[v,v]);
+    const filters=`<div class="anFilters">
+      ${this.select('bot','Paper account',[['all','All bot accounts'],...this.accounts().map(b=>[b.id,b.name])])}
+      ${this.select('sym','Instrument',[['all','All instruments'],...unique('sym')])}
+      ${this.select('tf','Timeframe',[['all','All timeframes'],...unique('tf')])}
+      <label>Closed from<input type="date" data-an-filter="from" value="${esc(this.f.from)}"></label>
+      <label>Closed through<input type="date" data-an-filter="to" value="${esc(this.f.to)}"></label>
+      ${this.select('edited','Trade adjustments',[['all','All trades'],['no','Unedited only'],['yes','Edited only']])}
+      <button class="bBtn" data-an-reset>Reset filters</button><button class="bBtn" data-an-refresh>↻ Refresh</button>
+      </div>`;
+    /* ⚙ Layout: the filters and every results part in your order. The parts are
+       refreshed one by one where they stand; the filters are never redrawn. */
+    if(extras&&typeof BotLayout!=='undefined')
+      return `<div class="anWrap"><div id="anResults" data-anlayout="1">${BotLayout.compose('analysis',Object.assign({notes:extras.notes||'',filters},this.parts(all)),true)}</div></div>`;
     return `<div class="anWrap"><div class="anFilters">
       ${this.select('bot','Paper account',[['all','All bot accounts'],...this.accounts().map(b=>[b.id,b.name])])}
       ${this.select('sym','Instrument',[['all','All instruments'],...unique('sym')])}
@@ -112,6 +125,34 @@ const TradeAnalysis = {
     return `<div class="anLogNav"><span>${rows.length} trades · page ${this.page+1} of ${pages}</span><button class="bBtn" data-an-page="-1" ${!this.page?'disabled':''}>← Previous</button><button class="bBtn" data-an-page="1" ${this.page>=pages-1?'disabled':''}>Next →</button></div>
       <div class="anTableScroll"><table class="anTable"><thead><tr><th>Closed / opened</th><th>Pair · bot</th><th>Side · timeframe</th><th>Entry → exit</th><th>Final lots</th><th>Net result</th><th>Fees</th><th>R</th><th>Exit / adjustments</th></tr></thead><tbody>${sorted.slice(this.page*50,(this.page+1)*50).map(x=>`<tr><td>${esc(this.when(x.t.exitTime))}<small>${esc(this.when(x.t.entryTime))}</small></td><td>${WorkspaceUI.pair(x.t.sym||'Unknown')}<small>${esc(x.botName)}</small></td><td class="${x.t.dir===1?'anBuy':'anSell'}">${x.t.dir===1?'BUY':'SELL'}<small>${esc(x.t.tf||'—')}</small></td><td>${this.value(x.t.entry,6)} → ${this.value(x.t.exit,6)}</td><td>${this.value(x.t.lots,4)}</td><td class="${x.net<0?'anNegative':'anPositive'}">${this.money(x.net)}${x.uncertain?'*':''}</td><td>${this.money(x.fees)}</td><td>${this.value(x.r)}</td><td>${esc(x.t.reason||'—')}<small>${x.t.touched?'Edited by hand':'Unedited'}</small></td></tr>`).join('')||'<tr><td colspan="9">No completed trades match.</td></tr>'}</tbody></table></div>`;
   },
+  /* the results in named parts (every part always has a wrapper, so it can be refreshed in place) */
+  parts(all=this.all()){
+    const keys=['hero','scope','notices','sides','money','time','compare','instruments','tf','bots','log','updated'];
+    const P={};for(const k of keys)P[k]='';
+    if(this.f.from&&this.f.to&&this.f.from>this.f.to){P.notices='<div class="anNotice" role="status">Choose an end date on or after the start date.</div>';}
+    else {
+    const selected=all.filter(x=>this.matches(x)),rows=selected.filter(x=>x.valid),b=this.stats(rows.filter(x=>x.t.dir===1)),s=this.stats(rows.filter(x=>x.t.dir===-1)),total=this.stats(rows);
+    const open=this.accounts().filter(b=>this.f.bot==='all'||b.id===this.f.bot).reduce((n,b)=>n+(Bots.ledger(b.id).open||[]).length,0);
+    const capped=this.accounts().filter(b=>(this.f.bot==='all'||b.id===this.f.bot)&&(Bots.ledger(b.id).closed||[]).length>=500).length;
+    P.hero=`<section class="anHero"><div><div class="anKicker">◈ DIRECTION ANALYSIS · PAPER HISTORY</div><h2>${this.headline(b,s)}</h2><p>${rows.length} completed trades · ${new Set(rows.map(x=>x.t.sym)).size} instruments · ${total.touched} adjusted by hand</p></div><div class="anTotal"><span>Combined net${total.unknown?'*':''}</span><strong class="${total.net<0?'anNegative':'anPositive'}">${this.money(total.net)}</strong><small>Recorded paper ledger units</small></div></section>`;
+    P.scope=`<p class="anScope">${open} currently open positions in the selected account scope are excluded. Filters use local closing dates. Each bot is a separate virtual account; this is retained history, not a live broker statement.</p>`;
+    P.notices=(total.unknown?`<div class="anNotice">* ${total.unknown} trades lack an exact saved entry fee. Their displayed results may overstate net profit. ${total.lower!==null?'Combined net is between '+this.money(total.lower)+' and '+this.money(total.net)+' after those entry fees.':'A reliable net range cannot be calculated because some fee records are missing.'} Charts and win/loss statistics use the displayed results.</div>`:'')+
+      (selected.length!==rows.length?`<div class="anNotice">${selected.length-rows.length} records excluded: missing or invalid profit/direction. Missing numbers are never treated as zero.</div>`:'')+
+      (capped?`<div class="anNotice">${capped} selected accounts have reached the 500-trade retention limit. Earlier history may no longer be available.</div>`:'');
+    P.sides=`<div class="anColumns">${this.card(b,'BUY')}${this.card(s,'SELL')}</div>`;
+    P.money=`<section class="anCard"><h3>▥ Where the money came from</h3><p>Same cash scale for every bar. Losses show money given back.</p>${this.bars(b,s)}</section>`;
+    P.time=`<section class="anCard"><h3>⌁ Profit over time</h3><p><span class="anBuy">━ Buy</span> &nbsp; <span class="anSell">┄ Sell</span> · cumulative completed results</p>${this.curve(b,s)}<p>${total.undated?total.undated+' trades without valid close dates are excluded from this curve.':'Both lines start at zero for the selected period.'} This is a realised P&amp;L curve, not account equity.</p></section>`;
+    P.compare=`<section class="anCard"><h3>≋ Buy vs Sell · the full comparison</h3>${this.table(b,s)}<div class="anNotes"><p>¹ Recorded commissions are shown separately for reference; do not subtract them again. Saved entry fees are deducted when known. Spread and slippage are already reflected in fills; history is never repriced. ${total.missingFees} trades lack a commission record.</p><p>² Profit factor = money won ÷ money lost. ³ R compares profit with the trade’s original risk. Missing R is excluded; saved legacy R is retained when entry fees are zero. ⁴ Drawdown is the largest fall from a peak in the dated, completed-trade curve, in cash units; it excludes open losses. Cash comparisons also reflect different sizes and trade counts, not just signal quality.</p></div></section>`;
+    P.instruments=`<section class="anCard"><h3>◎ Which instruments delivered?</h3><p>Ranked by combined net. Click a pair to open its chart.</p>${this.breakdown(rows,'sym')}</section>`;
+    P.tf=`<section class="anCard"><h3>◷ By timeframe</h3>${this.breakdown(rows,'tf')}</section>`;
+    P.bots=`<section class="anCard"><h3>▦ By bot account</h3>${this.breakdown(rows,'bot')}</section>`;
+    P.log=`<section class="anCard"><h3>☷ Every completed trade</h3><p>Partial exits are included once when the remaining position closes. Final lots may be smaller than the original position.</p><div id="anLog">${this.log(rows)}</div></section>`;
+    }
+    P.updated=`<p class="anScope">Updated ${esc(new Date().toLocaleTimeString())}. Historical paper results describe what happened; they do not establish a future trading advantage.</p>`;
+    /* never an empty part: its wrapper must exist so a later refresh can fill it */
+    for(const k of keys)P[k]=`<div class="anPart">${P[k]}</div>`;
+    return P;
+  },
   results(all=this.all()){
     if(this.f.from&&this.f.to&&this.f.from>this.f.to)return '<div class="anNotice" role="status">Choose an end date on or after the start date.</div>';
     const selected=all.filter(x=>this.matches(x)),rows=selected.filter(x=>x.valid),b=this.stats(rows.filter(x=>x.t.dir===1)),s=this.stats(rows.filter(x=>x.t.dir===-1)),total=this.stats(rows);
@@ -133,8 +174,10 @@ const TradeAnalysis = {
   },
   refresh(){
     const el=document.getElementById('anResults');if(!el)return;
+    const laid=el.dataset.anlayout==='1';
     // Keep date pickers, selects and focus intact during the workspace's 30-second tick.
-    const focused=el.contains(document.activeElement);if(focused)return;
+    // (In the laid-out page the filters are never redrawn, so they need no protection.)
+    const focused=!laid&&el.contains(document.activeElement);if(focused)return;
     const all=this.all();
     // A newly closed instrument should become filterable without rebuilding an open picker.
     for(const key of ['sym','tf']){
@@ -145,6 +188,11 @@ const TradeAnalysis = {
         if(known.has(value))continue;
         const option=document.createElement('option');option.value=value;option.textContent=value;select.appendChild(option);
       }
+    }
+    if(laid){
+      const P=this.parts(all);
+      for(const [k,html] of Object.entries(P)){const w=el.querySelector('[data-blpart="'+k+'"]');if(w)w.innerHTML=html;}
+      return;
     }
     el.innerHTML=this.results(all);
   },

@@ -24,6 +24,12 @@ const Shortcuts = {
     { id: 'news',     label: 'News & alerts',                    def: 'Ctrl+F4', run: () => Shortcuts.tab('news') },
     { id: 'heatmap',  label: 'Heatmap',                          def: 'Ctrl+F6', run: () => Shortcuts.tab('heatmap') },
     { id: 'panel',    label: 'Lower panel: normal → small → full', def: 'Ctrl+F10', run: () => { const t = document.querySelector('#botTabs [data-tab].active') || document.querySelector('#botTabs [data-tab="bots"]'); if (t) t.click(); } },
+    /* charts: on the desk, or torn off onto another monitor */
+    { id: 'winChart', label: 'This chart in its own window (for a second monitor)', def: 'Ctrl+F1', run: () => Shortcuts.winChart() },
+    { id: 'winNew',   label: 'A new chart window on top of everything',  def: 'Ctrl+F2', run: () => Shortcuts.desk('winnew', () => { if (typeof Popout !== 'undefined') Popout.open('chart', { fresh: true }); }) },
+    { id: 'winMenu',  label: 'The Windows menu (any panel in its own window)', def: 'Ctrl+F3', run: () => Shortcuts.desk('winmenu', () => { const b = document.getElementById('winBtn'); if (b) b.click(); }) },
+    { id: 'screenAdd',  label: 'One more chart screen on the desk',  def: 'Alt+ArrowUp',   run: () => Shortcuts.desk('screenadd',  () => { if (typeof Screens !== 'undefined') Screens.add(); }) },
+    { id: 'screenLess', label: 'Close the last chart screen',        def: 'Alt+ArrowDown', run: () => Shortcuts.desk('screenless', () => { if (typeof Screens !== 'undefined') Screens.removeLast(); }) },
   ],
   map: null, capture: null,
 
@@ -57,6 +63,24 @@ const Shortcuts = {
   },
 
   /* ---- the little helpers the actions use ---- */
+
+  /* Pressed inside a chart screen, this hands THAT chart to the desk, which
+     opens it as a window on its own instrument and takes the tile away — the
+     chart moves, it does not multiply. Pressed in the main window there is
+     nothing to move out of the grid, so it opens another window on whatever the
+     main chart is showing. */
+  /* run it here in the main window; inside a screen, ask the desk to do it */
+  desk(cmd, here){
+    if (typeof ScreenTile !== 'undefined' && ScreenTile.id && ScreenTile.ask(cmd)) return;
+    here();
+  },
+
+  winChart(){
+    if (typeof ScreenTile !== 'undefined' && ScreenTile.id && ScreenTile.popOut()) return;
+    if (typeof Screens !== 'undefined' && Screens.list && Screens.list.length && Screens.maxId &&
+        Screens.maxId !== 'main') return Screens.popOut(Screens.maxId);
+    if (typeof Popout !== 'undefined') Popout.open('chart', { fresh: true });
+  },
   bot(id){
     if (typeof WorkspaceUI === 'undefined') return;
     const o = document.getElementById('obsMax'); if (o && !o.hidden && typeof ObsWindows !== 'undefined' && o.dataset.name) ObsWindows.set(o.dataset.name, 'normal');
@@ -96,7 +120,7 @@ const Shortcuts = {
     const body = document.getElementById('keysBody'); if (!body) return;
     body.innerHTML = `<p class="dim2 keysHint">Function keys work anywhere, even while typing. Click a key to change it, then press the new key (Esc cancels). Letters on their own open the symbol search, so use F-keys or Ctrl/Alt combinations.</p>
       <table class="keysTable">${this.ACTIONS.map(a => `<tr><td>${esc(a.label)}</td><td><button class="keysKey${this.capture === a.id ? ' waiting' : ''}" data-keyid="${a.id}">${this.capture === a.id ? 'press a key…' : esc(this.map[a.id] || '—')}</button></td></tr>`).join('')}</table>
-      <div class="keysFoot"><span class="dim2">Also: Esc closes / restores · M maximises the chart when single-letter tools are off</span><button class="bMini" data-keysreset>↺ defaults</button></div>`;
+      <div class="keysFoot"><span class="dim2">Also: Esc closes / restores · M maximises the chart when single-letter tools are off · click a chart screen first, then Ctrl+F1, to send that one to its own window</span><button class="bMini" data-keysreset>↺ defaults</button></div>`;
     body.querySelectorAll('[data-keyid]').forEach(b => b.addEventListener('click', () => { this.capture = this.capture === b.dataset.keyid ? null : b.dataset.keyid; this.render(); }));
     body.querySelector('[data-keysreset]').addEventListener('click', () => { this.map = null; lsSet(this.KEY, {}); this.load(); this.render(); });
   },

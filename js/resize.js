@@ -36,13 +36,29 @@ const Resize = {
     }, -1);
   },
 
+  /* The lower panel — Screener, Heatmap, Observer, Intel, News, and the Market
+     Clock and Trade Replay in their normal state — is resized by the bar on its
+     top edge.
+
+     ⚠ That bar used to live INSIDE the panel, and the panel has overflow:hidden,
+     so three of its six pixels were clipped away and the tab strip sat on top of
+     the rest: about 3 px could actually be hit, which is why dragging "did not
+     work". It is now a bar of its own between the charts and the panel, 10 px
+     tall, so it can be grabbed anywhere along its width. */
   attachBottom(){
     const bp = document.getElementById('bottomPanel');
-    if (!bp || bp.querySelector('.paneGrip')) return;
+    if (!bp || !bp.parentElement) return;
+    if (bp.parentElement.querySelector(':scope > .bottomGrip')) return;
+    const old = bp.querySelector(':scope > .paneGrip');
+    if (old) old.remove();                       // the clipped one from before
     const grip = document.createElement('div');
     grip.className = 'paneGrip bottomGrip';
-    grip.title = 'Drag to resize the lower panel';
-    bp.appendChild(grip);
+    grip.title = 'Drag to make the lower panel taller or shorter (double-click to fold it away)';
+    bp.parentElement.insertBefore(grip, bp);
+    grip.addEventListener('dblclick', () => {
+      bp.classList.toggle('collapsed');
+      window.dispatchEvent(new Event('resize'));
+    });
     this.drag(grip, () => bp.getBoundingClientRect().height, (h) => {
       const v = Math.max(37, Math.min(window.innerHeight - 220, h));
       bp.style.height = v + 'px';
@@ -51,23 +67,29 @@ const Resize = {
     }, -1);
   },
 
-  /* shared drag behaviour; `sign` is -1 because dragging up must grow a panel
-     whose grip sits on its top edge */
+  /* Shared drag behaviour; `sign` is -1 because dragging up must grow a panel
+     whose grip sits on its top edge. Pointer events with capture, so the drag
+     survives the cursor leaving the bar or the window — and so it works with a
+     finger on a touch screen too. */
   drag(grip, getH, setH, sign){
-    grip.addEventListener('mousedown', e => {
+    grip.addEventListener('pointerdown', e => {
       e.preventDefault();
       const startY = e.clientY, startH = getH();
       document.body.classList.add('resizing');
+      try { grip.setPointerCapture(e.pointerId); } catch(err){}
       const move = ev => setH(startH + sign * (ev.clientY - startY));
       const up = () => {
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', up);
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        grip.removeEventListener('pointercancel', up);
+        try { grip.releasePointerCapture(e.pointerId); } catch(err){}
         document.body.classList.remove('resizing');
         this.save();
         window.dispatchEvent(new Event('resize'));
       };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+      grip.addEventListener('pointercancel', up);
     });
   },
 };
