@@ -190,7 +190,9 @@ Object.assign(Bots, {
       /* the laid-out Manual page: refresh the record parts where they stand, never the ticket */
       const P = this.ledgerParts('manual', L, st);
       for (const k of ['stats', 'equity', 'history', 'decisions', 'lessons', 'daily']){
-        const el = host.querySelector('[data-blpart="' + k + '"]');
+        const part = host.querySelector('[data-blpart="' + k + '"]');
+        /* a foldable part keeps its fold bar: only what is inside it is refreshed */
+        const el = part && (part.querySelector(':scope > .blFoldBody') || part);
         if (el && !(el.contains(document.activeElement) && document.activeElement.matches('input,select,textarea'))){ el.innerHTML = P[k]; this.bindPositionControls(el); }
       }
       this.wireCols(host, 'manual');

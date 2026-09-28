@@ -40,11 +40,83 @@ const LiveManual = {
       <div class="lmActions"><button class="bBtn danger" id="lmSend" data-lm-act="send" disabled>Confirm real market order</button><button class="bBtn" id="lmReviewed" data-lm-act="reviewed" hidden>I checked the uncertain outcome in MT5</button></div><p id="lmMessage" role="status"></p>
       <p>Accepted SL/TP levels are held by the broker and remain active with your PC off. Gaps can fill beyond a stop. Pending orders, trailing stops and stop edits are managed in MetaTrader. Automatic market entries have their own Start control below.</p></section>`,
       auto: typeof ManualAuto!=='undefined'?this.automation().view():'',
+      tuning: typeof ManualAuto!=='undefined'?this.tuningView():'',
       positions:`<section class="wsTradeSection"><h3>3 · Real open trades</h3><div id="lmPositions"></div><p>These are broker positions across the account. Close buttons appear only for trades opened by this LIVE Trading Bot. Manage stop/target changes and other positions directly in MT5.</p></section>`,
     };
     const body=typeof BotLayout!=='undefined'?BotLayout.compose(this.id,parts,true):Object.values(parts).join('');
     return `<div id="lmDesk" class="lmDesk">${body}</div>`;
   },
+  /* ---------- Tuning: the automatic-entry levels on big sliders ----------
+     The same four values as the Automatic entries boxes (they stay in step),
+     shown in money for this account: what one entry is worth, what it loses at
+     its stop, what it makes at its target, and the ratio between them. The
+     Override switch uses YOUR stop and target instead of each strategy's own.
+     Nothing here sends anything; the values apply when a session is started. */
+  TUNE: [
+    ['allocation', 'Position size', '% of equity per entry', 0.1, 25, 0.1],
+    ['sl', 'Stop distance', '% from the entry price', 0.05, 10, 0.05],
+    ['tp', 'Target distance', '% from the entry price', 0.05, 20, 0.05],
+    ['entries', 'Entries this session', '0 = no count limit', 0, 50, 1],
+  ],
+  tuneEquity(){ const h=this.health; return (h&&h.equity>0)?h.equity:(Live.bridge&&Live.bridge.balance>0?Live.bridge.balance:0); },
+  tuningView(){
+    const a=this.automation(),d=a.draft,locked=a.running||a.starting,own=d.exits==='percent';
+    const slider=([k,label,sub,min,max,step])=>{const v=Math.min(max,Math.max(min,Number(d[k])||0)),off=locked||((k==='sl'||k==='tp')&&!own);
+      return `<div class="tnRow${off?' off':''}" data-tnrow="${k}"><div class="tnLbl"><b>${label}</b><small>${sub}</small></div>
+        <input type="range" data-tn="${k}" min="${min}" max="${max}" step="${step}" value="${v}"${off?' disabled':''}>
+        <input type="number" class="tnNum" data-tnn="${k}" min="${min}" max="${max}" step="${step}" value="${v}"${off?' disabled':''}><span class="tnUnit">${k==='entries'?'':'%'}</span>
+        <span class="tnMoney" data-tnm="${k}"></span></div>`;};
+    return `<section class="wsTradeSection tnWrap"><h3>🎚 Tuning · automatic entries</h3>
+      <div class="tnTop"><label class="tnSwitch"><input type="checkbox" data-tnown="1"${own?' checked':''}${locked?' disabled':''}><i></i>
+        <span><b>Override the strategies’ stop and target</b><small>${own?'Using YOUR distances below for every entry.':'Each strategy uses its own stop and target — switch on to use yours.'}</small></span></label>
+        <span class="tnLock">${locked?'🔒 A session is running — stop it to change these values':'Applies when you start a session'}</span></div>
+      <div class="tnGrid"><div class="tnRows">${this.TUNE.map(slider).join('')}</div>
+        <div class="tnSide"><svg class="tnLadder" viewBox="0 0 120 180" data-tnladder="1"></svg><div class="tnSum" data-tnsum="1"></div></div></div>
+    </section>`;
+  },
+  tuneRefresh(host){
+    host=host||document.getElementById('lmDesk');if(!host)return;const a=this.automation(),d=a.draft,eq=this.tuneEquity(),own=d.exits==='percent';
+    const m=v=>eq>0?fmtNum(v):'—',pos=eq*(+d.allocation||0)/100,loss=pos*(+d.sl||0)/100,gain=pos*(+d.tp||0)/100,rr=(+d.sl>0)?(+d.tp/+d.sl):0;
+    const set=(k,t)=>{const e=host.querySelector('[data-tnm="'+k+'"]');if(e)e.innerHTML=t;};
+    set('allocation',eq>0?'≈ <b>'+m(pos)+'</b> per entry':'account not read yet');
+    set('sl',own?'loses ≈ <b class="down">−'+m(loss)+'</b> at the stop':'<i>strategy’s own stop</i>');
+    set('tp',own?'makes ≈ <b class="up">+'+m(gain)+'</b> at the target':'<i>strategy’s own target</i>');
+    set('entries',(+d.entries||0)===0?'no limit — until you press Stop':'stops after <b>'+d.entries+'</b> entr'+(+d.entries===1?'y':'ies'));
+    const sum=host.querySelector('[data-tnsum]');
+    if(sum)sum.innerHTML=own?`<div><span>Reward : risk</span><b class="${rr>=1.5?'up':rr>=1?'':'down'}">${rr?rr.toFixed(2):'—'} : 1</b></div><div><span>Win rate needed to break even</span><b>${rr?Math.round(100/(1+rr))+'%':'—'}</b></div><div><span>Worst case per entry</span><b class="down">−${m(loss)}</b></div>`
+      :`<div><span>Stops and targets</span><b>each strategy’s own</b></div><div><span>Position per entry</span><b>${m(pos)}</b></div>`;
+    const svg=host.querySelector('[data-tnladder]');
+    if(svg){const sl=own?+d.sl||0:1,tp=own?+d.tp||0:2,top=Math.max(sl,tp)||1,y=v=>90-v/top*75;
+      svg.innerHTML=`<rect x="40" y="${y(tp)}" width="40" height="${90-y(tp)}" fill="rgba(46,189,133,.25)" stroke="#2ebd85"/>
+        <rect x="40" y="90" width="40" height="${y(-sl)-90}" fill="rgba(246,70,93,.25)" stroke="#f6465d"/>
+        <line x1="30" x2="90" y1="90" y2="90" stroke="#8fa3c8" stroke-dasharray="3 2"/>
+        <text x="92" y="${y(tp)+4}" fill="#2ebd85" font-size="10">TP ${own?'+'+tp+'%':''}</text><text x="92" y="93" fill="#8fa3c8" font-size="10">entry</text>
+        <text x="92" y="${y(-sl)+4}" fill="#f6465d" font-size="10">SL ${own?'−'+sl+'%':''}</text>`;}
+  },
+  tuneBind(host){
+    const a=this.automation(),apply=(k,v)=>{
+      if(a.running||a.starting)return;
+      const row=this.TUNE.find(x=>x[0]===k);v=Math.min(row[4],Math.max(row[3],Number(v)));if(!Number.isFinite(v))return;
+      if(k==='entries')v=Math.round(v);a.draft[k]=v;
+      host.querySelectorAll('[data-tn="'+k+'"],[data-tnn="'+k+'"]').forEach(e=>{if(document.activeElement!==e)e.value=v;});
+      /* the Automatic entries boxes follow */
+      const box=host.querySelector('.manualAuto [data-ma="'+k+'"]');if(box)box.value=v;
+      this.tuneRefresh(host);a.refresh();
+    };
+    host.querySelectorAll('[data-tn]').forEach(e=>e.addEventListener('input',()=>apply(e.dataset.tn,e.value)));
+    host.querySelectorAll('[data-tnn]').forEach(e=>e.addEventListener('change',()=>apply(e.dataset.tnn,e.value)));
+    host.querySelector('[data-tnown]')?.addEventListener('change',e=>{
+      if(a.running||a.starting)return;a.draft.exits=e.target.checked?'percent':'signal';
+      const sel=host.querySelector('.manualAuto [data-ma="exits"]');if(sel)sel.value=a.draft.exits;
+      a.refresh();this.tuneRedraw(host);
+    });
+    /* a change in the Automatic entries boxes shows here too */
+    if(!host._tnAuto){host._tnAuto=true;host.addEventListener('change',e=>{if(e.target.closest&&e.target.closest('.manualAuto [data-ma]'))setTimeout(()=>this.tuneRedraw(host),0);});}
+    this.tuneRefresh(host);
+  },
+  tuneRedraw(host){const w=host.querySelector('[data-blpart="tuning"] .tnWrap')||host.querySelector('.tnWrap');if(!w)return;
+    const t=document.createElement('div');t.innerHTML=this.tuningView();w.replaceWith(t.firstElementChild);this.tuneBind(host);},
+
   unlocked:false,
   stateGate(){
     const S=Live.load(),a=S.armed[this.id];
@@ -103,8 +175,8 @@ const LiveManual = {
     return {symbol:d.sym,side:d.side,lots:d.lots||0,sl:d.sl,tp:d.tp||0,amount:d.amount||0,amountMode:d.amountMode||'value',...Object.fromEntries(['riskPct','maxLots','maxOpen','maxDailyLossPct','maxTotalLossPct'].map(k=>[k,C[k]])),
       maxNotionalPct:d.maxNotionalPct,maxCorrelated:d.maxCorrelated,maxPerSymbol:d.maxPerSymbol??1,startBalance:Live.state.startBalance||this.health?.balance};
   },
-  permission(forOrder=true){
-    const d=this.draft,S=Live.load();
+  permission(forOrder=true,sym){
+    const d={sym:sym?(Feed.brokerName?Feed.brokerName(sym):sym):this.draft.sym},S=Live.load();
     if(!this.symbols().includes(d.sym))throw Error('Choose an exact instrument from this broker account');
     if(forOrder&&PairRules.blocked(d.sym))throw Error('This pair is blocked in Instrument permissions');
     if(forOrder&&!S.caps.instruments.includes(d.sym))throw Error('Allow this pair in the live rules first');
@@ -181,7 +253,7 @@ const LiveManual = {
   },
   bind(host){
     this.bindSharedTicket(host);this.status();this.refresh();clearInterval(this.timer);this.timer=setInterval(()=>{if(Bots.active===this.id)this.refresh();else{clearInterval(this.timer);this.timer=null;}},5000);
-    if(typeof ManualAuto!=='undefined')this.automation().bind(host);
+    if(typeof ManualAuto!=='undefined'){this.automation().bind(host);this.tuneBind(host);}
     host.querySelectorAll('[data-lm]').forEach(el=>el.addEventListener('input',()=>{
       this.auto?.stop('Live settings changed. Start a new session when ready.');
       if(el.dataset.lm==='sym'||el.dataset.lm==='side'){
@@ -271,24 +343,57 @@ const LiveManual = {
   automation(){
     if(this.auto)return this.auto;
     const auto=Object.create(ManualAuto);
-    Object.assign(auto,{target:'liveManual',draft:{...ManualAuto.draft,mode:'confluence'},running:false,starting:false,busy:false,revision:0,timer:null,release:null,seen:new Set(),events:[],count:0,status:'Stopped · real automatic entries require an unlocked desk and a qualified strategy.'});
+    /* your settings are remembered (never a running session: after a reload you press Start again) */
+    const savedDraft=(()=>{try{const v=lsGet('astra_liveauto_draft',null);return v&&typeof v==='object'?v:{};}catch(e){return {};}})();
+    const keepKeys=['sources','source','scope','direction','exits','allocation','sl','tp','entries'];
+    const restored=Object.fromEntries(Object.entries(savedDraft).filter(([k])=>keepKeys.includes(k)));
+    Object.assign(auto,{target:'liveManual',draft:{...ManualAuto.draft,...restored,mode:'confluence'},running:false,starting:false,busy:false,revision:0,timer:null,release:null,seen:new Set(),events:[],count:0,status:'Stopped · real automatic entries require an unlocked desk and a qualified strategy.'});
+    auto.readyMap=function(){const now=Date.now();if(this._rm&&now-this._rmAt<5000)return this._rm;const m={};for(const b of this.sources())m[b.id]=Live.readiness(b.id);this._rm=m;this._rmAt=now;return m;};
+    auto.sourceInfo=function(id){return (this.readyMap()||{})[id]||{ok:false,met:0,of:0,checks:null};};
     auto.view=function(){return ManualAuto.view.call(this).replace('manual paper account','REAL JustMarkets account').replace('Start selected signals · paper','Start selected signals · REAL').replace('Experimental, with no established profitability. Sessions stop on reload. Keep ASTRA, the bridge and PC running for paper entries and exits. Stopping automatic entries leaves existing positions and separately placed price instructions active.','Real automation requires the existing strategy-readiness checks. Sessions stop on reload or when you leave this desk. Keep the PC, bridge and ASTRA running for new entries. Accepted stops and targets remain at the broker. No pending price instructions are created here.');};
     const bind=auto.bind;
     auto.bind=function(host){bind.call(this,host);const mode=host.querySelector('[data-ma="mode"]');mode.value='confluence';mode.disabled=true;mode.querySelector('[value="price"]').disabled=true;};
     const refresh=auto.refresh;
-    auto.refresh=function(){refresh.call(this);const host=document.querySelector('[data-auto-target="liveManual"]');if(host){host.querySelector('[data-ma="mode"]').disabled=true;host.querySelector('#maStatus').textContent=this.status+' · '+this.count+' REAL entries this session';}};
+    auto.refresh=function(){{const snap=JSON.stringify(Object.fromEntries(keepKeys.map(k=>[k,this.draft[k]])));if(snap!==this._saved){this._saved=snap;lsSet('astra_liveauto_draft',JSON.parse(snap));}}refresh.call(this);const host=document.querySelector('[data-auto-target="liveManual"]');if(host){host.querySelector('[data-ma="mode"]').disabled=true;host.querySelector('#maStatus').textContent=this.status+' · '+this.count+' REAL entries this session';}};
     auto.start=async function(){
-      await LiveManual.refresh();const why=LiveManual.stateGate(),source=this.draft.source||'confluence',ready=Live.readiness(source);
-      if(why||!ready.ok){this.status=why||ready.why||'This strategy has not passed the live-readiness checks';this.refresh();return false;}
-      if(!confirm('Start REAL automatic entries from '+(BOT_BY_ID[source]?.name||source)+' using the displayed limits? Each qualifying signal can send an order until you stop this session.'))return false;
-      return ManualAuto.start.call(this);
+      await LiveManual.refresh();const why=LiveManual.stateGate();
+      if(why){this.status=why;this.refresh();return false;}
+      this._rm=null;const picked=this.picked(),rm=this.readyMap(),ok=picked.filter(id=>rm[id]?.ok),no=picked.filter(id=>!rm[id]?.ok);
+      if(!picked.length){this.status='Tick at least one signal source.';this.refresh();return false;}
+      const name=id=>BOT_BY_ID[id]?.name||id,whyNot=id=>rm[id]?.of?'meets '+rm[id].met+' of '+rm[id].of:'no paper record';
+      /* bots that have not qualified are ALLOWED on your explicit say-so: a warning, then a typed phrase */
+      let use=ok,over=[];
+      if(no.length){
+        const yes=confirm('⚠ WARNING — '+no.length+' of the ticked bots '+(no.length===1?'has':'have')+' NOT qualified for real money:\n\n  ⚠ '+no.map(id=>name(id)+' ('+whyNot(id)+')').join('\n  ⚠ ')+
+          (ok.length?'\n\nQualified:\n  ✓ '+ok.map(name).join('\n  ✓ '):'\n\nNone of the ticked bots is qualified.')+
+          '\n\nUnqualified bots have not proven themselves on paper; they are more likely to lose real money. Your limits, allowed pairs, the broker preview and the kill switch still apply.\n\nOK = include them (you will type a confirmation next)\nCancel = '+(ok.length?'start with the qualified bots only':'do not start'));
+        if(yes){const typed=prompt('Type exactly  TRADE UNQUALIFIED  to let '+(no.length===1?'this unqualified bot':'these '+no.length+' unqualified bots')+' place REAL orders:');
+          if(typed===null)return false;
+          if(typed.trim()!=='TRADE UNQUALIFIED'){this.status='Not started — the confirmation was not typed exactly (TRADE UNQUALIFIED).';this.refresh();return false;}
+          use=picked;over=no;}
+        else if(!ok.length){this.status='Not started — none of the ticked bots is qualified, and you chose not to override.';this.refresh();return false;}
+      }
+      if(!confirm('Start REAL automatic entries from '+use.length+' bot'+(use.length===1?'':'s')+':\n\n  • '+use.map(id=>name(id)+(over.includes(id)?'  ⚠ NOT QUALIFIED (override)':'')).join('\n  • ')+
+        (no.length&&!over.length?'\n\nLeft out — not qualified for real money:\n  • '+no.map(id=>name(id)+' ('+whyNot(id)+')').join('\n  • '):'')+
+        '\n\nEach signal from ANY of them can send a real order, within the displayed limits, until you stop this session. Continue?'))return false;
+      const keep=this.draft.sources;this.draft.sources=use;this.draft.source=use[0];this.draft.override=over;
+      try{return await ManualAuto.start.call(this);}finally{this.draft.sources=keep;this.draft.source=keep[0]||'';delete this.draft.override;const h=document.getElementById('lmDesk');if(h)LiveManual.tuneRedraw(h);}
     };
-    auto.stop=function(message){ManualAuto.stop.call(this,message);LiveManual.invalidate();};
+    auto.stop=function(message){ManualAuto.stop.call(this,message);LiveManual.invalidate();const h=document.getElementById('lmDesk');if(h)LiveManual.tuneRedraw(h);};
     auto.enter=async function(row,version){
       if(!this.active(version))return;
       if(Bots.active!=='liveManual')return this.stop('Stopped because you left the live desk.');
-      const source=this.config.source||'confluence',ready=Live.readiness(source);
-      if(!ready.ok||LiveManual.stateGate())return this.stop(ready.why||LiveManual.stateGate());
+      const source=row.source||this.config.source||'confluence',ready=Live.readiness(source);
+      const overs=this.config.override||[],over=overs.includes(source);
+      if(LiveManual.stateGate())return this.stop(LiveManual.stateGate());
+      /* a source that lost its qualification is dropped from the session; the others carry on.
+         A bot you started deliberately WITHOUT qualification (override) is not dropped for that. */
+      if(!ready.ok&&!over){const left=(this.config.sources||[]).filter(x=>x!==source&&(Live.readiness(x).ok||overs.includes(x)));
+        if(!left.length)return this.stop((BOT_BY_ID[source]?.name||source)+': '+(ready.why||'no longer qualified'));
+        this.config=Object.freeze({...this.config,sources:left});return this.log(row.sym,(BOT_BY_ID[source]?.name||source)+' left the session — no longer qualified');}
+      /* a signal on a pair that may not be traded is SKIPPED (logged) — it must not stop the session */
+      if(typeof Bots!=='undefined'&&Bots.refuses){const no=Bots.refuses(source,row.sym);if(no)return this.log(row.sym,(BOT_BY_ID[source]?.name||source)+': '+no);}
+      try{LiveManual.permission(true,row.sym);}catch(e){return this.log(row.sym,'Skipped — '+e.message);}
       const s=row.signal,key=source+':'+row.sym+':'+s.entryBar;
       const session=s.meta?.manualAutoSession,tag=' [auto '+key+']',sessionTag=session?' [session '+source+':'+row.sym+':'+session+']':'';
       if(this.seen.has(key)||Live.loadBook().orders.some(o=>o.bot==='liveManual'&&(o.brokerSaid?.includes(tag)||(sessionTag&&o.brokerSaid?.includes(sessionTag)))))return;
@@ -306,11 +411,11 @@ const LiveManual = {
       await LiveManual.calculate();if(!this.active(version))return;
       if(!LiveManual.preview)return this.log(row.sym,LiveManual.message);
       const expired=this.entryReason(s,Bots.quoteFor(row.sym));
-      if(expired||!Live.readiness(source).ok){LiveManual.invalidate();return this.log(row.sym,expired||'Strategy qualification changed');}
+      if(expired||(!over&&!Live.readiness(source).ok)){LiveManual.invalidate();return this.log(row.sym,expired||(BOT_BY_ID[source]?.name||source)+' qualification changed');}
       // Claim before sending; an uncertain result is never retried automatically.
       this.seen.add(key);
-      LiveManual.autoContext=tag+sessionTag;
-      try{if(await LiveManual.send()){this.count++;this.log(row.sym,'REAL '+d.side+' confirmed by broker');}
+      LiveManual.autoContext=tag+sessionTag+(over?' [override: not qualified]':'');
+      try{if(await LiveManual.send()){this.count++;this.log(row.sym,'REAL '+d.side+' confirmed by broker · from '+(BOT_BY_ID[source]?.name||source)+(over?' · ⚠ override (not qualified)':''));}
       else return this.stop(LiveManual.message);}finally{LiveManual.autoContext='';}
       if(this.config.entries>0&&this.count>=this.config.entries)this.stop('Real session entry count reached.');
     };

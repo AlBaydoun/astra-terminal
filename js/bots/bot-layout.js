@@ -51,7 +51,8 @@ const BotLayout = {
     { id: 'order',      label: 'Your market order (the ticket)',                icon: '🎫' },
     { id: 'rules',      label: 'Live account rules & position budgets',         icon: '⚖' },
     { id: 'confirm',    label: 'Order preview & confirm',                       icon: '✅', always: true },
-    { id: 'auto',       label: 'Automatic entries',                             icon: '🤖' },
+    { id: 'auto',       label: 'Automatic entries (bots and limits)',           icon: '🤖' },
+    { id: 'tuning',     label: 'Tuning — sliders for size, stop, target',       icon: '🎚' },
     { id: 'positions',  label: 'Real open trades',                              icon: '📂' },
   ],
   /* Live connection & safety: the STOP EVERYTHING banner never disappears */
@@ -86,14 +87,14 @@ const BotLayout = {
     { id: 'filter',      label: 'Filters (bot, market, day…)',                  icon: '⧩' },
     { id: 'stats',       label: 'Numbers — trades, won, lost, net, best day…',  icon: '#' },
     { id: 'secbar',      label: 'Fold-all / normal-order buttons',              icon: '⇅' },
-    { id: 'money',       label: 'The money',                                    icon: '💰' },
-    { id: 'bots',        label: 'Every bot, side by side',                      icon: '🤖' },
-    { id: 'instruments', label: 'Every instrument, in full',                    icon: '🗂' },
-    { id: 'breakdowns',  label: 'Breakdowns',                                   icon: '▦' },
-    { id: 'days',        label: 'Day by day',                                   icon: '📅' },
-    { id: 'open',        label: 'Open right now (when something is open)',      icon: '📂' },
-    { id: 'log',         label: 'Trade log',                                    icon: '☰' },
-    { id: 'pairs',       label: 'Permitted & prohibited',                       icon: '🛡' },
+    { id: 'money',       label: 'The money',                                    icon: '💰', ownFold: true },
+    { id: 'bots',        label: 'Every bot, side by side',                      icon: '🤖', ownFold: true },
+    { id: 'instruments', label: 'Every instrument, in full',                    icon: '🗂', ownFold: true },
+    { id: 'breakdowns',  label: 'Breakdowns',                                   icon: '▦', ownFold: true },
+    { id: 'days',        label: 'Day by day',                                   icon: '📅', ownFold: true },
+    { id: 'open',        label: 'Open right now (when something is open)',      icon: '📂', ownFold: true },
+    { id: 'log',         label: 'Trade log',                                    icon: '☰', ownFold: true },
+    { id: 'pairs',       label: 'Permitted & prohibited',                       icon: '🛡', ownFold: true },
     { id: 'note',        label: 'Note: every trade here is virtual',            icon: '⚠' },
   ],
   /* the Performance Report; its six chart cards sit side by side when they follow each other */
@@ -105,12 +106,12 @@ const BotLayout = {
     { id: 'kpis',       label: 'Numbers — bots, trades, fleet P&L, win rate…', icon: '#' },
     { id: 'best',       label: 'Best on evidence so far',                     icon: '🏆' },
     { id: 'ranking',    label: 'Ranking — which bot would you trust?',        icon: '☰' },
-    { id: 'pnl',        label: 'Profit and loss by bot',                      icon: '▥', grid: 'rpGrid' },
-    { id: 'winrate',    label: 'Win rate',                                    icon: '◔', grid: 'rpGrid' },
-    { id: 'curves',     label: 'Equity curves',                               icon: '📈', grid: 'rpGrid' },
-    { id: 'rmult',      label: 'How trades finished (R multiples)',           icon: '▤', grid: 'rpGrid' },
-    { id: 'earns',      label: 'Where the fleet earns',                       icon: '🌍', grid: 'rpGrid' },
-    { id: 'lab',        label: 'What the lab has been doing',                 icon: '🧪', grid: 'rpGrid' },
+    { id: 'pnl',        label: 'Profit and loss by bot',                      icon: '▥', grid: 'rpGrid', gridFold: true },
+    { id: 'winrate',    label: 'Win rate',                                    icon: '◔', grid: 'rpGrid', gridFold: true },
+    { id: 'curves',     label: 'Equity curves',                               icon: '📈', grid: 'rpGrid', gridFold: true },
+    { id: 'rmult',      label: 'How trades finished (R multiples)',           icon: '▤', grid: 'rpGrid', gridFold: true },
+    { id: 'earns',      label: 'Where the fleet earns',                       icon: '🌍', grid: 'rpGrid', gridFold: true },
+    { id: 'lab',        label: 'What the lab has been doing',                 icon: '🧪', grid: 'rpGrid', gridFold: true },
     { id: 'conditions', label: 'The six conditions for a live seat',          icon: '✅' },
   ],
   /* Buy / Sell Analysis; the charts and the two breakdowns pair up side by side */
@@ -257,7 +258,18 @@ const BotLayout = {
   rebuild(){ this._force = true; if (typeof LiveDesk !== 'undefined') LiveDesk._force = true; if (typeof Checker !== 'undefined') Checker.dirty = true; Bots.render();
     if (typeof MarketClock !== 'undefined' && MarketClock.host && MarketClock.layoutOpen !== undefined) MarketClock.applyLayout();
     if (typeof TradeReview !== 'undefined' && TradeReview.applyLayout && TradeReview.host) TradeReview.applyLayout(); },
-  _force: false,           // a layout change must rebuild the Manual page (it normally never rebuilds)
+  _force: false,
+  /* pages whose parts each fold (their fold bars are drawn by compose) */
+  FOLDING: ['liveManual', 'manual', 'live', 'open', 'dash', 'report'],
+  toggleFold(page, pid){
+    const A = this.all(), L = A[page] || (A[page] = this.get(page)); L.folded = L.folded || [];
+    const shut = !L.folded.includes(pid); L.folded = shut ? L.folded.concat([pid]) : L.folded.filter(x => x !== pid);
+    lsSet(this.KEY, A);
+    /* in place — the LIVE page is never rebuilt for a fold */
+    const w = document.querySelector('.blFoldable[data-blpart="' + pid + '"]'); if (!w) return;
+    w.classList.toggle('blFolded', shut); w.querySelector(':scope > .blFoldBody').hidden = shut;
+    const b = w.querySelector(':scope > .blFoldBar'); b.setAttribute('aria-expanded', String(!shut)); b.querySelector('i').textContent = shut ? '▸' : '▾';
+  },           // a layout change must rebuild the Manual page (it normally never rebuilds)
   open: false,
 
   /* which pages it applies to: the ordinary strategy bots */
@@ -284,7 +296,7 @@ const BotLayout = {
     return { order, hidden: (L.hidden || []).filter(x => known.includes(x)) };
   },
   save(id, lay){
-    const A = this.all(); A[this.own(id) ? id : '*'] = { order: lay.order, hidden: lay.hidden };
+    const A = this.all(), prev = A[this.own(id) ? id : '*'] || {}; A[this.own(id) ? id : '*'] = { order: lay.order, hidden: lay.hidden, folded: prev.folded || [] };
     lsSet(this.KEY, A); this.rebuild();
   },
 
@@ -305,7 +317,17 @@ const BotLayout = {
       if (off) continue;
       if (!h) continue;
       /* a column keeps its own wrapper too, so the Manual page can refresh it in place */
-      if (part.grid) grid.push(`<div class="blCell" data-blpart="${pid}">${h}</div>`); else { flush(); out.push(`<div class="blPart" data-blpart="${pid}">${h}</div>`); }
+      if (part.grid && part.gridFold && this.FOLDING.includes(id)){
+        /* a card in a side-by-side grid that folds: the wrapper is the grid item, with its own fold bar */
+        const f = (this.all()[id] || {}).folded || [], shut = f.includes(pid);
+        grid.push(`<div class="blFoldable blGridFold${shut ? ' blFolded' : ''}" data-blpart="${pid}"><button type="button" class="blFoldBar" data-blfold="${esc(id)}|${pid}" aria-expanded="${!shut}"><i>${shut ? '▸' : '▾'}</i> ${esc(part.label)}</button><div class="blFoldBody"${shut ? ' hidden' : ''}>${h}</div></div>`);
+      }
+      else if (part.grid) grid.push(`<div class="blCell" data-blpart="${pid}">${h}</div>`);
+      else if (this.FOLDING.includes(id) && !part.always && !part.ownFold){
+        const f = (this.all()[id] || {}).folded || [], shut = f.includes(pid);
+        flush(); out.push(`<div class="blPart blFoldable${shut ? ' blFolded' : ''}" data-blpart="${pid}"><button type="button" class="blFoldBar" data-blfold="${esc(id)}|${pid}" aria-expanded="${!shut}"><i>${shut ? '▸' : '▾'}</i> ${esc(part.label)}</button><div class="blFoldBody"${shut ? ' hidden' : ''}>${h}</div></div>`);
+      }
+      else { flush(); out.push(`<div class="blPart" data-blpart="${pid}">${h}</div>`); }
     }
     flush();
     this._visible[id] = lay.order.filter(pid => { const p = this.partsFor(id).find(x => x.id === pid); return (html[pid] || '') && !(lay.hidden.includes(pid) && !p.always); });
@@ -394,6 +416,7 @@ document.addEventListener('click', e => {
   const dm = t.closest('[data-bldmv]'); if (dm){ const [k, d] = dm.dataset.bldmv.split('|'); LiveDesk.moveSec(k, +d); BotLayout.rebuild(); return; }
   const m = t.closest('[data-blmv]'); if (m){ const [id, pid, d] = m.dataset.blmv.split('|'); BotLayout.move(id, pid, +d); return; }
   const r = t.closest('[data-blreset]'); if (r){ BotLayout.reset(r.dataset.blreset); return; }
+  const fb = t.closest('[data-blfold]'); if (fb){ e.preventDefault(); const [pg, pid] = fb.dataset.blfold.split('|'); BotLayout.toggleFold(pg, pid); return; }
 });
 document.addEventListener('change', e => {
   const t = e.target; if (!t || !t.dataset) return;
