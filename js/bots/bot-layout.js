@@ -87,6 +87,7 @@ const BotLayout = {
     { id: 'filter',      label: 'Filters (bot, market, day…)',                  icon: '⧩' },
     { id: 'stats',       label: 'Numbers — trades, won, lost, net, best day…',  icon: '#' },
     { id: 'secbar',      label: 'Fold-all / normal-order buttons',              icon: '⇅' },
+    { id: 'ranking',     label: 'Bot ranking — who is earning, and where',      icon: '🏆', ownFold: true },
     { id: 'money',       label: 'The money',                                    icon: '💰', ownFold: true },
     { id: 'bots',        label: 'Every bot, side by side',                      icon: '🤖', ownFold: true },
     { id: 'instruments', label: 'Every instrument, in full',                    icon: '🗂', ownFold: true },

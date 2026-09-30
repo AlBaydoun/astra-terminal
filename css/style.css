@@ -2961,3 +2961,32 @@ html[data-tile] #toasts { display: none !important; }
 .ppRow .ppWhen:empty{ display:none; }
 
 .otFacts .otWhen{ color:#ffd166; white-space:normal; overflow:visible; text-overflow:clip; }
+
+/* Dashboard · bot ranking */
+.rkHead{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-bottom:8px; font-size:12px; }
+.rkHead .bMini.on{ background:rgba(0,229,255,.18); border-color:rgba(0,229,255,.6); color:var(--accent,#00e5ff); }
+.rkHead .dim2{ flex:1 1 260px; font-size:11px; }
+.rkPodium{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:8px; margin-bottom:10px; }
+.rkMedal{ display:flex; flex-direction:column; gap:2px; padding:8px 10px; border-radius:9px; border:1px solid rgba(46,189,133,.35); background:rgba(46,189,133,.07); }
+.rkMedal.m0{ border-color:rgba(255,209,102,.6); background:rgba(255,209,102,.08); }
+.rkMedal b{ font-size:13px; } .rkMedal span{ font:600 15px var(--font-mono,monospace); } .rkMedal small{ color:var(--dim); font-size:11px; }
+.rkMedal .up{ color:var(--green,#2ebd85); }
+.rkRow{ display:flex; gap:10px; padding:8px 10px; margin-bottom:6px; border-radius:9px; border:1px solid rgba(255,255,255,.07); border-left:4px solid rgba(255,255,255,.15); background:rgba(255,255,255,.02); }
+.rkRow.star{ border-left-color:#ffd166; } .rkRow.good{ border-left-color:var(--green,#2ebd85); } .rkRow.mixed{ border-left-color:#8b9bb4; } .rkRow.bad{ border-left-color:var(--red,#f6465d); }
+.rkNo{ font:700 14px var(--font-mono,monospace); color:var(--dim); min-width:22px; text-align:right; padding-top:2px; }
+.rkMain{ flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.rkTop{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; }
+.rkName{ background:none; border:0; padding:0; cursor:pointer; color:var(--text); font-weight:700; font-size:13px; text-align:left; width:auto !important; }
+.rkName:hover{ color:var(--accent,#00e5ff); text-decoration:underline; }
+.rkTag{ font-style:normal; font-size:11px; font-weight:600; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,.06); }
+.rkRow.star .rkTag{ color:#ffd166; } .rkRow.good .rkTag{ color:var(--green,#2ebd85); } .rkRow.bad .rkTag{ color:var(--red,#f6465d); }
+.rkNet{ font:700 13px var(--font-mono,monospace); }
+.rkFig{ font-size:11px; color:var(--dim); } .rkFig b{ font-family:var(--font-mono,monospace); }
+.rkScore{ margin-left:auto; font:600 11px var(--font-mono,monospace); color:var(--dim); border:1px solid rgba(255,255,255,.12); border-radius:6px; padding:1px 6px; }
+.rkSay{ font-size:12px; line-height:1.45; }
+.rkBot{ display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+.rkStrip{ display:inline-flex; gap:2px; margin-right:6px; } .rkStrip i{ width:9px; height:14px; border-radius:2px; background:rgba(255,255,255,.08); }
+.rkStrip i.up{ background:var(--green,#2ebd85); } .rkStrip i.down{ background:var(--red,#f6465d); }
+.rkMk{ font-size:10.5px; padding:1px 7px; border-radius:10px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.15); width:auto !important; font-family:var(--font-mono,monospace); }
+.rkMk.up{ color:var(--green,#2ebd85); border-color:rgba(46,189,133,.45); } .rkMk.down{ color:var(--red,#f6465d); border-color:rgba(246,70,93,.45); }
+.rkIdle{ font-size:11px; margin:4px 0; }

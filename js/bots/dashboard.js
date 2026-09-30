@@ -199,7 +199,87 @@ const BotDash = {
     return `<div class="bsWrap">${P.intro}${P.actions}${P.list}</div>`;
   },
 
-  DEFAULT_ORDER: ['money', 'bots', 'instruments', 'breakdowns', 'days', 'open', 'log', 'pairs'],
+
+  /* ---------- the bot ranking: who is earning, since when, and where ----------
+     What Al did by hand in the Deep Dive every day — open a day, find the green
+     bot, look at which markets paid — done for every bot at once and ranked.
+     Uses the SAME closed trades as the rest of the page (all bots, no filters),
+     grouped by the day the trade CLOSED, in the computer's own clock. */
+  RANK_KEY: 'astra_dashrank',
+  rankDays(){ const v = +((lsGet(this.RANK_KEY, {}) || {}).days); return [7, 14, 30, 90].includes(v) ? v : 14; },
+  rankStats(all, W){
+    const today = this.dayOf(Date.now());
+    const cut = new Date(); cut.setHours(0, 0, 0, 0); cut.setDate(cut.getDate() - (W - 1));
+    const since = cut.getTime();
+    const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return this.dayOf(d.getTime()); })();
+    const byBot = {};
+    for (const t of all) (byBot[t.bot] = byBot[t.bot] || []).push(t);
+    const rows = [];
+    for (const b of this.bots()){
+      const every = byBot[b.id] || [];
+      const list = every.filter(t => t.exitTime >= since);
+      /* every trading day this bot has ever had, newest first — for the streak */
+      const dayNet = {};
+      for (const t of every){ const d = this.dayOf(t.exitTime); dayNet[d] = (dayNet[d] || 0) + t.pnl; }
+      const allDays = Object.keys(dayNet).sort().reverse();
+      let streak = 0, streakKind = 0;
+      for (const d of allDays){ const k = dayNet[d] > 0 ? 1 : -1; if (!streakKind) streakKind = k; if (k !== streakKind) break; streak++; }
+      const inWin = allDays.filter(d => d >= this.dayOf(since));
+      const green = inWin.filter(d => dayNet[d] > 0).length, red = inWin.length - green;
+      const S = this.sum(list);
+      const mk = this.group(list, 'sym');
+      const good = mk.filter(m => m.net > 0).slice(0, 3), bad = mk.filter(m => m.net < 0).sort((a, c) => a.net - c.net).slice(0, 2);
+      /* score 0–100: steady green days count most, then profit factor, the running streak and being up at all */
+      const pfv = S.pf === Infinity ? 3 : Math.min(3, S.pf || 0);
+      const score = !S.n ? -1 : Math.round((inWin.length ? green / inWin.length : 0) * 40 + pfv / 3 * 30 + (streakKind > 0 ? Math.min(streak, 7) / 7 * 20 : 0) + (S.net > 0 ? 10 : 0));
+      rows.push({ b, S, streak, streakKind, green, red, days: inWin.length, dayNet, good, bad, score,
+        today: dayNet[today], yest: dayNet[yest], lastDay: allDays[0] || null });
+    }
+    return rows.sort((a, c) => c.score - a.score || c.S.net - a.S.net);
+  },
+  rankVerdict(r){
+    if (!r.S.n) return { cls: 'none', tag: 'No trades', say: 'Did not close a trade in this period.' };
+    const few = r.S.n < 5;
+    const mk = m => `${baseAsset(m.key)} (${this.money(m.net)}, ${m.n} trade${m.n === 1 ? '' : 's'})`;
+    const where = r.good.length ? ' Earns mostly on ' + r.good.map(mk).join(', ') + '.' : '';
+    const leak = r.bad.length ? ' Loses on ' + r.bad.map(mk).join(', ') + (r.S.net > 0 ? ' — consider prohibiting it there.' : '.') : '';
+    const run = r.streakKind > 0 && r.streak > 1 ? ` Green ${r.streak} trading days in a row.` : r.streakKind < 0 && r.streak > 1 ? ` Red ${r.streak} trading days in a row.` : '';
+    if (r.S.net > 0 && r.score >= 65 && !few) return { cls: 'star', tag: '⭐ Strong', say: `Keep it running — profitable on ${r.green} of ${r.days} trading days.${run}${where}${leak}` };
+    if (r.S.net > 0) return { cls: 'good', tag: few ? '✓ Promising (few trades)' : '✓ Profitable', say: `Up ${this.money(r.S.net)}, green on ${r.green} of ${r.days} days.${run}${where}${leak}${few ? ' Too few trades to trust yet.' : ''}` };
+    if (r.S.pf >= 0.9) return { cls: 'mixed', tag: '≈ Mixed', say: `Roughly break-even (${this.money(r.S.net)}).${run}${where}${leak} Watch it before trusting it.` };
+    return { cls: 'bad', tag: '✕ Losing', say: `Down ${this.money(r.S.net)}, red on ${r.red} of ${r.days} days.${run}${where}${leak} Consider switching it off, or keep it only on its green markets.` };
+  },
+  rankView(all){
+    const W = this.rankDays(), rows = this.rankStats(all, W);
+    const act = rows.filter(r => r.S.n), idle = rows.length - act.length;
+    const days = []; for (let i = W - 1; i >= 0; i--){ const d = new Date(); d.setDate(d.getDate() - i); days.push(this.dayOf(d.getTime())); }
+    const strip = r => '<span class="rkStrip">' + days.slice(-Math.min(W, 30)).map(d => { const v = r.dayNet[d]; return `<i class="${v == null ? '' : v > 0 ? 'up' : 'down'}" title="${esc(d)}: ${v == null ? 'no closed trades' : this.money(v)}"></i>`; }).join('') + '</span>';
+    const top = act.filter(r => r.S.net > 0).slice(0, 3);
+    const head = `<div class="rkHead"><span>Period</span>${[7, 14, 30, 90].map(d => `<button class="bMini${d === W ? ' on' : ''}" data-rankdays="${d}">${d} days</button>`).join('')}
+      <span class="dim2">Ranked by steady green days, profit factor, the running streak and the result — every bot, no filters. Closed trades only.</span></div>`;
+    const podium = top.length ? `<div class="rkPodium">${top.map((r, i) => `<div class="rkMedal m${i}"><b>${['🥇', '🥈', '🥉'][i]} ${esc(r.b.name)}</b><span class="up">${this.money(r.S.net)}</span><small>${r.green}/${r.days} green days${r.streakKind > 0 && r.streak > 1 ? ' · ' + r.streak + ' in a row' : ''}${r.good[0] ? ' · best on ' + esc(baseAsset(r.good[0].key)) : ''}</small></div>`).join('')}</div>`
+      : `<div class="botNote warn">No bot made money in the last ${W} days.</div>`;
+    const list = act.map((r, i) => { const v = this.rankVerdict(r);
+      return `<div class="rkRow ${v.cls}">
+        <span class="rkNo">${i + 1}</span>
+        <div class="rkMain">
+          <div class="rkTop"><button type="button" class="rkName" data-otdive="${esc(r.b.id)}" title="Open ${esc(r.b.name)} — its page and its Deep Dive">${esc(r.b.name)} ↗</button>
+            <em class="rkTag">${v.tag}</em>
+            <span class="rkNet ${pctClass(r.S.net)}">${this.money(r.S.net)}</span>
+            <span class="rkFig">${r.S.n} trade${r.S.n === 1 ? '' : 's'} · ${Math.round(r.S.winRate)}% won · PF ${this.pf(r.S.pf)}${r.today != null ? ` · today <b class="${pctClass(r.today)}">${this.money(r.today)}</b>` : ''}${r.yest != null ? ` · yesterday <b class="${pctClass(r.yest)}">${this.money(r.yest)}</b>` : ''}</span>
+            <span class="rkScore" title="Ranking score out of 100">${r.score}</span></div>
+          <div class="rkSay">${esc(v.say)}</div>
+          <div class="rkBot">${strip(r)}
+            ${r.good.map(m => `<button class="rkMk up" data-chartsym="${esc(m.key)}" title="Open the ${esc(m.key)} chart">${esc(baseAsset(m.key))} ${this.money(m.net)}</button>`).join('')}
+            ${r.bad.map(m => `<button class="rkMk down" data-chartsym="${esc(m.key)}" title="Open the ${esc(m.key)} chart">${esc(baseAsset(m.key))} ${this.money(m.net)}</button>`).join('')}
+            <button class="bMini" data-pickbot="${esc(r.b.id)}" title="Filter this whole Dashboard to this bot">Only this bot</button></div>
+        </div></div>`; }).join('');
+    return head + podium + (list || '<div class="empty">No bot closed a trade in this period.</div>') +
+      (idle ? `<div class="dim2 rkIdle">${idle} bot${idle === 1 ? '' : 's'} closed no trades in the last ${W} days.</div>` : '') +
+      '<div class="botNote">A recommendation, not a promise: paper results, past days only. A strong week can turn — the Deep Dive still has every trade.</div>';
+  },
+
+  DEFAULT_ORDER: ['ranking', 'money', 'bots', 'instruments', 'breakdowns', 'days', 'open', 'log', 'pairs'],
 
   secOrder(ids){
     const saved = Array.isArray(this.order) ? this.order : this.DEFAULT_ORDER;
@@ -238,7 +318,7 @@ const BotDash = {
       '<header class="dashSecHead">' +
         '<button class="secFold" data-secfold="' + esc(id) + '" title="' +
           (shut ? 'Open' : 'Fold') + ' this section"><i>' + (shut ? '\u25B8' : '\u25BE') + '</i></button>' +
-        '<h3>' + (typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon({money:'report',bots:'bot',instruments:'layers',breakdowns:'chart',days:'clock',open:'positions',log:'report',pairs:'shield'}[id]) + ' ' : '') + title + '</h3>' +
+        '<h3>' + (typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon({ranking:'chart',money:'report',bots:'bot',instruments:'layers',breakdowns:'chart',days:'clock',open:'positions',log:'report',pairs:'shield'}[id]) + ' ' : '') + title + '</h3>' +
         (sub ? '<span class="dashSecSub">' + esc(sub) + '</span>' : '') +
         '<span class="dashSecTools">' + (tools || '') +
           '<button class="bMini secMove" data-secup="' + esc(id) + '" title="Move up">\u25B2</button>' +
@@ -260,6 +340,8 @@ const BotDash = {
     const worstDay = days.reduce((a, d) => (!a || d.net < a.net) ? d : a, null);
 
     const secs = {
+      ranking: () => this.section('ranking', 'BOT RANKING — WHO IS EARNING',
+        'last ' + this.rankDays() + ' days · best first', this.rankView(all)),
       money: () => this.section('money', 'THE MONEY',
         'what the account actually did', this.capitalView(S, all)),
       bots: () => this.section('bots', 'EVERY BOT, SIDE BY SIDE',
@@ -1211,6 +1293,9 @@ const BotDash = {
       }
     }
 
+    host.querySelectorAll('[data-rankdays]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation(); lsSet(this.RANK_KEY, { days: +el.dataset.rankdays }); Bots.render();
+    }));
     /* fold a section, or move it up and down the page */
     host.querySelectorAll('[data-secfold]').forEach(el => el.addEventListener('click', e => {
       e.stopPropagation();
