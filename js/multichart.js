@@ -238,6 +238,10 @@ const Multi = {
     const host = cell.el.querySelector('.miniLegend');
     if (!host) return;
     const out = [];
+    /* when the hovered candle took place (the newest one when not hovering), in your own clock */
+    const t = time != null ? time : (cell.data && cell.data.length ? cell.data[cell.data.length - 1].time : null);
+    const w = t != null && typeof candleWhen === 'function' ? candleWhen(t - TZ_OFF, tfSeconds(cell.tf)) : null;
+    if (w) out.push(`<span class="lgWhen" title="${esc(time != null ? 'When this candle took place (your computer’s clock' + (w.utc ? '; ' + w.utc + ' at its start' : '') + ')' : 'The newest candle — hover any candle to see when it took place')}">🕒 <b>${esc(w.day)}</b>${w.span ? ' ' + esc(w.span) : ''}</span>`);
     for (const def of INDS){
       const c = cell.specs[def.id];
       if (!c) continue;

@@ -1074,6 +1074,7 @@ const Chart = {
       `<span class="lgTag">${esc(STORE.tf.toUpperCase())}</span>` +
       `<span class="lgTag dim" title="Where this price comes from">${esc(srcName)}</span>` +
       `<span class="fdTag ${st.cls}" title="${esc(st.tip)}">${esc(st.label)}</span>` +
+      (() => { const w = candleWhen(c.time - TZ_OFF, tfSeconds(STORE.tf)); return w ? `<span class="lgWhen" title="${esc(hover ? 'When this candle took place (your computer’s clock' + (w.utc ? '; ' + w.utc + ' at its start' : '') + ')' : 'The newest candle — hover any candle to see when it took place')}">🕒 <b>${esc(w.day)}</b>${w.span ? ' ' + esc(w.span) : ''}</span>` : ''; })() +
       `<span class="lgOhlc">O <b class="${cls}">${fmtPrice(c.open)}</b> H <b class="${cls}">${fmtPrice(c.high)}</b> L <b class="${cls}">${fmtPrice(c.low)}</b> C <b class="${cls}">${fmtPrice(c.close)}</b></span>` +
       `<span class="lgChg ${cls}">${(chg >= 0 ? '+' : '') + fmtPrice(chg)} (${fmtPct(pct)})</span>` +
       (c.volume != null ? `<span class="lgVol">Vol <b>${fmtNum(c.volume)}</b></span>` : '');

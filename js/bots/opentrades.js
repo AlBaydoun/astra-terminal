@@ -175,6 +175,7 @@ const OpenTrades = {
         <span><label>To stop</label><b data-f="tostop">${this.gap(l.pctToStop, l.cashToStop)}</b></span>
         <span><label>To target</label><b data-f="totp">${l.toTp == null ? 'none' : this.gap(l.pctToTp, l.cashToTp)}</b></span>
         <span><label>Best / worst</label><b data-f="mfe">+${fmtNum(p.mfe || 0)} / -${fmtNum(p.mae || 0)}</b></span>
+        ${(w => w ? `<span title="Opened ${esc(w.full)} (your computer’s clock)"><label>Opened</label><b class="otWhen">🕒 ${esc(w.abs)}</b></span>` : '')(typeof PosLines !== 'undefined' && PosLines.openedAt ? PosLines.openedAt(p.entryTime) : null)}
         <span><label>Held</label><b data-f="held">${l.held}</b></span>
       </div>
 

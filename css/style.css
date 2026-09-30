@@ -2949,3 +2949,15 @@ html[data-tile] #toasts { display: none !important; }
 /* − 100% + also sizes the lower tabs (Screener, Heatmap, Observer, Intel, News & Alerts,
    Market Clock, Trade Replay); the Bots tab keeps its per-page size on #botBody */
 #bottomPanel .botPanel.pzOn:not(#bot-bots) > * { zoom: var(--pz, 1); }
+
+/* when a candle took place — chart legend + Trade Replay */
+.lgWhen{ font-size:11.5px; color:var(--dim); white-space:nowrap; margin-right:8px; }
+.lgWhen b{ color:#ffd166; font-weight:600; }
+.trBarInfo .trWhen{ color:#ffd166; }
+
+/* open-trades panel: when each trade was opened (own line under the row) */
+.ppRow .ppWhen{ grid-column:1 / -1; order:9; font-size:10.5px; color:var(--dim); margin-top:-2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ppRow .ppWhen em{ font-style:normal; opacity:.75; }
+.ppRow .ppWhen:empty{ display:none; }
+
+.otFacts .otWhen{ color:#ffd166; white-space:normal; overflow:visible; text-overflow:clip; }

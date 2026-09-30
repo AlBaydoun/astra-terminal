@@ -100,9 +100,22 @@ const PosLines = {
   PP_KEY: 'astra_pospanel',
   PP_SORTS: [['hand', 'By hand (▲▼ on each row)'], ['newest', 'Newest first'], ['oldest', 'Oldest first'], ['best', 'Best result first'], ['worst', 'Worst result first'], ['bot', 'By bot name']],
   PP_CORNERS: [['bl', 'Bottom left'], ['br', 'Bottom right'], ['tl', 'Top left'], ['tr', 'Top right']],
-  ppCfg(){ const c = lsGet(this.PP_KEY, {}) || {}; return { sort: c.sort || 'newest', order: c.order || [], show: Object.assign({ bot: true, size: true, pnl: true }, c.show || {}), corner: c.corner || 'bl' }; },
+  ppCfg(){ const c = lsGet(this.PP_KEY, {}) || {}; return { sort: c.sort || 'newest', order: c.order || [], show: Object.assign({ bot: true, size: true, pnl: true, time: true }, c.show || {}), corner: c.corner || 'bl' }; },
   ppSave(c){ lsSet(this.PP_KEY, c); this._panelSig = ''; this.panel(); },
   ppCfgOpen: false,
+  /* when a trade was opened, in your own clock: "today 20:47 · 3h 12m ago" */
+  openedAt(ms){
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    const d = new Date(ms), now = new Date();
+    const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const yest = new Date(now); yest.setDate(now.getDate() - 1);
+    const day = d.toDateString() === now.toDateString() ? 'today' : d.toDateString() === yest.toDateString() ? 'yesterday'
+      : d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }) + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+    const min = Math.max(0, Math.floor((Date.now() - ms) / 60000));
+    const ago = min < 1 ? 'just now' : min < 60 ? min + 'm ago' : min < 1440 ? Math.floor(min / 60) + 'h ' + (min % 60) + 'm ago' : Math.floor(min / 1440) + 'd ' + Math.floor(min % 1440 / 60) + 'h ago';
+    const abs = d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }) + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') + ' ' + hm;
+    return { short: day + ' ' + hm, abs, ago, full: d.toLocaleString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) };
+  },
   ppSorted(rows){
     const c = this.ppCfg(), key = r => r.bot + '|' + r.p.id, live = r => (this.liveOf(r) || { unreal: 0 }).unreal;
     const by = {
@@ -169,6 +182,7 @@ const PosLines = {
         ${hand ? `<span class="ppMv"><button data-ppmv="${esc(key)}#-1" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button data-ppmv="${esc(key)}#1" ${i === sorted.length - 1 ? 'disabled' : ''} title="Move down">▼</button></span>` : ''}
         <button class="ppWho" data-ppfocus="${esc(key)}" title="Highlight this trade on the chart">
           <b class="${p.dir > 0 ? 'up' : 'down'}">${r.live ? 'REAL ' : ''}${p.dir > 0 ? 'BUY' : 'SELL'}</b>${S.size ? ' ' + esc(p.lots ? p.lots + ' lot' : fmtNum(p.qty)) : ''}${S.bot ? ' · <span>' + esc(r.botName || r.bot) + '</span>' : ''}</button>
+        ${S.time ? (w => w ? `<span class="ppWhen" title="Opened ${esc(w.full)} (your computer’s clock)">🕒 ${esc(w.short)} <em>· ${esc(w.ago)}</em></span>` : '<span class="ppWhen"></span>')(this.openedAt(p.entryTime)) : ''}
         ${S.pnl ? `<i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i>` : '<i></i>'}
         <button class="ppClose" data-ppclose="${esc(key)}" title="Close this trade at the market price now — you confirm first">✕ Close at market</button>
       </div>` };
@@ -178,7 +192,7 @@ const PosLines = {
     const settings = this.ppCfgOpen ? `<div class="ppCfg">
         <label>Order <select data-ppsort="1">${opt(this.PP_SORTS, cfg.sort)}</select></label>
         <label>Corner <select data-ppcorner="1">${opt(this.PP_CORNERS, cfg.corner)}</select></label>
-        <span class="ppShow">Show ${[['size', 'size'], ['bot', 'bot'], ['pnl', 'profit']].map(([k, t]) => `<label><input type="checkbox" data-ppshow="${k}" ${S[k] ? 'checked' : ''}> ${t}</label>`).join('')}</span>
+        <span class="ppShow">Show ${[['size', 'size'], ['bot', 'bot'], ['time', 'opened at'], ['pnl', 'profit']].map(([k, t]) => `<label><input type="checkbox" data-ppshow="${k}" ${S[k] ? 'checked' : ''}> ${t}</label>`).join('')}</span>
         <small>The ✕ Close at market button is always shown.${hand ? ' Use ▲▼ on each row.' : ''}</small>
       </div>` : '';
     const html = head + settings + (this.panelFold ? '' : items.map(i => i.html).join(''));
@@ -415,6 +429,7 @@ PosLines.confirmClose = function(bot, id){
   wrap.insertAdjacentHTML('beforeend', `<div id="posConfirm" class="posConfirm" style="top:${Math.max(8, Math.min(wrap.clientHeight - 120, y + 10))}px">
     <b>${real ? 'Close the REAL position · ' : 'Close at market · '}${p.dir > 0 ? 'BUY' : 'SELL'} ${esc(baseAsset(p.sym))} <small>${esc(botName)}</small></b>
     <div class="pcRow"><span>Size</span><i>${p.lots ? p.lots + ' lot' : fmtNum(p.qty)}</i><em></em><i></i></div>
+    ${(w => w ? `<div class="pcRow"><span>Opened</span><i>${esc(w.short)}</i><em></em><i class="dim2">${esc(w.ago)}</i></div>` : '')(this.openedAt(p.entryTime))}
     <div class="pcRow"><span>Entry → price now</span><i>${fmtPrice(p.entry)}</i><em>→</em><i>${fmtPrice(q.price)}</i></div>
     <div class="pcRow"><span>Result if closed now</span><i></i><em></em><i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i></div>
     <div class="pcBtns"><button class="bMini danger" data-pcclose>Close now · ${fmtC(l.unreal)}</button><button class="bMini" data-pccancel>Cancel</button></div>

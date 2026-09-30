@@ -13,6 +13,25 @@ const CFG = {
 };
 const TZ_OFF = -new Date().getTimezoneOffset() * 60; // shift epoch so the chart axis shows local time
 
+/* When did a candle happen? epochSec = the REAL start (UTC seconds), tfSec = candle length.
+   → { day:'Mon 29 Sep 2026', span:'14:15 – 14:30', utc:'12:15 UTC', full:'…' } in the viewer's own clock;
+   daily and weekly candles show the date only. */
+/* '15m' → 900, '4h' → 14400, '1w' → 604800 (0 when unknown) */
+function tfSeconds(tf){ const m = /^(\d+)([smhdwM])$/.exec(String(tf || '')); return m ? +m[1] * ({ s: 1, m: 60, h: 3600, d: 86400, w: 604800, M: 2592000 })[m[2]] : 0; }
+function candleWhen(epochSec, tfSec){
+  if (!Number.isFinite(epochSec)) return null;
+  const d = new Date(epochSec * 1000), e = new Date((epochSec + (tfSec || 0)) * 1000);
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+  const hm = x => x.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: tfSec && tfSec < 60 ? '2-digit' : undefined, hour12: false });
+  const utc = d.toISOString().slice(11, tfSec && tfSec < 60 ? 19 : 16) + ' UTC';
+  if (tfSec >= 86400){
+    const span = tfSec >= 604800 ? 'week of ' + day : day;
+    return { day, span: '', utc: '', full: span };
+  }
+  const span = hm(d) + (tfSec ? ' – ' + hm(e) : '');
+  return { day, span, utc, full: day + ' · ' + span };
+}
+
 /* tiny event bus */
 const BUS = {
   m: {},
