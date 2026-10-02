@@ -2990,3 +2990,13 @@ html[data-tile] #toasts { display: none !important; }
 .rkMk{ font-size:10.5px; padding:1px 7px; border-radius:10px; cursor:pointer; background:transparent; border:1px solid rgba(255,255,255,.15); width:auto !important; font-family:var(--font-mono,monospace); }
 .rkMk.up{ color:var(--green,#2ebd85); border-color:rgba(46,189,133,.45); } .rkMk.down{ color:var(--red,#f6465d); border-color:rgba(246,70,93,.45); }
 .rkIdle{ font-size:11px; margin:4px 0; }
+
+/* Deep Dive: select all / unselect all per card, and the way home */
+.exTickBar{ display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:11px; }
+.exTickBar .dim2{ margin-right:auto; }
+.exTickBar .bMini[disabled]{ opacity:.4; cursor:default; }
+.exNoneTicked{ margin:8px 0; }
+.exHomeDock{ position:sticky; bottom:14px; height:0; display:flex; justify-content:flex-end; z-index:20; pointer-events:none; }
+.exHomeBtn{ pointer-events:auto; transform:translateY(-100%); padding:8px 14px; border-radius:20px; cursor:pointer; font-weight:700; font-size:12.5px;
+  background:rgba(0,229,255,.16); color:var(--accent,#00e5ff); border:1px solid rgba(0,229,255,.6); box-shadow:0 4px 16px rgba(0,0,0,.45); backdrop-filter:blur(4px); width:auto !important; }
+.exHomeBtn:hover{ background:rgba(0,229,255,.3); }

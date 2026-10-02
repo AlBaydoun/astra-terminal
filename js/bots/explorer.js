@@ -182,8 +182,13 @@ const Explorer = {
         <span class="exBarTrack"><i class="${e.net >= 0 ? 'up' : 'down'}" style="width:${Math.abs(e.net) / maxAbs * 100}%"></i></span>
         <span class="exBarNum ${e.net >= 0 ? 'up' : 'down'}">${this.money(e.net)}</span>
         <span class="exBarMeta">${e.n} · ${Math.round(e.wins / e.n * 100)}%</span></button></div>`;
+    const onN = entries.filter(e => !ex.includes(e.k)).length;
+    this._allKeys = this._allKeys || {}; this._allKeys[dim.id] = entries.map(e => e.k);
+    const tools = `<div class="exTickBar"><span class="dim2">${onN} of ${entries.length} ticked</span>
+      <button class="bMini" data-extickall="${esc(dim.id)}|1" ${onN === entries.length ? 'disabled' : ''} title="Tick every ${esc(dim.label.toLowerCase())} again">☑ Select all</button>
+      <button class="bMini" data-extickall="${esc(dim.id)}|0" ${onN === 0 ? 'disabled' : ''} title="Untick every ${esc(dim.label.toLowerCase())} — then tick only the ones you want">☐ Unselect all</button></div>`;
     return this.section('split:' + dim.id, esc(dim.label), entries.length + ' ' + (entries.length === 1 ? 'value' : 'values') + ' · press one to open it',
-      `<div class="exBars">${shown.map(bar).join('')}</div>` +
+      tools + `<div class="exBars">${shown.map(bar).join('')}</div>` +
       (entries.length > 14 ? `<button class="bMini exMoreBtn" data-exmore="${esc(dim.id)}">${all ? 'Show the top 14 only' : 'Show all ' + entries.length + ' (' + (entries.length - 14) + ' more)'}</button>` : ''),
       'exSplit');
   },
@@ -467,7 +472,8 @@ const Explorer = {
       <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
         <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
       ${this.layoutOpen ? this.layoutPanel() : ''}
-      ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>`}
+      ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : exN ? `<div class="botNote warn exNoneTicked">Nothing is ticked yet — tick the days, bots or pairs you want to see in the cards below, or press <button class="bMini" data-exclear="1">tick all</button>.</div><div class="exSecs">${shownSecs.filter(x => x.id.startsWith('split:')).map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>`}
+      ${this.path.length || exN ? `<div class="exHomeDock"><button class="exHomeBtn" data-excrumb="-1" title="Back to Everything: all bots, all days, every tick back on — start a new path from the top">⌂ Everything</button></div>` : ''}
     </div>`;
   },
 
@@ -660,6 +666,15 @@ const Explorer = {
       this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-exclear]').forEach(b => b.addEventListener('click', () => this.clearExcludes()));
+    /* tick or untick every value of one card at once */
+    host.querySelectorAll('[data-extickall]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const [dimId, on] = b.dataset.extickall.split('|');
+      if (on === '1') delete this.excludes[dimId];
+      else this.excludes[dimId] = ((this._allKeys || {})[dimId] || []).slice();
+      lsSet('astra_explorer_excl', this.excludes);
+      this.dirty = true; Bots.render();
+    }));
     /* drag a section's right edge to change its width in grid columns */
     host.querySelectorAll('[data-exgrip]').forEach(g => g.addEventListener('mousedown', e => {
       e.preventDefault(); e.stopPropagation();
