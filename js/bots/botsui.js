@@ -54,11 +54,12 @@ Object.assign(Bots, {
 
   bindBotSettings(host){
     host.querySelectorAll('[data-bsen]').forEach(el => el.addEventListener('change', () => Bots.setDisabled(el.dataset.bsen, !el.checked)));
+    host.querySelectorAll('[data-bsofffold]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); lsSet('astra_bsoff_open', !lsGet('astra_bsoff_open', false)); this.render(); }));
     host.querySelectorAll('[data-bspause]').forEach(el => el.addEventListener('click', () => Bots.setPaused(el.dataset.bspause, !(Bots.cfg(el.dataset.bspause) || {}).paused)));
     host.querySelectorAll('[data-bsreset]').forEach(el => el.addEventListener('click', () => this.resetBot(el.dataset.bsreset)));
     host.querySelectorAll('[data-bsall]').forEach(el => el.addEventListener('click', () => {
       const what = el.dataset.bsall;
-      if (what === 'on'){ lsSet(Bots.DISABLED_KEY, []); this.renderNav(); this.render(); }
+      if (what === 'on'){ Bots.setAllOn(); toast('Every bot is switched on again', 'ok'); }
       if (what === 'unpause'){ for (const b of Bots.idle().paused) { const c = Bots.cfg(b.id); c.paused = false; this.saveCfg(b.id); } this.render(); toast('Every paused bot is running again', 'ok'); }
       if (what === 'resetlocked'){ for (const b of Bots.idle().locked) this.resetBot(b.id); }
     }));

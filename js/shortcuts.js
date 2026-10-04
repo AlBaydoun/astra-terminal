@@ -9,6 +9,11 @@ const Shortcuts = {
   ACTIONS: [
     { id: 'help',     label: 'This list of shortcuts',           def: 'F1',  run: () => Shortcuts.open() },
     { id: 'back',     label: 'Back one step (also the ← Back button, bottom-left)', def: 'Alt+ArrowLeft', run: () => { if (typeof Nav !== 'undefined') Nav.back(); } },
+    /* the one-key way back. A selected drawing or a focused take-profit grip keeps
+       Backspace for itself (it deletes them), and typing in a box never triggers it */
+    { id: 'back2',    label: 'Back one step — the quick key',  def: 'Backspace',
+      when: () => !(typeof Draw !== 'undefined' && Draw.sel) && !(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('wsGrip')),
+      run: () => { if (typeof Nav !== 'undefined') Nav.back(); } },
     { id: 'clock',    label: 'Market Clock',                     def: 'F2',  run: () => Shortcuts.obs('clock', 'marketClockBtn') },
     { id: 'replay',   label: 'Trade Replay',                     def: 'F3',  run: () => Shortcuts.obs('replay', 'tradeReviewBtn') },
     { id: 'screener', label: 'Screener',                         def: 'F4',  run: () => Shortcuts.tab('screener') },
@@ -57,6 +62,7 @@ const Shortcuts = {
       const combo = this.combo(e);
       const hit = this.ACTIONS.find(a => this.map[a.id] === combo);
       if (!hit) return;
+      if (hit.when && !hit.when()) return;
       e.preventDefault(); e.stopPropagation();
       try { hit.run(); } catch(err){ console.warn('ASTRA shortcut:', err.message); }
     }, true);

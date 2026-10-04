@@ -41,23 +41,71 @@ const WorkspaceUI = {
   },
   nav(active){
     const entries = BOTS.filter(b => !Bots.disabled(b.id)).concat({id:'permissions', name:'Instrument permissions'}, {id:'botsettings', name:'Bots on / off'});
-    return `<div class="wsNavTop"><span class="wsEyebrow">YOUR WORKSPACE</span>
+    const fold = this.navFold();
+    return `<div class="wsNavTop"><span class="wsEyebrow">YOUR WORKSPACE<span class="wsFoldAll"><button type="button" data-navfoldall="1" title="Fold every group">▸ all</button><button type="button" data-navfoldall="0" title="Unfold every group">▾ all</button></span></span>
       <label class="wsSearch">${this.icon('search')}<input id="wsBotSearch" type="search" aria-label="Search bots and pages" placeholder="Find a bot or page…" value="${esc(this.query)}" autocomplete="off"></label></div>
-      <div class="wsNavGroups">` + ['Overview','Trading desk','Scanners & research','Strategy bots','Settings & safety'].map(group =>
-      `<section class="wsNavGroup" data-ws-group="${esc(group)}"><h3>${esc(group)}</h3>` + (() => {
-        const members = Bots.ordered(entries.filter(b => this.group(b) === group));
+      <div class="wsNavGroups">` + [this.FAV_GROUP,'Overview','Trading desk','Scanners & research','Strategy bots','Settings & safety'].map(group =>
+      (() => {
+        const favs = this.favs().filter(id => entries.some(b => b.id === id));
+        const isFav = group === this.FAV_GROUP;
+        const members = isFav ? favs.map(id => entries.find(b => b.id === id))
+          : Bots.ordered(entries.filter(b => this.group(b) === group && !favs.includes(b.id)));
         const ids = members.map(b => b.id).join(',');
-        return members.map((b, i) =>
-        `<div class="wsNavItem"><button data-bot="${esc(b.id)}" data-ws-search="${esc((this.name(b)+' '+group).toLowerCase())}" class="${b.id === active ? 'active' : ''}"${b.id === active ? ' aria-current="page"' : ''}>
+        const shut = !!fold[group], here = members.some(b => b.id === active);
+        return `<section class="wsNavGroup${shut ? ' wsFolded' : ''}${here ? ' wsHasActive' : ''}" data-ws-group="${esc(group)}">` +
+          `<h3><button type="button" class="wsGroupHead" data-navfold="${esc(group)}" aria-expanded="${!shut}" title="${shut ? 'Unfold' : 'Fold'} ${esc(group)}"><i>${shut ? '▸' : '▾'}</i><span>${isFav ? '★ ' : ''}${esc(group)}</span><small>${members.length}</small></button></h3>` +
+          `<div class="wsGroupBody">` + (isFav && !members.length ? '<p class="wsFavEmpty">Press ☆ beside any page below to keep it up here.</p>' : '') + members.map((b, i) =>
+        `<div class="wsNavItem"><button data-bot="${esc(b.id)}" data-ws-search="${esc((this.name(b)+' '+group+' '+this.group(b)).toLowerCase())}" class="${b.id === active ? 'active' : ''}"${b.id === active ? ' aria-current="page"' : ''}>
         ${this.icon(this.botIcon(b))}<span>${esc(this.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</button>` +
+        `<button type="button" class="wsFav${isFav ? ' on' : ''}" data-fav="${esc(b.id)}" title="${isFav ? 'Take it out of Favourites' : 'Add to Favourites'}">${isFav ? '★' : '☆'}</button>` +
         `<button type="button" class="wsGuide" data-guide="${esc(b.id)}" title="How it works">?</button>` +
-        `<span class="wsMove"><button type="button" data-mv="-1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>` +
-        `<button type="button" data-mv="1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move down"${i === members.length - 1 ? ' disabled' : ''}>▼</button></span></div>`).join('');
-      })() + '</section>').join('') +
+        (isFav
+          ? `<span class="wsMove"><button type="button" data-favmv="-1" data-favid="${esc(b.id)}" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>` +
+            `<button type="button" data-favmv="1" data-favid="${esc(b.id)}" title="Move down"${i === members.length - 1 ? ' disabled' : ''}>▼</button></span></div>`
+          : `<span class="wsMove"><button type="button" data-mv="-1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>` +
+            `<button type="button" data-mv="1" data-mvid="${esc(b.id)}" data-mvgroup="${esc(ids)}" title="Move down"${i === members.length - 1 ? ' disabled' : ''}>▼</button></span></div>`)).join('') + '</div></section>';
+      })()).join('') +
       '<p class="wsNoResults" hidden>No matching bot or page. Clear the search to see everything.</p></div>';
+  },
+  /* your favourites: pages you starred, in your own order (remembered per browser).
+     A starred page moves into the group and leaves its usual one; unstar it and it goes back. */
+  FAV_GROUP: 'Favourites',
+  FAV_KEY: 'astra_navfav',
+  favs(){ const v = lsGet(this.FAV_KEY, []); return Array.isArray(v) ? v : []; },
+  toggleFav(id){
+    const f = this.favs(), on = f.includes(id);
+    lsSet(this.FAV_KEY, on ? f.filter(x => x !== id) : f.concat([id]));
+    if (!on) this.setNavFold(this.FAV_GROUP, false);
+    if (typeof Bots !== 'undefined') Bots.renderNav();
+  },
+  moveFav(id, dir){
+    const f = this.favs(), i = f.indexOf(id), j = i + dir;
+    if (i < 0 || j < 0 || j >= f.length) return;
+    f.splice(i, 1); f.splice(j, 0, id); lsSet(this.FAV_KEY, f);
+    if (typeof Bots !== 'undefined') Bots.renderNav();
+  },
+  /* which workspace groups are folded (remembered per browser) */
+  NAVFOLD_KEY: 'astra_navfold',
+  navFold(){ const v = lsGet(this.NAVFOLD_KEY, {}); return v && typeof v === 'object' ? v : {}; },
+  setNavFold(group, shut){
+    const f = this.navFold(); if (shut) f[group] = true; else delete f[group]; lsSet(this.NAVFOLD_KEY, f);
+    const g = document.querySelector('#botNav .wsNavGroup[data-ws-group="' + CSS.escape(group) + '"]'); if (!g) return;
+    g.classList.toggle('wsFolded', shut);
+    const b = g.querySelector('[data-navfold]'); b.setAttribute('aria-expanded', String(!shut)); b.title = (shut ? 'Unfold ' : 'Fold ') + group; b.querySelector('i').textContent = shut ? '▸' : '▾';
   },
   bindNav(nav){
     nav.querySelector('#wsBotSearch').addEventListener('input', e => { this.query = e.target.value; this.filterNav(nav); });
+    nav.querySelectorAll('[data-navfold]').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      this.setNavFold(b.dataset.navfold, !b.closest('.wsNavGroup').classList.contains('wsFolded'));
+    }));
+    nav.querySelectorAll('[data-fav]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); this.toggleFav(b.dataset.fav); }));
+    nav.querySelectorAll('[data-favmv]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); this.moveFav(b.dataset.favid, +b.dataset.favmv); }));
+    nav.querySelectorAll('[data-navfoldall]').forEach(b => b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const shut = b.dataset.navfoldall === '1';
+      nav.querySelectorAll('.wsNavGroup').forEach(g => this.setNavFold(g.dataset.wsGroup, shut));
+    }));
     nav.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
       Bots.moveBot(b.dataset.mvid, +b.dataset.mv, b.dataset.mvgroup.split(','));
@@ -78,10 +126,13 @@ const WorkspaceUI = {
     const q = this.query.trim().toLowerCase();
     nav.querySelectorAll('[data-bot]').forEach(b => { b.hidden = !b.dataset.wsSearch.includes(q); });
     nav.querySelectorAll('.wsNavItem').forEach(it => { it.hidden = !!it.querySelector('[data-bot][hidden]'); });
-    nav.querySelectorAll('.wsNavGroup').forEach(g => { g.hidden = !g.querySelector('[data-bot]:not([hidden])'); });
+    nav.querySelectorAll('.wsNavGroup').forEach(g => { g.hidden = !g.querySelector('[data-bot]:not([hidden])') && !(g.dataset.wsGroup === this.FAV_GROUP && !q); });
     nav.querySelector('.wsNoResults').hidden = !!nav.querySelector('[data-bot]:not([hidden])');
+    /* while searching, folded groups open up so a match is never hidden inside one */
+    nav.classList.toggle('wsSearching', !!q);
   },
   sync(active){
+    document.querySelectorAll('#botNav .wsNavGroup').forEach(g => g.classList.toggle('wsHasActive', !!g.querySelector('[data-bot="' + CSS.escape(active || '') + '"]')));
     document.querySelectorAll('#botNav [data-bot], [data-ws-bot]').forEach(el => {
       const on = (el.dataset.bot || el.dataset.wsBot) === active;
       el.classList.toggle('active', on);

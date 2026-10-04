@@ -3000,3 +3000,78 @@ html[data-tile] #toasts { display: none !important; }
 .exHomeBtn{ pointer-events:auto; transform:translateY(-100%); padding:8px 14px; border-radius:20px; cursor:pointer; font-weight:700; font-size:12.5px;
   background:rgba(0,229,255,.16); color:var(--accent,#00e5ff); border:1px solid rgba(0,229,255,.6); box-shadow:0 4px 16px rgba(0,0,0,.45); backdrop-filter:blur(4px); width:auto !important; }
 .exHomeBtn:hover{ background:rgba(0,229,255,.3); }
+
+/* Dashboard: tick-list filters with Select all / Unselect all */
+.dfPick{ position:relative; display:inline-block; }
+.dfBtn{ cursor:pointer; text-align:left; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dfBtn.on{ border-color:rgba(0,229,255,.6) !important; color:var(--accent,#00e5ff); }
+.dfPanel{ position:absolute; z-index:60; top:calc(100% + 4px); left:0; min-width:230px; max-width:320px; padding:8px; border-radius:9px;
+  background:var(--panel,#121c2e); border:1px solid rgba(0,229,255,.35); box-shadow:0 10px 30px rgba(0,0,0,.55); }
+.dfFind{ width:100%; margin-bottom:6px; }
+.dfTools{ display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+.dfTools .dfCount{ margin-left:auto; font-size:11px; }
+.dfList{ max-height:260px; overflow:auto; display:flex; flex-direction:column; gap:1px; }
+.dfItem{ display:flex; align-items:center; gap:7px; padding:3px 4px; border-radius:5px; cursor:pointer; font-size:12px; white-space:nowrap; }
+.dfItem:hover{ background:rgba(255,255,255,.05); }
+.dfItem input{ width:15px !important; height:15px; margin:0; flex:0 0 15px; accent-color:#00e5ff; }
+.dfFoot{ display:flex; justify-content:flex-end; margin-top:7px; }
+
+/* Your workspace: foldable groups */
+.wsNavGroup > h3{ padding:0 !important; }
+.wsGroupHead{ display:flex; align-items:center; gap:6px; width:100% !important; padding:4px 2px; background:none; border:0; cursor:pointer;
+  color:inherit; font:inherit; letter-spacing:inherit; text-transform:inherit; text-align:left; }
+.wsGroupHead i{ font-style:normal; width:12px; color:var(--accent,#00e5ff); font-size:10px; }
+.wsGroupHead small{ margin-left:auto; font-size:10px; opacity:.6; font-weight:400; }
+.wsGroupHead:hover{ color:var(--text); }
+.wsNavGroup.wsFolded > .wsGroupBody{ display:none; }
+.wsSearching .wsNavGroup.wsFolded > .wsGroupBody{ display:block; }
+.wsNavGroup.wsFolded.wsHasActive .wsGroupHead span{ color:var(--accent,#00e5ff); }
+.wsNavGroup.wsFolded.wsHasActive .wsGroupHead span::after{ content:' •'; }
+.wsFoldAll{ float:right; display:inline-flex; gap:3px; }
+.wsFoldAll button{ font-size:9.5px; padding:0 5px; border-radius:5px; cursor:pointer; background:transparent; color:var(--dim); border:1px solid rgba(255,255,255,.14); width:auto !important; letter-spacing:0; }
+.wsFoldAll button:hover{ color:var(--accent,#00e5ff); border-color:rgba(0,229,255,.5); }
+
+/* Your workspace: favourites */
+.wsFav{ width:20px !important; height:20px; padding:0 !important; border:0; background:transparent; cursor:pointer; color:var(--dim); font-size:13px; line-height:1; opacity:.45; flex:0 0 20px; }
+.wsNavItem:hover .wsFav, .wsFav.on{ opacity:1; }
+.wsFav.on, .wsFav:hover{ color:#ffd166; }
+.wsNavGroup[data-ws-group="Favourites"] .wsGroupHead span{ color:#ffd166; }
+.wsFavEmpty{ margin:2px 4px 6px 20px; font-size:11px; color:var(--dim); line-height:1.4; }
+/* the star sits with the other hover buttons (? and ▲▼), left of them */
+#botNav .wsNavItem .wsFav{ position:absolute; right:46px; top:50%; transform:translateY(-50%); display:none; opacity:1; }
+#botNav .wsNavItem:hover .wsFav, #botNav .wsNavItem:focus-within .wsFav{ display:inline-grid; place-items:center; }
+
+/* Deep Dive: the top bar stays at the top, the picture can be frozen under it */
+.exWrap > .exCrumbs{ position:sticky; top:calc(-1 * var(--exPad, 0px)); z-index:30; padding:calc(6px + var(--exPad, 0px)) 0 6px; margin-top:calc(-6px - var(--exPad, 0px));
+  background:var(--exBg, #0a1220); box-shadow:0 6px 10px -8px rgba(0,0,0,.6); }
+.exWrap.exFreezeHero .exSec[data-exsec="hero"]{ position:sticky; top:calc(var(--exBarH, 44px) - var(--exPad, 0px)); z-index:25;
+  background:var(--exBg, #0a1220); box-shadow:0 8px 12px -10px rgba(0,0,0,.7); }
+.exWrap.exFreezeHero .exSec[data-exsec="hero"].folded{ padding-bottom:4px; }
+.exFreezeBtn.on{ background:rgba(0,229,255,.16); border-color:rgba(0,229,255,.6); color:var(--accent,#00e5ff); }
+
+/* Markets card: when a market / pair was switched on or off */
+.mkHist{ font-size:11.5px; color:var(--dim); margin:0 0 8px; line-height:1.5; }
+.mkHist b{ color:var(--text); } .mkHist .up{ color:var(--green,#2ebd85); } .mkHist .down{ color:var(--red,#f6465d); }
+.mkHist .bMini{ margin-left:6px; }
+.mkHistList{ margin-top:6px; max-height:220px; overflow:auto; border-left:2px solid rgba(0,229,255,.3); padding-left:8px; }
+.mkHistList > div{ padding:2px 0; } .mkHistList > div > span{ display:inline-block; min-width:118px; font-family:var(--font-mono,monospace); color:var(--text); }
+.mkSince{ font-size:10px; color:var(--dim); margin-left:8px; padding:1px 6px; border-radius:8px; border:1px solid rgba(255,255,255,.12); white-space:nowrap; }
+/* frozen picture: no title row ("The picture · what this doll holds" + its little buttons) —
+   it only takes room. Unfreeze to get the row back; a folded picture keeps it so it can be opened. */
+.exWrap.exFreezeHero .exSec[data-exsec="hero"]:not(.folded) > .exSecHead{ display:none; }
+
+/* Bots on / off: the switched-off bots in a folded row */
+.bsOff{ margin-top:12px; border:1px dashed rgba(255,255,255,.14); border-radius:9px; padding:4px 8px; }
+.bsOffHead{ display:flex; align-items:center; gap:8px; width:100% !important; background:none; border:0; cursor:pointer; color:var(--text); font-weight:700; font-size:12.5px; padding:6px 2px; text-align:left; }
+.bsOffHead i{ font-style:normal; color:var(--accent,#00e5ff); width:12px; }
+.bsOffHead small{ font-weight:400; color:var(--dim); font-size:11px; }
+.bsOff.open{ background:rgba(255,255,255,.02); }
+
+/* Deep Dive: money invested under the net result */
+.exBig .exInvLine{ display:block; font-size:12px; font-weight:400; color:var(--dim); margin-top:2px; letter-spacing:0; text-transform:none; }
+.exBig .exInvLine b{ color:var(--text); font-family:var(--font-mono,monospace); font-size:12px; }
+.exBig .exInvLine .up{ color:var(--green,#2ebd85); } .exBig .exInvLine .down{ color:var(--red,#f6465d); }
+.exRowInv{ font-family:var(--font-mono,monospace); white-space:nowrap; text-align:right; }
+.exBig .exInvLine span{ display:inline; font-size:inherit; letter-spacing:0; text-transform:none; }
+.exRow{ grid-template-columns:130px 1fr 1fr 1fr 90px 110px auto; }
+@media (max-width:760px){ .exRow{ grid-template-columns:1fr 1fr; } }

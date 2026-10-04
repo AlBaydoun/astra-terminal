@@ -284,6 +284,7 @@ const Bots = {
     /* bots the Strategy Lab has published come back before anything is wired */
     if (typeof StratLab !== 'undefined') try { StratLab.init(); } catch(e){}
     if (typeof Checker !== 'undefined') try { Checker.mountAll(); } catch(e){ console.warn('ASTRA checker bots:', e.message); }
+    this.applyOff();
     for (const b of BOTS){
       this.ledgers[b.id] = BotEngine.load(b.id);
       this.cfgs[b.id] = Object.assign({}, b.defaults, lsGet('astra_botcfg_' + b.id, {}));
@@ -293,8 +294,19 @@ const Bots = {
         this.cfgs[b.id].paused = false; lsSet('astra_botcfg_' + b.id, this.cfgs[b.id]); lsSet('astra_conviction_auto_v1', true);
       }
     }
+    for (const b of BOTS) this._cfgSeen[b.id] = localStorage.getItem('astra_botcfg_' + b.id);
     this.wire();
     this.render();
+    /* ONE window runs the bots. Every extra chart screen and every pop-out window
+       starts the whole app too; before this, each of them also ran its own bot
+       cycle (and the live desk and the scanners) with the settings it had read
+       when it opened - so a market you switched off in the main window could
+       still be traded by a window that was already open. Those windows now only
+       SHOW the bots and re-read them from storage. */
+    if (!this.isRunner()){
+      this.timer = setInterval(() => this.followStorage(), 30000);
+      return;
+    }
     /* the workspace runs on a slow, deliberate cadence — bots act on closed candles */
     this.timer = setInterval(() => this.tick(), 30000);
     if (typeof Auto !== 'undefined') Auto.init();
@@ -302,6 +314,36 @@ const Bots = {
     if (typeof Checker !== 'undefined') Checker.init();
     if (typeof ConfluenceScanner !== 'undefined') ConfluenceScanner.start();
     setTimeout(() => this.tick(), 8000);
+  },
+
+  /* the main window (not a chart screen, not a pop-out) is the only one that trades */
+  isRunner(){
+    if (typeof TILE_ID !== 'undefined' && TILE_ID) return false;
+    if (typeof Popout !== 'undefined' && Popout.isChild && Popout.isChild()) return false;
+    return true;
+  },
+  /* a window that does not run the bots keeps its picture current from storage */
+  followStorage(){
+    for (const b of BOTS){
+      try { this.ledgers[b.id] = BotEngine.load(b.id); } catch(e){}
+      this.adoptStoredCfg(b.id);
+    }
+    if (this.active && !this.isPage(BOT_BY_ID[this.active] || {})) try { this.render(); } catch(e){}
+  },
+  /* a bot's settings saved by ANOTHER window are taken over here, in place (so every
+     screen holding this cfg object sees them). A change made in this window is never
+     overwritten - it is saved first and therefore already what storage holds. */
+  _cfgSeen: {},
+  adoptStoredCfg(id){
+    const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[id] : null; if (!b) return false;
+    const raw = localStorage.getItem('astra_botcfg_' + id);
+    if (raw === this._cfgSeen[id] || (raw == null && this._cfgSeen[id] === undefined)) return false;
+    this._cfgSeen[id] = raw;
+    let stored = {}; if (raw != null) try { stored = JSON.parse(raw) || {}; } catch(e){ return false; }
+    const c = this.cfgs[id] || (this.cfgs[id] = {});
+    for (const k of Object.keys(c)) delete c[k];
+    Object.assign(c, b.defaults || {}, stored);
+    return true;
   },
 
   /* ================= shared column sorting =================
@@ -349,7 +391,48 @@ const Bots = {
   },
 
   cfg(id){ return this.cfgs[id]; },
-  saveCfg(id){ lsSet('astra_botcfg_' + id, this.cfgs[id]); },
+  saveCfg(id){
+    let prev = null; try { prev = this._cfgSeen[id] != null ? JSON.parse(this._cfgSeen[id]) : null; } catch(e){}
+    lsSet('astra_botcfg_' + id, this.cfgs[id]); this._cfgSeen[id] = localStorage.getItem('astra_botcfg_' + id);
+    try { this.logMarketChange(id, prev, this.cfgs[id]); } catch(e){ console.warn('ASTRA market log:', e.message); }
+  },
+
+  /* ---- when each market / pair was switched on or off, per bot ----
+     Every market change goes through saveCfg (the Markets card, "Only …", a single
+     pair, Market Fit, the live desk), so it is stamped here, once. Stored under
+     astra_marketlog = { botId: [{ t, on:[..], off:[..], pairsOn:[..], pairsOff:[..] }] },
+     newest last, at most 200 per bot. Read-only history; it never changes a setting. */
+  MKLOG_KEY: 'astra_marketlog',
+  marketLog(id){ const all = lsGet(this.MKLOG_KEY, {}) || {}; return Array.isArray(all[id]) ? all[id] : []; },
+  effectiveGroups(cfg){
+    const all = Object.keys(this.marketGroups());
+    if (cfg && cfg.groups && cfg.groups.length) return cfg.groups.filter(g => all.includes(g));
+    const mode = (cfg && cfg.marketMode) || 'manual';
+    return mode === 'manual' ? all.filter(g => g !== 'stocks' && g !== 'other') : all;
+  },
+  blockedPairs(cfg){
+    const out = new Set((cfg && cfg.blocked) || []);
+    if (cfg && cfg.instruments && cfg.instruments.length){
+      for (const s of this.groupSymbols(Object.keys(this.marketGroups()))) if (!cfg.instruments.includes(s)) out.add(s);
+    }
+    return out;
+  },
+  logMarketChange(id, prev, next){
+    const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[id] : null;
+    if (!b || b.manual || b.liveManual || this.isPage(b)) return;
+    const before = prev || Object.assign({}, b.defaults || {});
+    const G = this.marketGroups(), label = g => (G[g] || {}).label || g;
+    const g0 = new Set(this.effectiveGroups(before)), g1 = new Set(this.effectiveGroups(next));
+    const b0 = this.blockedPairs(before), b1 = this.blockedPairs(next);
+    const on = [...g1].filter(g => !g0.has(g)).map(label), off = [...g0].filter(g => !g1.has(g)).map(label);
+    const pairsOff = [...b1].filter(s => !b0.has(s)), pairsOn = [...b0].filter(s => !b1.has(s));
+    if (!on.length && !off.length && !pairsOn.length && !pairsOff.length) return;
+    const all = lsGet(this.MKLOG_KEY, {}) || {};
+    const list = Array.isArray(all[id]) ? all[id] : [];
+    list.push({ t: Date.now(), on, off, pairsOn, pairsOff });
+    all[id] = list.slice(-200);
+    lsSet(this.MKLOG_KEY, all);
+  },
   ledger(id){ return this.ledgers[id]; },
 
   /* ---------- which instruments a bot looks at ---------- */
@@ -602,11 +685,56 @@ const Bots = {
   DISABLED_KEY: 'astra_botdisabled',
   disabledIds(){ return lsGet(this.DISABLED_KEY, []) || []; },
   disabled(id){ return this.disabledIds().includes(id); },
+
+  /* A switched-off bot is treated EXACTLY like a deleted one: it is taken out of
+     the bot registry (BOTS / BOT_BY_ID), so nothing in ASTRA sees it any more -
+     not the bot cycle, not its open trades (they are no longer watched), not the
+     Dashboard, Deep Dive, Open Trades, reports, scanners or source lists. Only the
+     Bots on / off page still lists it. Its record and settings stay in storage
+     untouched, so switching it on puts it back exactly where it was. */
+  _offStash: {},          // id -> bot definition, while switched off
+  _regOrder: [],          // the registry order, so a bot comes back in its old place
+  offBots(){ return Object.values(this._offStash); },
+  applyOff(){
+    if (!this._regOrder.length) this._regOrder = BOTS.map(b => b.id);
+    for (const id of this.disabledIds()){
+      const i = BOTS.findIndex(b => b.id === id); if (i < 0) continue;
+      const b = BOTS[i];
+      if (this.isPage(b) || b.manual || b.liveManual) continue;
+      this._offStash[id] = b; BOTS.splice(i, 1); delete BOT_BY_ID[id];
+      delete this.ledgers[id]; delete this.cfgs[id];
+    }
+  },
+  restoreBot(id){
+    const b = this._offStash[id]; if (!b) return;
+    delete this._offStash[id];
+    const pos = this._regOrder.indexOf(id);
+    let at = BOTS.length;
+    for (let k = 0; k < BOTS.length; k++){ const p = this._regOrder.indexOf(BOTS[k].id); if (p > pos){ at = k; break; } }
+    BOTS.splice(at, 0, b); BOT_BY_ID[id] = b;
+    this.ledgers[id] = BotEngine.load(id);
+    this.cfgs[id] = Object.assign({}, b.defaults, lsGet('astra_botcfg_' + id, {}));
+    this._cfgSeen[id] = localStorage.getItem('astra_botcfg_' + id);
+  },
   setDisabled(id, off){
+    if (off){
+      const L = this.ledgers[id], open = L && L.open ? L.open.length : 0;
+      if (open && !confirm('This bot still holds ' + open + ' open trade' + (open === 1 ? '' : 's') + '.\n\nSwitching it off treats it exactly like a deleted bot: ' + (open === 1 ? 'that trade is' : 'those trades are') + ' no longer watched (no stop, no target, no time limit), and ' + (open === 1 ? 'it disappears' : 'they disappear') + ' from Open Trades and every report until you switch the bot on again.\n\nClose ' + (open === 1 ? 'it' : 'them') + ' first if you want them finished. Switch the bot off anyway?')){
+        this.render(); return false;
+      }
+    }
     const list = this.disabledIds().filter(x => x !== id);
     if (off) list.push(id);
     lsSet(this.DISABLED_KEY, list);
+    if (off) this.applyOff(); else this.restoreBot(id);
     if (off && this.active === id) this.active = 'dash';
+    this.renderNav && this.renderNav();
+    this.render();
+    return true;
+  },
+  setAllOn(){
+    lsSet(this.DISABLED_KEY, []);
+    for (const id of Object.keys(this._offStash)) this.restoreBot(id);
     this.renderNav && this.renderNav();
     this.render();
   },
@@ -631,6 +759,7 @@ const Bots = {
   lastTickAt: 0,
   async tick(){
     this.lastTickAt = Date.now();
+    for (const b of BOTS) this.adoptStoredCfg(b.id);
     /* contract sizes first — without them the risk engine cannot size in lots */
     if (Feed.bridge) await Feed.loadSpecs(this.universe().slice(0, 40));
     // Restored positions may not be on any watchlist. Fetch their own quotes
@@ -816,6 +945,9 @@ const Bots = {
   refuses(botId, sym){
     const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[botId] : null;
     if (!b || b.manual || b.liveManual || !sym) return null;
+    /* right before an entry, the saved setting is the one that counts - whichever
+       window changed it last */
+    this.adoptStoredCfg(botId);
     const cfg = this.cfg(botId) || {};
     const key = s => (typeof Feed !== 'undefined' && Feed.brokerName) ? Feed.brokerName(s) : s;
     const k = key(sym), same = s => s === sym || key(s) === k;

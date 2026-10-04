@@ -42,10 +42,14 @@ const Nav = {
       obs,
       trTrade: !!(review && !review.hidden && obs.replay && obs.replay !== 'closed' && obs.replay !== 'behind'),
       scroll: body ? body.scrollTop : 0,
+      /* inside the Deep Dive every doll you open (a day, a bot, a pair) and every
+         tick you change is a step of its own */
+      dive: tab === 'bots' && typeof Bots !== 'undefined' && Bots.active === 'explorer' && typeof Explorer !== 'undefined'
+        ? JSON.stringify({ p: Explorer.path || [], x: Explorer.excludes || {} }) : null,
     };
   },
   /* what counts as "a different place" — the scroll position does not */
-  sig(s){ return JSON.stringify([s.sym, s.tf, s.tab, s.bot, s.collapsed, s.wide, s.chartmax, s.obs, s.trTrade]); },
+  sig(s){ return JSON.stringify([s.sym, s.tf, s.tab, s.bot, s.collapsed, s.wide, s.chartmax, s.obs, s.trTrade, s.dive]); },
 
   watch(){
     if (this.restoring) return;
@@ -113,6 +117,14 @@ const Nav = {
         const t = document.querySelector('#botTabs [data-tab="bots"]');
         if (t && !t.classList.contains('active')) run(() => t.click());
         if (typeof Bots !== 'undefined' && Bots.active !== s.bot) run(() => WorkspaceUI.openBot(s.bot));
+        /* the Deep Dive: back to the doll and the ticks you had */
+        if (s.bot === 'explorer' && s.dive && typeof Explorer !== 'undefined' && s.dive !== now.dive) run(() => {
+          const d = JSON.parse(s.dive);
+          Explorer.path = d.p || []; Explorer.excludes = d.x || {};
+          Explorer.listAll = false; Explorer._listN = 0;
+          lsSet('astra_explorer_path', Explorer.path); lsSet('astra_explorer_excl', Explorer.excludes);
+          Explorer.dirty = true; Bots.render();
+        });
       } else {
         const t = document.querySelector('#botTabs [data-tab="' + s.tab + '"]');
         if (t && !t.classList.contains('active')) run(() => t.click());
@@ -146,6 +158,13 @@ const Nav = {
       const b = typeof BOT_BY_ID !== 'undefined' && BOT_BY_ID[s.bot];
       const name = b ? (typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)
         : s.bot === 'permissions' ? 'Instrument permissions' : s.bot === 'botsettings' ? 'Bots on / off' : s.bot;
+      if (s.dive && s.bot === 'explorer' && !s.collapsed){
+        try {
+          const d = JSON.parse(s.dive), last = (d.p || [])[d.p.length - 1];
+          const exN = Object.values(d.x || {}).reduce((a, l) => a + (l ? l.length : 0), 0);
+          return name + ' · ' + (last ? last.label : 'Everything') + (exN ? ' (' + exN + ' unticked)' : '');
+        } catch(e){}
+      }
       if (!s.collapsed) return name;
     }
     const chart = 'chart ' + (typeof baseAsset === 'function' ? baseAsset(s.sym || '') : s.sym) + ' ' + (s.tf || '');
@@ -158,8 +177,8 @@ const Nav = {
     const prev = this.stack[this.stack.length - 1];
     const can = !!(top || prev);
     b.disabled = !can;
-    b.title = top ? 'Back — close this window (Alt+←)'
-      : prev ? 'Back to: ' + this.where(prev) + '  (Alt+← or the mouse back button)'
+    b.title = top ? 'Back — close this window (Backspace or Alt+←)'
+      : prev ? 'Back to: ' + this.where(prev) + '  (Backspace, Alt+← or the mouse back button)'
       : 'Nothing to go back to yet';
     b.querySelector('small').textContent = top ? 'close' : prev ? this.where(prev) : '';
   },

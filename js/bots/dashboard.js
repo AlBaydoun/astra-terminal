@@ -37,14 +37,28 @@ const BotDash = {
     return out.sort((a, b) => b.entryTime - a.entryTime);
   },
 
+
+  /* ---------- filters that can hold several values ----------
+     Bot, instrument, timeframe and day take 'all', ONE value (a string, as
+     before — every older caller keeps working) or a LIST of values. */
+  has(k, v){ const x = this.f[k]; return x === 'all' || (Array.isArray(x) ? x.includes(v) : x === v); },
+  isOn(k, v){ return this.f[k] !== 'all' && this.has(k, v); },
+  fLabel(k, name, allTxt){
+    const x = this.f[k];
+    if (x === 'all') return allTxt;
+    if (!Array.isArray(x)) return name(x);
+    if (!x.length) return 'none';
+    return x.length <= 3 ? x.map(name).join(', ') : x.length + ' selected';
+  },
+
   match(t){
     const f = this.f;
-    if (f.bot !== 'all' && t.bot !== f.bot) return false;
-    if (f.sym !== 'all' && t.sym !== f.sym) return false;
-    if (f.tf !== 'all' && t.tf !== f.tf) return false;
+    if (!this.has('bot', t.bot)) return false;
+    if (!this.has('sym', t.sym)) return false;
+    if (!this.has('tf', t.tf)) return false;
     if (f.side !== 'all' && (f.side === 'buy' ? t.dir <= 0 : t.dir > 0)) return false;
     if (f.result !== 'all' && (f.result === 'win' ? t.pnl <= 0 : t.pnl > 0)) return false;
-    if (f.day !== 'all' && this.dayOf(t.exitTime) !== f.day) return false;
+    if (f.day !== 'all' && !this.has('day', this.dayOf(t.exitTime))) return false;
     return true;
   },
 
@@ -173,9 +187,11 @@ const BotDash = {
 
   /* ---- Bots on / off (Settings & safety) ---- */
   botSettingsView(withNotes){
-    const all = BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.liveManual);
+    const all = BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.liveManual && !Bots.disabled(b.id));
+    const offList = (Bots.offBots ? Bots.offBots() : []).slice().sort((a, b) => String(WorkspaceUI.name(a)).localeCompare(WorkspaceUI.name(b)));
+    const offOpen = !!lsGet('astra_bsoff_open', false);
     const row = b => {
-      const off = Bots.disabled(b.id), cfg = Bots.cfg(b.id) || {}, L = Bots.ledger(b.id);
+      const off = Bots.disabled(b.id), cfg = (off ? lsGet('astra_botcfg_' + b.id, {}) : Bots.cfg(b.id)) || {}, L = off ? BotEngine.load(b.id) : Bots.ledger(b.id);
       const locked = L && Number.isFinite(L.equity) && L.equity < BotEngine.rules(cfg).minEquity;
       const state = off ? 'OFF' : cfg.paused ? 'PAUSED' : locked ? 'LOCKED' : 'RUNNING';
       return `<div class="bsRow ${off ? 'off' : ''}">
@@ -190,9 +206,12 @@ const BotDash = {
         </span></div>`;
     };
     const P = {
-      intro: `<p class="dim2">Untick a bot to switch it off: it leaves the sidebar, the Dashboard, the Manual bot's signal list and the Live page, and opens nothing new. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. A bot that still holds a position keeps managing it to its stop or target.</p>`,
+      intro: `<p class="dim2">Untick a bot to switch it off. A switched-off bot is treated <b>exactly like a deleted one</b>: it disappears from every list, report, Deep Dive and Open Trades, opens nothing new, and its open trades are no longer watched. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. Switched-off bots wait in the folded row at the bottom.</p>`,
       actions: `<div class="botCtl"><button class="bMini go" data-bsall="on">Switch all on</button><button class="bMini go" data-bsall="unpause">▶ Unpause all</button><button class="bMini danger" data-bsall="resetlocked">↺ Reset every locked bot</button></div>`,
-      list: `<div class="bsList">${Bots.ordered(all).map(row).join('')}</div>`,
+      list: `<div class="bsList">${Bots.ordered(all).map(row).join('')}</div>` +
+        (offList.length ? `<div class="bsOff${offOpen ? ' open' : ''}">
+          <button type="button" class="bsOffHead" data-bsofffold="1" aria-expanded="${offOpen}"><i>${offOpen ? '▾' : '▸'}</i> Switched off <small>${offList.length} bot${offList.length === 1 ? '' : 's'} · treated as deleted, record kept</small></button>
+          ${offOpen ? `<div class="bsList">${offList.map(row).join('')}</div>` : ''}</div>` : ''),
     };
     /* ⚙ Layout: the page in your order */
     if (withNotes != null && typeof BotLayout !== 'undefined') return `<div class="bsWrap">${BotLayout.compose('botsettings', Object.assign({ notes: withNotes }, P), true)}</div>`;
@@ -333,7 +352,7 @@ const BotDash = {
   view(extras){
     const all = this.allTrades();
     const shown = all.filter(t => this.match(t));
-    const open = this.allOpen().filter(p => this.f.bot === 'all' || p.bot === this.f.bot);
+    const open = this.allOpen().filter(p => this.has('bot', p.bot));
     const S = this.sum(shown);
     const days = this.dayRows(shown);
     const bestDay = days.reduce((a, d) => (!a || d.net > a.net) ? d : a, null);
@@ -360,7 +379,7 @@ const BotDash = {
         '</div>'),
       days: () => this.section('days', 'DAY BY DAY',
         days.length + ' day' + (days.length === 1 ? '' : 's') +
-        (this.f.day !== 'all' ? ' \u00B7 showing ' + this.f.day : ''),
+        (this.f.day !== 'all' ? ' \u00B7 showing ' + this.fLabel('day', d => d, '') : ''),
         this.dayStrip(days) + this.dayTable(days)),
       open: () => open.length ? this.section('open', 'OPEN RIGHT NOW',
         open.length + ' position' + (open.length === 1 ? '' : 's'), this.openTable(open)) : '',
@@ -482,13 +501,25 @@ const BotDash = {
     const sel = (k, opts, cur) => `<select class="tsel" data-df="${k}">` +
       opts.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('') +
       '</select>';
+    /* a tick-list: the button shows what is chosen, the panel has Select all / Unselect all */
+    const pick = (k, opts, allTxt) => {
+      const name = v => (opts.find(o => o[0] === v) || [v, v])[1];
+      const lbl = this.fLabel(k, name, allTxt);
+      return `<span class="dfPick" data-dfpick="${k}"><button type="button" class="tsel dfBtn${this.f[k] === 'all' ? '' : ' on'}" data-dfopen="${k}" title="Choose one, several or all">${esc(lbl)} ▾</button>
+        <div class="dfPanel" hidden>
+          ${opts.length > 8 ? '<input type="search" class="dfFind" placeholder="Find…">' : ''}
+          <div class="dfTools"><button type="button" class="bMini" data-dfall="1">☑ Select all</button><button type="button" class="bMini" data-dfall="0">☐ Unselect all</button><span class="dim2 dfCount"></span></div>
+          <div class="dfList">${opts.map(([v, l]) => `<label class="dfItem" data-dfname="${esc(String(l).toLowerCase())}"><input type="checkbox" value="${esc(v)}"${this.has(k, v) ? ' checked' : ''}> <span>${esc(l)}</span></label>`).join('')}</div>
+          <div class="dfFoot"><button type="button" class="bBtn go" data-dfapply="1">Show</button></div>
+        </div></span>`;
+    };
     return `<div class="dashBar">
-      <label class="bc">Bot ${sel('bot', [['all', 'All bots']].concat(this.bots().map(b => [b.id, b.name])), this.f.bot)}</label>
-      <label class="bc">Instrument ${sel('sym', [['all', 'All']].concat(syms.map(s => [s, baseAsset(s)])), this.f.sym)}</label>
-      <label class="bc">Timeframe ${sel('tf', [['all', 'All']].concat(tfs.map(t => [t, t])), this.f.tf)}</label>
+      <label class="bc">Bot ${pick('bot', this.bots().map(b => [b.id, b.name]), 'All bots')}</label>
+      <label class="bc">Instrument ${pick('sym', syms.map(s => [s, baseAsset(s)]), 'All')}</label>
+      <label class="bc">Timeframe ${pick('tf', tfs.map(t => [t, t]), 'All')}</label>
       <label class="bc">Side ${sel('side', [['all', 'Both'], ['buy', 'Buy only'], ['sell', 'Sell only']], this.f.side)}</label>
       <label class="bc">Result ${sel('result', [['all', 'All'], ['win', 'Winners'], ['loss', 'Losers']], this.f.result)}</label>
-      <label class="bc">Day ${sel('day', [['all', 'Every day']].concat(days.map(d => [d, d])), this.f.day)}</label>
+      <label class="bc">Day ${pick('day', days.map(d => [d, d]), 'Every day')}</label>
       <button class="bMini" data-act="clearf">Clear filters</button>
     </div>`;
   },
@@ -524,7 +555,7 @@ const BotDash = {
     });
     return `<div class="dashScroll"><table class="dashTable">
       <thead>${Bots.sortHead('dashBots', cols, 'net')}</thead><tbody>${rows.map(r => `
-        <tr data-pickbot="${esc(r.b.id)}"${this.f.bot === r.b.id ? ' class="on"' : ''}>
+        <tr data-pickbot="${esc(r.b.id)}"${this.isOn('bot', r.b.id) ? ' class="on"' : ''}>
           <td class="c-sym">${esc(r.b.name)}</td>
           <td>${esc((Bots.cfg(r.b.id) || {}).tf || '—')}</td>
           <td class="dashTfs">${r.tfs.map(t => `<i>${esc(t)}</i>`).join('') || '—'}</td>
@@ -629,8 +660,8 @@ const BotDash = {
   },
 
   instrumentTable(all, openAll){
-    const scoped = this.f.bot === 'all' ? all : all.filter(t => t.bot === this.f.bot);
-    const scopedOpen = this.f.bot === 'all' ? openAll : openAll.filter(p => p.bot === this.f.bot);
+    const scoped = this.f.bot === 'all' ? all : all.filter(t => this.has('bot', t.bot));
+    const scopedOpen = this.f.bot === 'all' ? openAll : openAll.filter(p => this.has('bot', p.bot));
     let rows = this.instrumentRows(scoped, scopedOpen);
     if (!rows.length) return '<div class="empty">No instrument has traded yet</div>';
 
@@ -895,7 +926,7 @@ const BotDash = {
       : k === 'worst' ? (r.worst ? r.worst.pnl : null) : r[k]);
     return `<div class="dashScroll short"><table class="dashTable">
       <thead>${Bots.sortHead('dashDays', dcols, 'day')}</thead>
-      <tbody>${days.map(d => `<tr data-pickday="${esc(d.day)}"${this.f.day === d.day ? ' class="on"' : ''}>
+      <tbody>${days.map(d => `<tr data-pickday="${esc(d.day)}"${this.isOn('day', d.day) ? ' class="on"' : ''}>
         <td class="c-sym">${esc(d.day)}</td>
         <td class="num">${d.n}</td>
         <td class="num up">${d.won}</td>
@@ -1034,7 +1065,7 @@ const BotDash = {
     if (!list.length) return toast('Nothing to export with these filters', 'warn');
     const S = this.sum(list);
     const days = this.dayRows(list);
-    const open = this.allOpen().filter(p => this.f.bot === 'all' || p.bot === this.f.bot);
+    const open = this.allOpen().filter(p => this.has('bot', p.bot));
     const H = XLSX.head.bind(XLSX);
     const pfv = v => v === Infinity ? 999 : +(v || 0).toFixed(2);
     const f = this.f;
@@ -1048,12 +1079,12 @@ const BotDash = {
         ['These are PAPER trades. ASTRA cannot place an order with any broker.'],
         [],
         [{ v: 'Filters applied', s: 4 }],
-        ['Bot', f.bot === 'all' ? 'All bots' : (BOT_BY_ID[f.bot] || {}).name || f.bot],
-        ['Instrument', f.sym === 'all' ? 'All' : f.sym],
-        ['Timeframe', f.tf === 'all' ? 'All' : f.tf],
+        ['Bot', this.fLabel('bot', id => (BOT_BY_ID[id] || {}).name || id, 'All bots')],
+        ['Instrument', this.fLabel('sym', s => s, 'All')],
+        ['Timeframe', this.fLabel('tf', s => s, 'All')],
         ['Side', f.side === 'all' ? 'Both' : f.side],
         ['Result', f.result === 'all' ? 'All' : f.result],
-        ['Day', f.day === 'all' ? 'Every day' : f.day],
+        ['Day', this.fLabel('day', d => d, 'Every day')],
         [],
         [{ v: 'Totals', s: 4 }],
         ['Trades', S.n], ['Won', S.won], ['Lost', S.lost],
@@ -1169,12 +1200,12 @@ const BotDash = {
       <td>${esc(t.reason || '')}</td></tr>`).join('');
 
     const filters = [
-      f.bot === 'all' ? null : 'bot: ' + ((BOT_BY_ID[f.bot] || {}).name || f.bot),
-      f.sym === 'all' ? null : 'instrument: ' + f.sym,
-      f.tf === 'all' ? null : 'timeframe: ' + f.tf,
+      f.bot === 'all' ? null : 'bot: ' + this.fLabel('bot', id => (BOT_BY_ID[id] || {}).name || id, ''),
+      f.sym === 'all' ? null : 'instrument: ' + this.fLabel('sym', s => s, ''),
+      f.tf === 'all' ? null : 'timeframe: ' + this.fLabel('tf', s => s, ''),
       f.side === 'all' ? null : 'side: ' + f.side,
       f.result === 'all' ? null : 'result: ' + f.result,
-      f.day === 'all' ? null : 'day: ' + f.day,
+      f.day === 'all' ? null : 'day: ' + this.fLabel('day', d => d, ''),
     ].filter(Boolean).join(' \u00b7 ') || 'no filters \u2014 everything';
 
     const doc = `<!doctype html><html><head><meta charset="utf-8"><title>ASTRA \u2014 bot dashboard</title><style>
@@ -1250,6 +1281,7 @@ const BotDash = {
       this.f[el.dataset.df] = el.value;
       Bots.render();
     }));
+    this.bindPicks(host);
     host.querySelectorAll('[data-pickbot]').forEach(el => el.addEventListener('click', () => {
       this.f.bot = this.f.bot === el.dataset.pickbot ? 'all' : el.dataset.pickbot;
       Bots.render();
@@ -1320,6 +1352,46 @@ const BotDash = {
       else { this.f.sort = k; this.f.dir = -1; }
       Bots.render();
     }));
+  },
+
+  /* the tick-list filters. Ticking does not redraw the page (the panel would close
+     under the hand); the choice is applied with Show, or by clicking outside. */
+  bindPicks(host){
+    const apply = box => {
+      const k = box.dataset.dfpick, boxes = [...box.querySelectorAll('.dfList input')];
+      const on = boxes.filter(c => c.checked).map(c => c.value);
+      this.f[k] = on.length === boxes.length ? 'all' : on.length === 1 ? on[0] : on;
+      this._dfOpen = null; Bots.render();
+    };
+    const count = box => { const b = [...box.querySelectorAll('.dfList input')], n = b.filter(c => c.checked).length; const el = box.querySelector('.dfCount'); if (el) el.textContent = n + ' of ' + b.length; };
+    host.querySelectorAll('.dfPick').forEach(box => {
+      const panel = box.querySelector('.dfPanel');
+      /* the label around it must not forward clicks onto the first checkbox */
+      box.addEventListener('click', e => { e.stopPropagation(); if (e.target.closest('.dfPanel') && !e.target.closest('input,button,label')) e.preventDefault(); });
+      box.querySelector('[data-dfopen]').addEventListener('click', e => {
+        e.preventDefault();
+        const open = panel.hidden;
+        host.querySelectorAll('.dfPanel').forEach(p => { if (p !== panel && !p.hidden) apply(p.closest('.dfPick')); });
+        panel.hidden = !open; this._dfOpen = open ? box : null; count(box);
+        if (open) box.querySelector('.dfFind')?.focus();
+      });
+      panel.querySelectorAll('[data-dfall]').forEach(b => b.addEventListener('click', e => {
+        e.preventDefault();
+        panel.querySelectorAll('.dfItem').forEach(it => { if (!it.hidden) it.querySelector('input').checked = b.dataset.dfall === '1'; });
+        count(box);
+      }));
+      panel.querySelector('.dfList').addEventListener('change', () => count(box));
+      panel.querySelector('.dfFind')?.addEventListener('input', e => {
+        const q = e.target.value.trim().toLowerCase();
+        panel.querySelectorAll('.dfItem').forEach(it => { it.hidden = !!q && !it.dataset.dfname.includes(q); });
+      });
+      panel.querySelector('[data-dfapply]').addEventListener('click', e => { e.preventDefault(); apply(box); });
+    });
+    if (!this._dfDoc){
+      this._dfDoc = true;
+      document.addEventListener('click', () => { const b = this._dfOpen; if (b && b.isConnected && !b.querySelector('.dfPanel').hidden) apply(b); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && this._dfOpen && this._dfOpen.isConnected){ this._dfOpen.querySelector('.dfPanel').hidden = true; this._dfOpen = null; } });
+    }
   },
 
   /* the prohibit / allow buttons — bound on a full render, and again on their

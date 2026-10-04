@@ -306,8 +306,14 @@ const Explorer = {
     const inner = body && body.querySelector(':scope > .exFit'); if (!inner) return;
     inner.style.zoom = ''; inner.style.width = ''; body.classList.remove('overflowing');
     if (!body.classList.contains('fixed') || body.classList.contains('scroll')) return;
+    /* the height you chose is the most it may take - start from it every time */
+    if (!body.dataset.room && body.style.height) body.dataset.room = String(parseFloat(body.style.height));
+    if (body.dataset.room) body.style.height = body.dataset.room + 'px';
+    /* "shrink to fit" never leaves an empty band: the box ends where its content ends */
+    const trim = () => { const h = Math.ceil(inner.getBoundingClientRect().height) + 2; if (h > 20 && h < body.clientHeight - 2) body.style.height = h + 'px'; };
     const room = body.clientHeight, need = inner.scrollHeight;
-    if (!(room > 0) || need <= room + 1) return;
+    if (!(room > 0)) return;
+    if (need <= room + 1){ trim(); return; }
     let s = Math.max(0.35, room / need);
     for (let k = 0; k < 4; k++){       /* widening lets the text re-flow into fewer lines — measure again */
       inner.style.zoom = String(s);
@@ -315,7 +321,7 @@ const Explorer = {
       s = Math.max(0.35, s * room / got);
     }
     /* still too tall at the smallest readable size: let it scroll rather than cut it off */
-    if (inner.getBoundingClientRect().height > room + 1) body.classList.add('overflowing');
+    if (inner.getBoundingClientRect().height > room + 1) body.classList.add('overflowing'); else trim();
   },
   fitAll(host){ (host || document).querySelectorAll('.exSecBody.fixed').forEach(b => this.fit(b)); },
   DENSITY: [['compact', 'Compact'], ['normal', 'Normal'], ['roomy', 'Roomy']],
@@ -407,14 +413,31 @@ const Explorer = {
 
   /* the top "net result" picture of a set of trades — the Deep Dive uses it,
      and so does every bot page (its own trades) */
+  /* how much money one trade put to work: its full position value (quantity × entry
+     price, in account money) - the same measure the Dashboard calls volume */
+  invested(t){
+    /* a currency pair whose BASE is the account currency (USD/JPY on a USD account) was
+       stored without a conversion on a few early trades: qty is already dollars there */
+    const s = String(t.sym || '').replace(/\.[a-z]+$/i, ''), acct = (typeof Feed !== 'undefined' && Feed.account && Feed.account.currency) || 'USD';
+    if (!(t.meta && t.meta.accountFx) && /^[A-Z]{6}$/.test(s) && s.slice(0, 3) === acct && s.slice(3) !== acct) return Math.abs(t.qty || 0);
+    try { return typeof BotDash !== 'undefined' && BotDash.notional ? BotDash.notional(t) : Math.abs((t.qty || 0) * (t.entry || 0)); } catch(e){ return 0; }
+  },
   hero(rows, st, open){
     const pfTxt = st.pf === Infinity ? '∞' : st.pf.toFixed(2);
+    const inv = rows.reduce((a, t) => a + this.invested(t), 0), avgInv = rows.length ? inv / rows.length : 0;
+    const big = rows.reduce((m, t) => { const v = this.invested(t); return !m || v > m.v ? { t, v } : m; }, null);
+    const risked = rows.reduce((a, t) => a + (typeof BotDash !== 'undefined' && BotDash.risked ? BotDash.risked(t) : 0), 0);
+    const ret = inv > 0 ? st.net / inv * 100 : 0;
     return `<div class="exHero">
         <div class="exHeroLeft">
-          <div class="exBig ${st.net >= 0 ? 'up' : 'down'} exAct" data-exact="list" role="button" tabindex="0" title="Open every trade behind this number"><span>net result</span><b data-count="${st.net.toFixed(2)}">${this.money(st.net)}</b></div>
+          <div class="exBig ${st.net >= 0 ? 'up' : 'down'} exAct" data-exact="list" role="button" tabindex="0" title="Open every trade behind this number"><span>net result</span><b data-count="${st.net.toFixed(2)}">${this.money(st.net)}</b>
+            ${inv > 0 ? `<small class="exInvLine" title="The full value of every position added up: what was put to work to reach this result">on <b>${fmtNum(inv)}</b> invested · <span class="${ret >= 0 ? 'up' : 'down'}">${(ret >= 0 ? '+' : '') + ret.toFixed(2)}%</span></small>` : ''}</div>
           <div class="exKpis">
             ${this.kpi('Trades', st.n, '', esc(this.fmtDur(st.span)) + ' of history', 'list', 'Open all ' + st.n + ' trades, newest first')}
             ${this.kpi('Won · lost', this.door(st.wins ? 'res:won' : '', '<span class="up">' + st.wins + '</span>', 'Open the ' + st.wins + ' winners') + ' · ' + this.door(st.losses ? 'res:lost' : '', '<span class="down">' + st.losses + '</span>', 'Open the ' + st.losses + ' losers'), '', Math.round(st.winPct) + '% win rate')}
+            ${this.kpi('Money invested', fmtNum(inv), '',
+              'avg ' + fmtNum(avgInv) + ' per trade · ' + this.door(this.tradeAct(big && big.t), 'biggest ' + fmtNum(big ? big.v : 0), 'Open the biggest trade: ' + this.tradeName(big && big.t)) + (risked > 0 ? ' · at risk ' + fmtNum(risked) : '') + ' · return <span class="' + (ret >= 0 ? 'up' : 'down') + '">' + (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%</span>',
+              'list', 'Open the trades - each one shows how much it put to work')}
             ${this.kpi('Profit factor', pfTxt, st.pf >= 1 ? 'up' : 'down', this.door(st.wins ? 'res:won' : '', 'won ' + fmtNum(st.gp), 'Open the winners') + ' vs ' + this.door(st.losses ? 'res:lost' : '', 'lost ' + fmtNum(st.gl), 'Open the losers'), 'sec:split:result', 'Winners against losers, side by side')}
             ${this.kpi('Average R', (st.avgR >= 0 ? '+' : '') + st.avgR.toFixed(2) + 'R', st.avgR >= 0 ? 'up' : 'down', 'avg win ' + fmtNum(st.avgWin) + ' · avg loss ' + fmtNum(st.avgLoss), 'sec:rdist', 'Show how R is spread — press a bar to open those trades')}
             ${this.kpi('Time in trades', this.fmtDur(st.avgHold), '', 'average · ' + this.door(this.tradeAct(st.longT), 'longest ' + esc(this.fmtDur(st.longest)), 'Open the longest trade: ' + this.tradeName(st.longT)) + ' · total ' + esc(this.fmtDur(st.totalHold)), 'sec:split:hold', 'Trades by how long they ran')}
@@ -429,6 +452,10 @@ const Explorer = {
         <div class="exHeroRight">${this.donut(st)}<div class="exDonutLegend">${this.door(st.wins ? 'res:won' : '', '■ ' + st.wins + ' won', 'Open the winners', 'up')}${this.door(st.losses ? 'res:lost' : '', '■ ' + st.losses + ' lost', 'Open the losers', 'down')}</div></div>
       </div>`;
   },
+  /* the top bar (Everything › what you opened) always stays at the top; the picture
+     stays under it too unless you unfreeze it. Remembered per browser. */
+  FREEZE_KEY: 'astra_explorer_freeze',
+  heroFrozen(){ return lsGet(this.FREEZE_KEY, true) !== false; },
   dirty: false,
   view(){
     this.dirty = false;
@@ -448,6 +475,7 @@ const Explorer = {
           <span>${esc(BOT_BY_ID[t.bot] ? WorkspaceUI.name(BOT_BY_ID[t.bot]) : t.bot)} · ${esc(t.tf || '')}</span>
           <span class="dim2">${new Date(t.entryTime).toLocaleString()} → ${this.fmtDur((t.exitTime || 0) - (t.entryTime || 0))}</span>
           <span class="dim2">${this.byHand(t) ? '<b class="exHand" title="You closed this trade yourself at the market price">✋ closed by you' + (t.closedBy && t.closedBy.via ? ' · ' + esc(t.closedBy.via) : '') + '</b>' + this.whatIfBadge(t) : esc(t.reason || '')}${t.touched ? ' · adjusted' : ''}</span>
+          <span class="dim2 exRowInv" title="Money this trade put to work (its full position value)">${fmtNum(this.invested(t))} in</span>
           <span class="${t.pnl >= 0 ? 'up' : 'down'} exRowPnl">${this.money(t.pnl)}<small>${Number.isFinite(t.r) ? ' · ' + t.r.toFixed(2) + 'R' : ''}</small></span>
           <button class="bMini exReplay" data-exreplay="${esc(t.bot)}|${t.entryTime}|${t.exitTime || 0}|${esc(t.sym)}" title="Open this trade in Trade Replay: the candles around it, entry, stop, target and exit, candle by candle">▷ Replay</button></div>`).join('')}</div>` +
         (rows.length > listMax ? `<button class="bMini exMoreBtn" data-exlistmore="1">Show ${Math.min(this.LIST_STEP, rows.length - listMax)} more (${rows.length - listMax} not shown)</button>` : '')
@@ -468,8 +496,10 @@ const Explorer = {
     const shownSecs = secs.filter(x => !hidden[x.id]);
     this._shownIds = shownSecs.map(x => x.id);
     const offN = this.layoutIds().filter(id => hidden[id]).length;
-    return `<div class="exWrap${maxed ? ' hasMax' : ''} dens-${this.secState().dens || 'normal'}">
+    const frozen = this.heroFrozen();
+    return `<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
       <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
+        <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
         <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
       ${this.layoutOpen ? this.layoutPanel() : ''}
       ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : exN ? `<div class="botNote warn exNoneTicked">Nothing is ticked yet — tick the days, bots or pairs you want to see in the cards below, or press <button class="bMini" data-exclear="1">tick all</button>.</div><div class="exSecs">${shownSecs.filter(x => x.id.startsWith('split:')).map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>`}
@@ -666,6 +696,13 @@ const Explorer = {
       this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-exclear]').forEach(b => b.addEventListener('click', () => this.clearExcludes()));
+    host.querySelectorAll('[data-exfreeze]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation(); lsSet(this.FREEZE_KEY, !this.heroFrozen()); this.dirty = true; Bots.render();
+    }));
+    /* the frozen picture sits right under the top bar, whatever height the bar has */
+    const wrap = host.querySelector('.exWrap'), bar = wrap && wrap.querySelector(':scope > .exCrumbs');
+    if (wrap){ let el = wrap.parentElement, bg = ''; while (el && !bg){ const c = getComputedStyle(el).backgroundColor; if (c && c !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(c)) bg = c; el = el.parentElement; } if (bg) wrap.style.setProperty('--exBg', bg); const sc = document.getElementById('botBody'); wrap.style.setProperty('--exPad', (sc ? parseFloat(getComputedStyle(sc).paddingTop) || 0 : 0) + 'px'); }
+    if (wrap && bar){ const set = () => wrap.style.setProperty('--exBarH', bar.offsetHeight + 'px'); set(); if (window.ResizeObserver){ if (this._barRO) this._barRO.disconnect(); this._barRO = new ResizeObserver(set); this._barRO.observe(bar); } }
     /* tick or untick every value of one card at once */
     host.querySelectorAll('[data-extickall]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation();
@@ -703,10 +740,10 @@ const Explorer = {
         const sec = g.closest('.exSec'), body = sec.querySelector(':scope > .exSecBody'), id = g.dataset.exhgrip; if (!body) return;
         const startY = e.clientY, startH = body.getBoundingClientRect().height;
         body.classList.add('fixed'); document.body.classList.add('resizing', 'rowResizing');
-        const move = ev => { body.style.height = Math.max(40, Math.round(startH + ev.clientY - startY)) + 'px'; this.fit(body); };
+        const move = ev => { const nh = Math.max(40, Math.round(startH + ev.clientY - startY)); body.dataset.room = String(nh); body.style.height = nh + 'px'; this.fit(body); };
         const up = () => {
           window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('resizing', 'rowResizing');
-          const st = this.secState(); st.h[id] = Math.round(body.getBoundingClientRect().height); this.saveSec(st); this.dirty = true; Bots.render();
+          const st = this.secState(); st.h[id] = Math.round(+body.dataset.room || body.getBoundingClientRect().height); this.saveSec(st); this.dirty = true; Bots.render();
         };
         window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
       });

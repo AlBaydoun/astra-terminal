@@ -102,6 +102,8 @@ const ConfluenceBot = {
     return null;
   },
   async run(b, inspectOnly=false, scanned=false){
+    /* switched off on the Bots on / off page = treated as deleted: nothing runs */
+    if(!b||(typeof Bots!=='undefined'&&Bots.disabled&&Bots.disabled(b.id))) return false;
     if(this.busy) return false;
     this.busy=true;
     const version=this.revision;

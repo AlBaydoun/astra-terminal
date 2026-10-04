@@ -27,8 +27,22 @@ const BotMarkets = {
     return 'allowed';
   },
 
+  /* "04.10.2026 12:14" in the computer's own clock */
+  stamp(t){ const d = new Date(t), p = n => String(n).padStart(2, '0'); return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); },
+  lastFor(log, groupLabel){ for (let i = log.length - 1; i >= 0; i--){ const e = log[i]; if ((e.on || []).includes(groupLabel) || (e.off || []).includes(groupLabel)) return e; } return null; },
+  describe(e){
+    const parts = [];
+    if (e.on && e.on.length) parts.push('<b class="up">switched on:</b> ' + esc(e.on.join(', ')));
+    if (e.off && e.off.length) parts.push('<b class="down">switched off:</b> ' + esc(e.off.join(', ')));
+    const few = l => l.slice(0, 6).map(s => this.short(s)).join(', ') + (l.length > 6 ? ' +' + (l.length - 6) + ' more' : '');
+    if (e.pairsOn && e.pairsOn.length) parts.push('<b class="up">pairs allowed:</b> ' + esc(few(e.pairsOn)));
+    if (e.pairsOff && e.pairsOff.length) parts.push('<b class="down">pairs blocked:</b> ' + esc(few(e.pairsOff)));
+    return parts.join(' · ');
+  },
+  histOpen: {},
   view(b, cfg){
     const G = Bots.marketGroups();
+    const log = Bots.marketLog ? Bots.marketLog(b.id) : [];
     const chosen = cfg.groups && cfg.groups.length ? cfg.groups : null;      // null = every market
     const stats = Bots.perInstrument(b.id);
     const resolved = Bots.allowed(b);
@@ -55,7 +69,7 @@ const BotMarkets = {
       return `<div class="mkCard${on ? '' : ' off'}">
         <div class="mkCardHead">
           <label class="bsSwitch" title="${on ? 'Switch this whole market off for this bot' : 'Switch this market on for this bot'}"><input type="checkbox" data-mkgroup="${esc(id)}" ${on ? 'checked' : ''}><i></i></label>
-          <b>${esc(g.label)}</b>
+          <b>${esc(g.label)}</b>${(() => { const ev = this.lastFor(log, g.label); return ev ? `<span class="mkSince" title="${esc(this.stamp(ev.t))}">${on ? 'on' : 'off'} since ${esc(this.stamp(ev.t))}</span>` : ''; })()}
           <span class="dim2">${(id === 'stocks' || id === 'other') && !on ? (id === 'stocks' ? 'US share CFDs' : 'European share CFDs and anything else the account offers') + ' — off unless you switch them on · ' + g.syms.length + ' names' : on ? nLive + ' tradable now · ' + (g.syms.length - nBlocked) + ' of ' + g.syms.length + ' allowed' + (pref ? ' · ' + pref + ' ★' : '') + (nBlocked ? ' · ' + nBlocked + ' ✕' : '') : 'off — ' + g.syms.length + ' pairs'}</span>
           ${on ? `<span class="mkCardTools">
             <button class="bMini" data-mkall="${esc(id)}|allow" title="Allow every pair in this market">All allowed</button>
@@ -68,7 +82,13 @@ const BotMarkets = {
     }).join('');
 
     const prefAll = (cfg.preferred || []).filter(s => resolved.includes(s));
+    const last = log[log.length - 1], open = !!this.histOpen[b.id];
+    const history = `<div class="mkHist">🕒 ${last
+      ? `Last change <b>${esc(this.stamp(last.t))}</b> — ${this.describe(last)} <button class="bMini" data-mkhist="${esc(b.id)}">${open ? 'Hide history' : 'History (' + log.length + ')'}</button>`
+      : '<span class="dim2">No market change recorded yet — from now on every switch is stamped with its date and time.</span>'}
+      ${open ? `<div class="mkHistList">${log.slice().reverse().map(e => `<div><span>${esc(this.stamp(e.t))}</span>${this.describe(e)}</div>`).join('')}</div>` : ''}</div>`;
     return `<div class="mkWrap">
+      ${history}
       <div class="mkPresets"><span class="insLbl">Quick</span>${presets}</div>
       <div class="mkSearchRow">
         <input type="search" class="mkSearch" data-mksearch="1" placeholder="Find a pair in the lists below…" value="${esc(this.q[b.id] || '')}">
@@ -126,6 +146,7 @@ const BotMarkets = {
       c.blocked = [...blocked]; c.preferred = [...pref];
       save();
     }));
+    host.querySelectorAll('[data-mkhist]').forEach(el => el.addEventListener('click', e => { e.stopPropagation(); this.histOpen[b.id] = !this.histOpen[b.id]; Bots.render(); }));
     const search = host.querySelector('[data-mksearch]');
     if (search) search.addEventListener('input', () => { this.q[b.id] = search.value; Bots.render(); const s2 = document.querySelector('[data-mksearch]'); if (s2){ s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); } });
   },
