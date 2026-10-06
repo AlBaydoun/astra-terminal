@@ -430,6 +430,7 @@ const MarketFit = {
       } else {
         cfg.tf = p.tf;
         cfg.tfAuto = false;                 // the study picked the timeframe; do not drift off it
+        cfg.tfs = null;                     // ...so a ticked list of several gives way to it
         cfg.instruments = p.instruments;
         cfg.paused = false;
         configured++;

@@ -283,8 +283,8 @@ const PosLines = {
       this.closeBtns.push(cb);
       const tail = which => (this.drag && this.drag.which === which && dragging === this.drag) ? '  ← release, then confirm'
         : (this.pending && dragging === this.pending && this.pending.which === which) ? '  · waiting for your confirmation' : '  ⇕';
-      if (yS != null) this.label(ctx, lx, yS, 'SL ' + fmtPrice(sl) + ' · ' + money(sl) + tail('sl'), this.COL.sl, yS > yE);
-      if (yT != null) this.label(ctx, lx, yT, 'TP ' + fmtPrice(tp) + ' · ' + money(tp) + tail('tp'), this.COL.tp, yT > yE);
+      if (yS != null) this.label(ctx, lx, yS, 'SL ' + fmtPrice(sl) + ' · ' + r.botName + ' · ' + money(sl) + tail('sl'), this.COL.sl, yS > yE);
+      if (yT != null) this.label(ctx, lx, yT, 'TP ' + fmtPrice(tp) + ' · ' + r.botName + ' · ' + money(tp) + tail('tp'), this.COL.tp, yT > yE);
       /* the trailing stop: dotted amber. Before it engages, the line marks the
          price that switches it on; once engaged, the stop itself is the trail
          (drawn red above) and the amber line shows the peak it follows. */

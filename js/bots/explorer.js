@@ -216,23 +216,25 @@ const Explorer = {
   DEFAULT_SPAN: { hero: 12, curve: 12, list: 12, notes: 12 },
   section(id, title, sub, body, cls){
     const st = this.secState();
-    const folded = !!st.fold[id], maxed = st.max === id;
+    const folded = id === 'notes' ? !this.notesOpen : !!st.fold[id], maxed = st.max === id;
     const h = st.h[id] && !maxed ? `style="height:${st.h[id]}px"` : '';
     const own = !!(st.w && st.w[id]);
     const span = own ? st.w[id] : (this.DEFAULT_SPAN[id] || 4);
-    const scroll = !!(st.scroll && st.scroll[id]);
+    const scroll = id === 'notes' || id === 'list' || !!(st.scroll && st.scroll[id]);   /* lists scroll, they never shrink */
+    const z = (st.z && st.z[id]) || 1;
     return `<section class="exSec ${cls || 'exCard'}${folded ? ' folded' : ''}${maxed ? ' maxed' : ''}" data-exsec="${esc(id)}" style="grid-column:span ${span}"${own ? ' data-w="1"' : ''}>
       <div class="exSecHead">
         <b>${title}</b><span>${esc(sub || '')}</span>
         <span class="paneCtl exSecCtl">
           <button data-exs="left" title="Move left (earlier)">◂</button><button data-exs="right" title="Move right (later)">▸</button>
           <button data-exs="narrow" title="Narrower">−</button><button data-exs="wide" title="Wider">+</button>
-          ${st.h[id] ? `<button data-exs="fit" class="${scroll ? '' : 'on'}" title="${scroll ? 'The content scrolls inside this box — press to shrink it to fit instead' : 'The content shrinks to fit this box — press to let it scroll instead'}">${scroll ? '↕' : '⤢'}</button>` : ''}
+          <button data-exs="zout" title="Smaller text in this section">A−</button><button data-exs="z0" class="exZpct${z !== 1 ? ' on' : ''}" title="Back to 100%">${Math.round(z * 100)}%</button><button data-exs="zin" title="Bigger text in this section">A+</button>
+          ${st.h[id] && id !== 'notes' && id !== 'list' ? `<button data-exs="fit" class="${scroll ? '' : 'on'}" title="${scroll ? 'The content scrolls inside this box — press to shrink it to fit instead' : 'The content shrinks to fit this box — press to let it scroll instead'}">${scroll ? '↕' : '⤢'}</button>` : ''}
           <button data-exs="fold" title="${folded ? 'Open' : 'Fold'}">${folded ? '▢' : '_'}</button>
           <button data-exs="max" class="${maxed ? 'on' : ''}" title="${maxed ? 'Back to normal' : 'Maximise'}">⛶</button>
         </span>
       </div>
-      ${folded ? '' : `<div class="exSecBody${st.h[id] && !maxed ? ' fixed' : ''}${scroll ? ' scroll' : ''}" ${h}><div class="exFit">${body}</div></div>`}
+      ${folded ? '' : `<div class="exSecBody${st.h[id] && !maxed ? ' fixed' : ''}${scroll ? ' scroll' : ''}" ${h}><div class="exFit"><div class="exZoom"${z !== 1 ? ` style="zoom:${z}"` : ''}>${body}</div></div></div>`}
       <div class="exColGrip" data-exgrip="${esc(id)}" title="Drag to change the width, like a column in Excel · double-click: back to its normal width"></div>
       ${folded ? '' : `<div class="exRowGrip" data-exhgrip="${esc(id)}" title="Drag to change the height, like a row in Excel · double-click: back to its natural height"></div>`}
     </section>`;
@@ -249,9 +251,16 @@ const Explorer = {
   },
   secAction(id, what, ids, visible){
     const st = this.secState();
-    if (what === 'fold'){ st.fold[id] = !st.fold[id]; if (st.fold[id] && st.max === id) st.max = null; }
-    else if (what === 'max'){ st.max = st.max === id ? null : id; delete st.fold[id]; }
+    if (what === 'fold' && id === 'notes'){ this.notesOpen = !this.notesOpen; if (!this.notesOpen && st.max === id) st.max = null; }
+    else if (what === 'fold'){ st.fold[id] = !st.fold[id]; if (st.fold[id] && st.max === id) st.max = null; }
+    else if (what === 'max'){ st.max = st.max === id ? null : id; delete st.fold[id]; if (id === 'notes') this.notesOpen = true; }
     else if (what === 'fit'){ st.scroll = st.scroll || {}; if (st.scroll[id]) delete st.scroll[id]; else st.scroll[id] = true; }
+    else if (what === 'zin' || what === 'zout' || what === 'z0'){
+      const Z = [0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6];
+      st.z = st.z || {}; const cur = st.z[id] || 1; let i = Z.findIndex(v => Math.abs(v - cur) < 0.001); if (i < 0) i = 4;
+      const nz = what === 'z0' ? 1 : Z[Math.max(0, Math.min(Z.length - 1, i + (what === 'zin' ? 1 : -1)))];
+      if (nz === 1) delete st.z[id]; else st.z[id] = nz;
+    }
     else if (what === 'left' || what === 'right' || what === 'up' || what === 'down'){
       const cur = this.ordered(ids.map(i => ({ id: i }))).map(o => o.id);
       const i = cur.indexOf(id); if (i < 0) return;
@@ -314,11 +323,13 @@ const Explorer = {
     const room = body.clientHeight, need = inner.scrollHeight;
     if (!(room > 0)) return;
     if (need <= room + 1){ trim(); return; }
-    let s = Math.max(0.35, room / need);
+    /* never smaller than 70% - text below that cannot be read; the box scrolls instead */
+    const MIN = 0.7;
+    let s = Math.max(MIN, room / need);
     for (let k = 0; k < 4; k++){       /* widening lets the text re-flow into fewer lines — measure again */
       inner.style.zoom = String(s);
-      const got = inner.getBoundingClientRect().height; if (got <= room + 1 || s <= 0.35) break;
-      s = Math.max(0.35, s * room / got);
+      const got = inner.getBoundingClientRect().height; if (got <= room + 1 || s <= MIN) break;
+      s = Math.max(MIN, s * room / got);
     }
     /* still too tall at the smallest readable size: let it scroll rather than cut it off */
     if (inner.getBoundingClientRect().height > room + 1) body.classList.add('overflowing'); else trim();
@@ -349,15 +360,21 @@ const Explorer = {
     const compose = `<div class="dnCompose">
         <div class="dnNow"><b>${esc(this.botName(b))}</b>${where.map(w => ` <i class="dnChip">${esc(w)}</i>`).join('')}
           <span>${st.n} trades · <em class="${st.net >= 0 ? 'up' : 'down'}">${this.money(st.net)}</em> · ${Math.round(st.winPct)}% won${span ? ' · ' + esc(span) : ''}</span></div>
-        <textarea class="dnText" rows="2" placeholder="e.g. Until today it trades only crypto and is ${st.net >= 0 ? 'up' : 'down'} ${esc(fmtNum(Math.abs(st.net)))} over ${st.n} trades — ${st.net >= 0 ? 'keep watching' : 'switch it off if it goes on like this'}…"></textarea>
+        ${(() => { const sug = 'Until today it is ' + (st.net >= 0 ? 'up' : 'down') + ' ' + fmtNum(Math.abs(st.net)) + ' over ' + st.n + ' trades, ' + Math.round(st.winPct) + '% won' + (where.length ? ' (' + where.join(', ') + ')' : '') + ' — ' + (st.net >= 0 ? 'keep watching.' : 'switch it off if it goes on like this.');
+          return `<textarea class="dnText" rows="2" data-suggest="${esc(sug)}" placeholder="${esc(sug)}   (press Tab to use this)"></textarea>`; })()}
         <div class="dnBar"><small>Saved with today’s date and the figures above. Ctrl+Enter saves.</small><button class="bMini go" data-dnsave="1">Save note</button></div>
       </div>`;
+    const bots = [...new Set(list.map(n => n.bot || ''))];
+    const tools = list.length ? `<div class="dnTools">
+        <input type="search" class="dnFind" data-dnfind="1" placeholder="Find in the notes — any word, a pair, a bot…" value="${esc(this.noteQ || '')}">
+        ${!b && bots.length > 1 ? `<select class="dnBot" data-dnbot="1"><option value="*">Every bot (${list.length})</option>${bots.map(id => `<option value="${esc(id)}"${this.noteBot === id ? ' selected' : ''}>${esc(this.botName(id || null))} (${list.filter(n => (n.bot || '') === id).length})</option>`).join('')}</select>` : ''}
+        <span class="dim2 dnCount"></span></div>` : '';
     let lastDay = '', html = '';
     for (const n of list){
       const d = day(n.at);
       if (d !== lastDay){ html += `<div class="dnDay">${esc(d)}</div>`; lastDay = d; }
       const s = n.snap || {};
-      html += `<div class="dnNote" data-dnid="${n.id}">
+      html += `<div class="dnNote" data-dnid="${n.id}" data-dnbotid="${esc(n.bot || '')}" data-dnhay="${esc([n.text, this.botName(n.bot), ...(n.where || []), d].join(' ').toLowerCase())}">
         <div class="dnHead"><span class="dim2">${new Date(n.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
           ${!b ? `<b>${esc(this.botName(n.bot))}</b>` : ''}${(n.where || []).map(w => `<i class="dnChip">${esc(w)}</i>`).join('')}
           <span class="dnSnap">${s.n != null ? s.n + ' trades · <em class="' + (s.net >= 0 ? 'up' : 'down') + '">' + this.money(s.net) + '</em> · ' + Math.round(s.winPct || 0) + '% won' + (s.span ? ' · ' + esc(s.span) : '') : ''}</span>
@@ -365,7 +382,72 @@ const Explorer = {
           <button class="dnDel" data-dndel="${n.id}" title="Delete this note">×</button></div>
         <div class="dnBody" contenteditable="true" spellcheck="true" data-dnedit="${n.id}">${esc(n.text)}</div></div>`;
     }
-    return compose + (html || `<div class="empty">No notes${b ? ' on ' + esc(this.botName(b)) : ''} yet. Write what you see — the date and today’s figures are kept with it.</div>`);
+    const listBtn = list.length ? `<button type="button" class="bMini dnListBtn" data-dnlist="1">${this.dnListOpen ? '▾ Hide the notes' : '▸ Show the ' + list.length + ' note' + (list.length === 1 ? '' : 's')}</button>` : '';
+    return compose + (tools ? tools.replace('<span class="dim2 dnCount"></span>', listBtn + '<span class="dim2 dnCount"></span>') : '') + (html ? `<div class="dnList"${this.dnListOpen ? '' : ' hidden'}>${html}</div><div class="empty dnNone" hidden>No note matches.</div>` : `<div class="empty">No notes${b ? ' on ' + esc(this.botName(b)) : ''} yet. Write what you see — the date and today’s figures are kept with it.</div>`);
+  },
+  /* the search box and the bot filter hide notes in place - no rebuild, the cursor stays */
+  filterNotes(host){
+    const box = host.querySelector('.dnList'); if (!box) return;
+    const words = (this.noteQ || '').toLowerCase().split(/\s+/).filter(Boolean), bot = this.noteBot && this.noteBot !== '*' ? this.noteBot : null;
+    let shown = 0, total = 0;
+    for (const el of box.querySelectorAll('.dnNote')){
+      total++;
+      const ok = (!bot || el.dataset.dnbotid === bot) && words.every(w => el.dataset.dnhay.includes(w));
+      el.hidden = !ok; if (ok) shown++;
+    }
+    /* a day heading shows only when one of its notes does */
+    for (const d of box.querySelectorAll('.dnDay')){ let n = d.nextElementSibling, any = false; while (n && !n.classList.contains('dnDay')){ if (!n.hidden) any = true; n = n.nextElementSibling; } d.hidden = !any; }
+    /* the button is the one switch: open shows the list (filtered by the search), hide hides it */
+    box.hidden = !this.dnListOpen;
+    const btn = host.querySelector('[data-dnlist]');
+    if (btn) btn.textContent = this.dnListOpen ? '▾ Hide the notes' : ((words.length || bot) ? '▸ Show the ' + shown + ' matching note' + (shown === 1 ? '' : 's') : '▸ Show the ' + total + ' note' + (total === 1 ? '' : 's'));
+    const cnt = host.querySelector('.dnCount'); if (cnt) cnt.textContent = (words.length || bot) ? shown + ' of ' + total + ' notes' : '';
+    const none = host.querySelector('.dnNone'); if (none) none.hidden = !this.dnListOpen || shown > 0;
+  },
+  /* choosing a bot runs its newest note ONCE across the top of the Deep Dive, like a
+     news line, then it is gone. Choosing the same bot again later runs it again;
+     staying on it (refreshes, opening a day inside it) does not. */
+  noteTicker(host){
+    const b = this.notesBot();
+    if (b === this._tickerBot) return;
+    this._tickerBot = b;
+    document.querySelectorAll('.dnTicker').forEach(el => el.remove());
+    if (!b) return;
+    const list = this.notesAll().filter(x => x.bot === b); if (!list.length) return;
+    const n = list.reduce((a, x) => (!a || x.at > a.at) ? x : a, null);
+    const bar = host.querySelector('.exWrap > .exCrumbs'); if (!bar) return;
+    const when = new Date(n.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const text = String(n.text || '').replace(/\s+/g, ' ').trim();
+    const el = document.createElement('div');
+    el.className = 'dnTicker';
+    el.innerHTML = `<span><b>📝 ${esc(this.botName(b))}</b> · your last note, ${esc(when)} — ${esc(text)}</span>`;
+    /* it floats above the page (fixed, just under the top bar), so a page refresh cannot cut it short */
+    const place = () => {
+      if (!el.isConnected) return;
+      const cur = document.querySelector('.exWrap > .exCrumbs');
+      if (typeof Bots !== 'undefined' && Bots.active !== 'explorer'){ el.remove(); return; }   // left the Deep Dive
+      if (!cur || !cur.offsetParent){ el.style.visibility = 'hidden'; requestAnimationFrame(place); return; }   // the page is still opening
+      el.style.visibility = '';
+      const r = cur.getBoundingClientRect();
+      Object.assign(el.style, { left: r.left + 'px', width: r.width + 'px', top: (r.bottom + 2) + 'px' });
+      requestAnimationFrame(place);
+    };
+    document.body.appendChild(el); place();
+    /* speed: the same pace whatever the length (about 110 px a second) */
+    const run = el.firstElementChild, dist = el.clientWidth + run.scrollWidth;
+    run.style.setProperty('--dnFrom', el.clientWidth + 'px'); run.style.setProperty('--dnTo', -run.scrollWidth + 'px');
+    run.style.animationDuration = Math.max(6, dist / 110) + 's';
+    run.addEventListener('animationend', () => el.remove());
+    el.addEventListener('click', () => el.remove());
+  },
+  /* folded: one line with the newest note of the chosen bot (or of any bot at "Everything") */
+  lastNoteLine(){
+    const b = this.notesBot(), list = this.notesAll().filter(x => !b || x.bot === b);
+    if (!list.length) return b ? 'no notes on this bot yet — unfold to write one' : 'no notes yet — unfold to write one';
+    const n = list.reduce((a, x) => (!a || x.at > a.at) ? x : a, null);
+    const when = new Date(n.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + new Date(n.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const text = String(n.text || '').replace(/\s+/g, ' ').trim();
+    return 'Last · ' + when + (b ? '' : ' · ' + this.botName(n.bot)) + ' — ' + (text.length > 140 ? text.slice(0, 140) + '…' : text) + (list.length > 1 ? '  (+' + (list.length - 1) + ' more)' : '');
   },
   notesAdd(text){
     const rows = this.filtered(), st = this.stats(rows), day = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -408,6 +490,7 @@ const Explorer = {
   /* bring a section into view (unfolded), with a short flash */
   focus(id){
     const st = this.secState(); if (st.fold[id]){ delete st.fold[id]; this.saveSec(st); }
+    if (id === 'notes') this.notesOpen = true;
     this._focus = id; this.dirty = true; Bots.render();
   },
 
@@ -483,7 +566,7 @@ const Explorer = {
     const hero = this.hero(rows, st, open);
     const secs = this.ordered([
       { id: 'hero',  html: this.section('hero', 'The picture', 'what this doll holds', hero, 'exHeroSec') },
-      { id: 'notes', html: this.section('notes', '📝 ' + this.notesTitle(), 'your notes on these results, by the date you wrote them — each one keeps the figures of that day', this.notesView(rows, st)) },
+      { id: 'notes', html: this.section('notes', (this.notesOpen ? '▾ ' : '▸ ') + '📝 ' + this.notesTitle(), this.notesOpen ? 'your notes on these results, by the date you wrote them — each one keeps the figures of that day' : this.lastNoteLine(), this.notesView(rows, st)) },
       { id: 'curve', html: this.section('curve', 'The curve', 'every trade added up, in time order', this.curveSvg(st)) },
       { id: 'pnl',   html: this.section('pnl', 'Result per trade', 'how the wins and losses are spread', this.histogram(rows.map(t => t.pnl), 16, v => fmtNum(v), 'pnl')) },
       { id: 'rdist', html: this.section('rdist', 'R per trade', 'reward against the risk taken', this.histogram(rows.map(t => t.r).filter(Number.isFinite), 16, v => v.toFixed(1) + 'R', 'r')) },
@@ -499,6 +582,7 @@ const Explorer = {
     const frozen = this.heroFrozen();
     return `<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
       <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
+        ${(() => { const bid = this.notesBot(); return bid && BOT_BY_ID[bid] ? `<button class="bMini exToBot" data-extobot="${esc(bid)}" title="Go straight to ${esc(this.botName(bid))} — its own page (settings, markets, timeframes, notes). The Back button brings you here again.">⚙ Open ${esc(this.botName(bid))} ↗</button>` : ''; })()}
         <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
         <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
       ${this.layoutOpen ? this.layoutPanel() : ''}
@@ -653,6 +737,15 @@ const Explorer = {
       dn.querySelector('[data-dnsave]').addEventListener('click', save);
       ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); save(); } });
     }
+    this.noteTicker(host);
+    host.querySelectorAll('[data-dnlist]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation(); this.dnListOpen = !this.dnListOpen; this.filterNotes(host);
+    }));
+    host.querySelectorAll('[data-dnfind]').forEach(el => el.addEventListener('input', () => { const was = !!(this.noteQ || '').trim(); this.noteQ = el.value; if (!was && el.value.trim()) this.dnListOpen = true; this.filterNotes(host); }));
+    host.querySelectorAll('[data-dnbot]').forEach(el => el.addEventListener('change', () => { this.noteBot = el.value; if (el.value !== '*') this.dnListOpen = true; this.filterNotes(host); }));
+    /* the notes title folds and unfolds the section - also while it is open */
+    host.querySelectorAll('.exSec[data-exsec="notes"]:not(.folded) > .exSecHead > b').forEach(t => { t.style.cursor = 'pointer'; t.title = 'Fold the notes'; t.addEventListener('click', e => { e.stopPropagation(); this.secAction('notes', 'fold', this._secIds || []); }); });
+    this.filterNotes(host);
     host.querySelectorAll('[data-dndel]').forEach(b => b.addEventListener('click', () => {
       if (!confirm('Delete this note?')) return;
       this.notesSave(this.notesAll().filter(n => n.id !== +b.dataset.dndel)); this.dirty = true; Bots.render();
@@ -696,6 +789,10 @@ const Explorer = {
       this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-exclear]').forEach(b => b.addEventListener('click', () => this.clearExcludes()));
+    host.querySelectorAll('[data-extobot]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation(); const id = b.dataset.extobot; if (!BOT_BY_ID[id]) return;
+      WorkspaceUI.openBot(id); const body = document.getElementById('botBody'); if (body) body.scrollTop = 0;
+    }));
     host.querySelectorAll('[data-exfreeze]').forEach(b => b.addEventListener('click', e => {
       e.stopPropagation(); lsSet(this.FREEZE_KEY, !this.heroFrozen()); this.dirty = true; Bots.render();
     }));

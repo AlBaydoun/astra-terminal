@@ -186,6 +186,22 @@ const BotDash = {
   },
 
   /* ---- Bots on / off (Settings & safety) ---- */
+  /* Bots on / off: the search hides rows in place (no rebuild, the cursor stays).
+     While you search, matching switched-off bots show too, even with their row folded. */
+  bsQ: '',
+  filterBotSettings(host){
+    const words = (this.bsQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0, total = 0;
+    host.querySelectorAll('.bsRow[data-bsname]').forEach(r => { total++; const ok = words.every(w => r.dataset.bsname.includes(w)); r.hidden = !ok; if (ok) shown++; });
+    const off = host.querySelector('.bsOff'), offList = host.querySelector('.bsOffList');
+    if (off && offList){
+      const any = !!offList.querySelector('.bsRow:not([hidden])');
+      offList.hidden = words.length ? !any : !off.classList.contains('open');
+      off.hidden = words.length ? !any : false;
+    }
+    const cnt = host.querySelector('.bsFindCount'); if (cnt) cnt.textContent = words.length ? shown + ' of ' + total + ' bots' : '';
+    const none = host.querySelector('.bsNone'); if (none) none.hidden = !(words.length && !shown);
+  },
   botSettingsView(withNotes){
     const all = BOTS.filter(b => !Bots.isPage(b) && !b.manual && !b.liveManual && !Bots.disabled(b.id));
     const offList = (Bots.offBots ? Bots.offBots() : []).slice().sort((a, b) => String(WorkspaceUI.name(a)).localeCompare(WorkspaceUI.name(b)));
@@ -194,7 +210,7 @@ const BotDash = {
       const off = Bots.disabled(b.id), cfg = (off ? lsGet('astra_botcfg_' + b.id, {}) : Bots.cfg(b.id)) || {}, L = off ? BotEngine.load(b.id) : Bots.ledger(b.id);
       const locked = L && Number.isFinite(L.equity) && L.equity < BotEngine.rules(cfg).minEquity;
       const state = off ? 'OFF' : cfg.paused ? 'PAUSED' : locked ? 'LOCKED' : 'RUNNING';
-      return `<div class="bsRow ${off ? 'off' : ''}">
+      return `<div class="bsRow ${off ? 'off' : ''}" data-bsname="${esc((WorkspaceUI.name(b) + ' ' + b.id + ' ' + (typeof WorkspaceUI.group === 'function' ? WorkspaceUI.group(b) : '') + ' ' + state).toLowerCase())}">
         <label class="bsSwitch" title="${off ? 'Switch this bot on' : 'Switch this bot off — it disappears from every list; its record is kept'}"><input type="checkbox" data-bsen="${esc(b.id)}" ${off ? '' : 'checked'}><i></i></label>
         <b>${esc(WorkspaceUI.name(b))}</b>
         <span class="bsState ${state.toLowerCase()}">${state}</span>
@@ -208,10 +224,12 @@ const BotDash = {
     const P = {
       intro: `<p class="dim2">Untick a bot to switch it off. A switched-off bot is treated <b>exactly like a deleted one</b>: it disappears from every list, report, Deep Dive and Open Trades, opens nothing new, and its open trades are no longer watched. Its paper record and settings are kept, so ticking it again brings it back exactly as it was. Switched-off bots wait in the folded row at the bottom.</p>`,
       actions: `<div class="botCtl"><button class="bMini go" data-bsall="on">Switch all on</button><button class="bMini go" data-bsall="unpause">▶ Unpause all</button><button class="bMini danger" data-bsall="resetlocked">↺ Reset every locked bot</button></div>`,
-      list: `<div class="bsList">${Bots.ordered(all).map(row).join('')}</div>` +
+      list: `<div class="bsFindRow"><input type="search" class="bsFind" data-bsfind="1" placeholder="Find a bot — name, family (pattern, research, US stocks…), RUNNING / PAUSED / OFF…" value="${esc(this.bsQ || '')}"><span class="dim2 bsFindCount"></span></div>` +
+        `<div class="bsList bsOnList">${Bots.ordered(all).map(row).join('')}</div>` +
         (offList.length ? `<div class="bsOff${offOpen ? ' open' : ''}">
           <button type="button" class="bsOffHead" data-bsofffold="1" aria-expanded="${offOpen}"><i>${offOpen ? '▾' : '▸'}</i> Switched off <small>${offList.length} bot${offList.length === 1 ? '' : 's'} · treated as deleted, record kept</small></button>
-          ${offOpen ? `<div class="bsList">${offList.map(row).join('')}</div>` : ''}</div>` : ''),
+          <div class="bsList bsOffList"${offOpen ? '' : ' hidden'}>${offList.map(row).join('')}</div></div>` : '') +
+        '<div class="empty bsNone" hidden>No bot matches.</div>',
     };
     /* ⚙ Layout: the page in your order */
     if (withNotes != null && typeof BotLayout !== 'undefined') return `<div class="bsWrap">${BotLayout.compose('botsettings', Object.assign({ notes: withNotes }, P), true)}</div>`;

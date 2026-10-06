@@ -259,6 +259,7 @@ const OpenTrades = {
         ${sortBtn('sym', 'Instrument')}${sortBtn('bot', 'Bot')}
         <span class="otHint">Live figures refresh every second. Anything you type is left alone.</span>
       </div>` : '',
+      table: rows.length ? this.tableHtml(rows) : '',
       filter: rows.length ? this.botFilterBar(rows) : '',
       list: `<div class="otList">${sorted.map(r => this.card(r)).join('')}</div>
       <div class="empty otFilterEmpty" hidden>No open trade from that bot right now.</div>` +
@@ -268,6 +269,199 @@ const OpenTrades = {
         the strategy did not run on its own. The original risk is never rewritten, so its R still measures
         what was staked when it opened.</div>`,
     };
+  },
+
+  /* ---------- the summary table ----------
+     Every open trade on one line: green while it is in profit, red while it is
+     losing. A click on a heading sorts by it (again: the other way round), a
+     click on a line takes you to that trade's card below, and the ▸ opens the
+     line itself - the levels, what they are worth, why it was opened. The live
+     figures are rewritten in place every second; the order only changes when
+     you ask for it, so a line never jumps away from under the mouse. */
+  tblSort: { k: 'unreal', dir: -1 },
+  tblOpen: new Set(),
+  TBL_COLS: [
+    ['bot', 'Bot'], ['sym', 'Instrument'], ['dir', 'Side'], ['tf', 'TF'], ['size', 'Size', 'num'],
+    ['entry', 'Entry', 'num'], ['px', 'Now', 'num'], ['unreal', 'Profit / loss', 'num'], ['pct', '%', 'num'],
+    ['r', 'R', 'num'], ['tostop', 'To stop', 'num'], ['totp', 'To target', 'num'], ['opened', 'Opened'], ['held', 'Held', 'num'],
+  ],
+  tblVal(row, l, k){
+    const p = row.p;
+    switch (k){
+      case 'bot': return row.botName.toLowerCase();
+      case 'sym': return baseAsset(p.sym).toLowerCase();
+      case 'dir': return p.dir;
+      case 'tf': return typeof tfSeconds === 'function' ? (tfSeconds(p.tf) || 0) : 0;
+      case 'size': return l.value;
+      case 'entry': return p.entry;
+      case 'px': return l.px;
+      case 'unreal': return l.unreal;
+      case 'pct': return l.value > 0 ? l.unreal / l.value : 0;
+      case 'r': return l.rNow;
+      case 'tostop': return l.cashToStop;
+      case 'totp': return l.cashToTp == null ? -Infinity : l.cashToTp;
+      case 'opened': return p.entryTime;
+      case 'held': return -p.entryTime;
+    }
+    return 0;
+  },
+  tblSorted(rows){
+    const { k, dir } = this.tblSort;
+    const lv = new Map(rows.map(r => [r, this.live(r)]));
+    return rows.slice().sort((a, b) => {
+      const x = this.tblVal(a, lv.get(a), k), y = this.tblVal(b, lv.get(b), k);
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir || b.p.entryTime - a.p.entryTime;
+    });
+  },
+  /* the figures of one line, by column - shared by the first draw and the refresh */
+  tblCells(row, l){
+    const p = row.p, sign = v => (v >= 0 ? '+' : '') + fmtNum(v);
+    const w = typeof PosLines !== 'undefined' && PosLines.openedAt ? PosLines.openedAt(p.entryTime) : null;
+    const pc = l.value > 0 ? l.unreal / l.value * 100 : null;
+    return {
+      size: p.lots ? p.lots + ' lot' : String(+p.qty.toPrecision(4)),
+      px: fmtPrice(l.px) + (l.stale ? ' ⚠' : ''),
+      unreal: sign(l.unreal), pct: pc == null ? '—' : (pc >= 0 ? '+' : '') + pc.toFixed(2) + '%',
+      r: (l.rNow >= 0 ? '+' : '') + l.rNow.toFixed(2),
+      tostop: p.sl > 0 ? this.gap(l.pctToStop, l.cashToStop) : 'no stop',
+      totp: l.toTp == null ? 'none' : this.gap(l.pctToTp, l.cashToTp),
+      opened: w ? w.abs : '', held: l.held,
+    };
+  },
+  tblRowHtml(row){
+    const p = row.p, l = this.live(row), c = this.tblCells(row, l), k = row.bot + ':' + p.id;
+    const open = this.tblOpen.has(k), cls = l.unreal >= 0 ? 'up' : 'down';
+    const w = typeof PosLines !== 'undefined' && PosLines.openedAt ? PosLines.openedAt(p.entryTime) : null;
+    return `<tr class="otSumRow ${cls}" data-otrow="${esc(k)}" title="Go to this trade">
+        <td class="otSumBot"><button type="button" class="otSumDrill" data-otdrill="${esc(k)}" title="Show the details of this trade here" aria-expanded="${open}">${open ? '▾' : '▸'}</button>${esc(row.botName)}</td>
+        <td><b>${esc(baseAsset(p.sym))}</b> <span class="dim2">${esc(p.sym)}</span></td>
+        <td class="${p.dir > 0 ? 'up' : 'down'}"><b>${p.dir > 0 ? 'BUY' : 'SELL'}</b></td>
+        <td>${esc(p.tf || '—')}</td>
+        <td class="num" data-c="size">${esc(c.size)}</td>
+        <td class="num">${esc(fmtPrice(p.entry))}</td>
+        <td class="num" data-c="px">${esc(c.px)}</td>
+        <td class="num otSumPnl" data-c="unreal">${esc(c.unreal)}</td>
+        <td class="num" data-c="pct">${esc(c.pct)}</td>
+        <td class="num" data-c="r">${esc(c.r)}</td>
+        <td class="num" data-c="tostop">${esc(c.tostop)}</td>
+        <td class="num" data-c="totp">${esc(c.totp)}</td>
+        <td${w ? ` title="${esc(w.full)}"` : ''}>${esc(c.opened)}</td>
+        <td class="num" data-c="held">${esc(c.held)}</td>
+      </tr>
+      <tr class="otSumDetail" data-otdetail="${esc(k)}"${open ? '' : ' hidden'}><td colspan="${this.TBL_COLS.length}">${open ? this.tblDetail(row) : ''}</td></tr>`;
+  },
+  /* the line, opened: levels and what each is worth, then the way into everything else */
+  tblDetail(row){
+    const p = row.p, l = this.live(row), k = row.bot + ':' + p.id;
+    const atStop = p.sl > 0 ? BotEngine.cashPnl(p, Bots.moneyAt(p.entry, p.dir, p.qty, p.sl)) - p.fees : null;
+    const atTp = p.tp > 0 ? BotEngine.cashPnl(p, Bots.moneyAt(p.entry, p.dir, p.qty, p.tp)) - p.fees : null;
+    const sign = v => v == null ? '—' : (v >= 0 ? '+' : '') + fmtNum(v);
+    const trail = p.trail !== undefined ? p.trail : (Bots.cfg(row.bot) || {}).trail;
+    const w = typeof PosLines !== 'undefined' && PosLines.openedAt ? PosLines.openedAt(p.entryTime) : null;
+    const f = (lab, val, cls) => `<span><label>${esc(lab)}</label><b class="${cls || ''}">${val}</b></span>`;
+    const fx = p.meta && p.meta.accountFx;
+    return `<div class="otSumDrillBody">
+      <div class="otSumFacts">
+        ${f('Stop', p.sl > 0 ? esc(fmtPrice(p.sl)) : 'none')}
+        ${f('If the stop is hit', esc(sign(atStop)), atStop == null ? '' : atStop >= 0 ? 'up' : 'down')}
+        ${f('Target', p.tp > 0 ? esc(fmtPrice(p.tp)) : 'none')}
+        ${f('If the target is hit', esc(sign(atTp)), 'up')}
+        ${f('Value held', esc(fmtNum(l.value)))}
+        ${f('Best / worst so far', '+' + esc(fmtNum(p.mfe || 0)) + ' / -' + esc(fmtNum(p.mae || 0)))}
+        ${f('Costs paid', esc(fmtNum(p.fees || 0)))}
+        ${f('Opened', esc(w ? w.full : new Date(p.entryTime).toLocaleString()))}
+        ${f('Strategy', esc(p.model || '—'))}
+        ${f('Trailing stop', trail ? 'on — starts ' + esc(String(trail.start)) + 'R, holds ' + esc(String(trail.gap)) + 'R back' : 'off')}
+        ${p.touched ? f('Adjusted by hand', p.edits && p.edits.length ? p.edits.length + ' change' + (p.edits.length === 1 ? '' : 's') : 'yes', 'warn') : ''}
+        ${fx && fx.from ? f('Priced in', esc(fx.from) + ' → ' + esc(fx.currency || 'USD')) : ''}
+      </div>
+      ${(p.reasons || []).length ? `<ul class="otSumWhy">${p.reasons.slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      <div class="otSumGo">
+        <button class="bMini go" data-otgoto="${esc(k)}">Go to this trade ↓</button>
+        <button class="bMini" data-otsumchart="${esc(k)}">On chart ↗</button>
+        <button class="bMini" data-otdive="${esc(row.bot)}">${esc(row.botName)} ↗</button>
+      </div>
+    </div>`;
+  },
+  tableHtml(rows){
+    const head = this.TBL_COLS.map(([k, label, cls]) => {
+      const on = this.tblSort.k === k;
+      return `<th class="sortable${on ? ' sorted' : ''}${cls ? ' ' + cls : ''}" data-otsortcol="${k}" title="Sort by ${esc(label)}">${esc(label)}${on ? (this.tblSort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+    }).join('');
+    return `<div class="otSum"><div class="dashScroll"><table class="dashTable otSumTable">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${this.tblSorted(rows).map(r => this.tblRowHtml(r)).join('')}</tbody>
+      <tfoot>${this.tblFoot(rows)}</tfoot></table></div>
+      <div class="dim2 otSumHint">Click a heading to sort · click a line to go to that trade · ▸ opens the line</div></div>`;
+  },
+  tblFoot(rows){
+    let up = 0, down = 0, sum = 0, value = 0;
+    for (const r of rows){ const l = this.live(r); sum += l.unreal; value += l.value; if (l.unreal >= 0) up++; else down++; }
+    return `<tr class="dashTotal"><td colspan="4">${rows.length} open · <span class="up">${up} in profit</span> · <span class="down">${down} losing</span></td>
+      <td class="num">${esc(fmtNum(value))}</td><td colspan="2"></td>
+      <td class="num ${sum >= 0 ? 'up' : 'down'}">${(sum >= 0 ? '+' : '') + esc(fmtNum(sum))}</td><td colspan="6"></td></tr>`;
+  },
+  updateTable(host, rows){
+    const box = host.querySelector('.otSum'); if (!box) return;
+    const body = box.querySelector('tbody');
+    const want = new Set(rows.map(r => r.bot + ':' + r.p.id));
+    const have = new Set([...body.querySelectorAll('tr[data-otrow]')].map(tr => tr.dataset.otrow));
+    /* a trade opened or closed: the lines are drawn again, in the chosen order */
+    if (want.size !== have.size || [...want].some(k => !have.has(k))){
+      for (const k of [...this.tblOpen]) if (!want.has(k)) this.tblOpen.delete(k);
+      body.innerHTML = this.tblSorted(rows).map(r => this.tblRowHtml(r)).join('');
+      box.querySelector('tfoot').innerHTML = this.tblFoot(rows);
+      if (this.filterBot) this.applyFilter(host);
+      return;
+    }
+    for (const row of rows){
+      const k = row.bot + ':' + row.p.id, tr = body.querySelector('tr[data-otrow="' + CSS.escape(k) + '"]'); if (!tr) continue;
+      const l = this.live(row), c = this.tblCells(row, l);
+      for (const [f, v] of Object.entries(c)){ const td = tr.querySelector('[data-c="' + f + '"]'); if (td && td.textContent !== v) td.textContent = v; }
+      tr.classList.toggle('up', l.unreal >= 0); tr.classList.toggle('down', l.unreal < 0);
+    }
+    box.querySelector('tfoot').innerHTML = this.tblFoot(rows);
+  },
+  /* take the eye to the trade's card: unfold its part, lift a bot filter that hides it, flash it */
+  goTo(host, k){
+    const root = host.closest('#botBody') || host;
+    const find = () => root.querySelector('.otList [data-ot="' + CSS.escape(k) + '"]');
+    let card = find();
+    if (!card) return toast('That trade is no longer open', 'info');
+    if (card.hidden){ this.filterBot = ''; this.applyFilter(root); }
+    const fold = card.closest('.blFoldable.blFolded');
+    if (fold){ const bar = fold.querySelector('.blFoldBar'); if (bar) bar.click(); card = find() || card; }
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card.classList.remove('otFlash'); void card.offsetWidth; card.classList.add('otFlash');
+    setTimeout(() => card.classList.remove('otFlash'), 2400);
+  },
+  bindTable(host){
+    const box = host.querySelector('.otSum'); if (!box || box._otb) return; box._otb = true;
+    box.addEventListener('click', e => {
+      const th = e.target.closest('[data-otsortcol]');
+      if (th){
+        const k = th.dataset.otsortcol;
+        this.tblSort = this.tblSort.k === k ? { k, dir: -this.tblSort.dir } : { k, dir: ['bot', 'sym', 'tf', 'opened'].includes(k) ? 1 : -1 };
+        const parent = box.parentElement;
+        box.outerHTML = this.tableHtml(this.all());
+        this.bindTable(parent);
+        if (this.filterBot) this.applyFilter(parent);
+        return;
+      }
+      const dr = e.target.closest('[data-otdrill]');
+      if (dr){
+        const k = dr.dataset.otdrill, row = this.all().find(r => r.bot + ':' + r.p.id === k);
+        const det = box.querySelector('tr[data-otdetail="' + CSS.escape(k) + '"]'); if (!row || !det) return;
+        if (this.tblOpen.has(k)){ this.tblOpen.delete(k); det.hidden = true; dr.textContent = '▸'; dr.setAttribute('aria-expanded', 'false'); }
+        else { this.tblOpen.add(k); det.firstElementChild.innerHTML = this.tblDetail(row); det.hidden = false; dr.textContent = '▾'; dr.setAttribute('aria-expanded', 'true'); }
+        return;
+      }
+      const go = e.target.closest('[data-otgoto]'); if (go) return this.goTo(box, go.dataset.otgoto);
+      const ch = e.target.closest('[data-otsumchart]');
+      if (ch){ const { bot, id } = this.split(ch.dataset.otsumchart); if (typeof PosLines !== 'undefined') PosLines.show(bot, id); return; }
+      if (e.target.closest('[data-otdive], .otSumDetail')) return;   /* the bot link is handled by the page; clicks inside the detail stay there */
+      const tr = e.target.closest('tr[data-otrow]'); if (tr) this.goTo(box, tr.dataset.otrow);
+    });
   },
 
   /* ---------- the live half, rewritten in place ----------
@@ -327,7 +521,7 @@ const OpenTrades = {
         map.innerHTML = WorkspaceUI.priceMap(p, l, { k: row.bot + ':' + p.id });
       const cb = card.querySelector('[data-f="closebtn"]:not([data-armed="1"])');
       if (cb) cb.textContent = 'Close at market · ' + (l.unreal >= 0 ? '+' : '') + fmtNum(l.unreal);
-      card.className = 'otCard ' + (l.unreal >= 0 ? 'up' : 'down');
+      card.classList.toggle('up', l.unreal >= 0); card.classList.toggle('down', l.unreal < 0);   /* keeps the highlight from the summary table */
     });
     // Preserve surviving cards and drafts even when another position opens or closes.
     const present = new Set([...host.querySelectorAll('[data-ot]')].map(el=>el.dataset.ot));
@@ -336,6 +530,7 @@ const OpenTrades = {
       list.insertAdjacentHTML('afterbegin',this.card(row));
       this.bind(list.firstElementChild);
     }
+    if (!sc.bot) this.updateTable(host, rows);
     const template=document.createElement('div');
     template.innerHTML=this.view(sc.bot,true);
     host.querySelector('.botStats')?.replaceWith(template.querySelector('.botStats'));
@@ -392,6 +587,11 @@ const OpenTrades = {
       const hit = !want || card.dataset.ot.split(':')[0] === want;
       card.hidden = !hit; if (hit) shown++;
     });
+    root.querySelectorAll('.otSum tr[data-otrow]').forEach(tr => {
+      const hit = !want || tr.dataset.otrow.split(':')[0] === want;
+      tr.hidden = !hit;
+      const d = tr.nextElementSibling; if (d && d.classList.contains('otSumDetail')) d.hidden = !hit || !this.tblOpen.has(tr.dataset.otrow);
+    });
     const empty = root.querySelector('.otFilterEmpty');
     if (empty) empty.hidden = !(want && !shown);
     root.querySelectorAll('[data-otbot]').forEach(b => b.classList.toggle('on', (b.dataset.otbot || '') === want));
@@ -421,6 +621,7 @@ const OpenTrades = {
 
   bind(host){
     if (typeof LiveDesk !== 'undefined' && host.querySelector('#ldRealHost')) LiveDesk.bindPositions(host.querySelector('#ldRealHost'));
+    this.bindTable(host);
     host.querySelectorAll('[data-otchart]').forEach(el => el.addEventListener('click', () => {
       const { bot, id } = this.split(el.dataset.otchart);
       if (typeof PosLines !== 'undefined') PosLines.show(bot, id);

@@ -3075,3 +3075,78 @@ html[data-tile] #toasts { display: none !important; }
 .exBig .exInvLine span{ display:inline; font-size:inherit; letter-spacing:0; text-transform:none; }
 .exRow{ grid-template-columns:130px 1fr 1fr 1fr 90px 110px auto; }
 @media (max-width:760px){ .exRow{ grid-template-columns:1fr 1fr; } }
+
+/* a bot's timeframes: tick one or several */
+.tfPick{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.tfChip{ width:auto !important; padding:3px 8px !important; border-radius:7px; cursor:pointer; font-size:12px; font-family:var(--font-mono,monospace);
+  background:transparent; color:var(--dim); border:1px solid rgba(255,255,255,.14); }
+.tfChip.on{ color:var(--accent,#00e5ff); border-color:rgba(0,229,255,.55); background:rgba(0,229,255,.08); }
+.tfChip.now{ box-shadow:0 0 0 2px rgba(46,189,133,.55); }
+.tfNow{ flex-basis:100%; font-size:11px; color:var(--dim); margin-top:2px; }
+.tfNow b{ color:var(--green,#2ebd85); }
+
+/* Deep Dive notes: search + bot filter */
+.dnTools{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:8px 0 4px; }
+.dnTools .dnFind{ flex:1 1 240px; min-width:0; }
+.dnTools .dnBot{ width:auto !important; }
+.dnTools .dnCount{ font-size:11px; }
+
+/* Deep Dive: the chosen bot's last note runs once across the top bar */
+.exWrap > .exCrumbs{ position:sticky; }
+.dnTicker{ position:fixed; height:22px; overflow:hidden; pointer-events:auto; cursor:pointer; z-index:9000;
+  background:linear-gradient(90deg, rgba(255,209,102,.0), rgba(255,209,102,.10) 8%, rgba(255,209,102,.10) 92%, rgba(255,209,102,0)); border-radius:6px; }
+.dnTicker > span{ position:absolute; top:3px; left:0; white-space:nowrap; font-size:12.5px; color:#ffe2a0; animation-name:dnRun; animation-timing-function:linear; animation-iteration-count:1; animation-fill-mode:forwards; }
+.dnTicker b{ color:#ffd166; }
+@keyframes dnRun{ from{ transform:translateX(var(--dnFrom, 100vw)); } to{ transform:translateX(var(--dnTo, -100%)); } }
+
+/* Deep Dive: straight to the bot being studied */
+.exToBot{ background:rgba(255,209,102,.12) !important; border-color:rgba(255,209,102,.55) !important; color:#ffd166 !important; font-weight:700; }
+.exToBot:hover{ background:rgba(255,209,102,.24) !important; }
+
+/* Bots on / off: search */
+.bsFindRow{ display:flex; align-items:center; gap:10px; margin:6px 0 8px; }
+.bsFindRow .bsFind{ flex:1 1 auto; min-width:0; }
+.bsFindCount{ font-size:11px; white-space:nowrap; }
+
+/* the Bots on / off search and the Deep Dive notes search + bot filter:
+   the same look as every other search box in ASTRA (they were the browser's plain grey) */
+.bsFind, .dnFind, .dnBot{ padding:6px 10px; background:var(--field); color:var(--text); border:1px solid var(--border); border-radius:8px; font:inherit; font-size:13px; outline:none; }
+.bsFind:focus, .dnFind:focus, .dnBot:focus{ border-color:rgba(0,229,255,.55); box-shadow:0 0 0 2px rgba(0,229,255,.12); }
+.bsFind::placeholder, .dnFind::placeholder{ color:var(--dim); }
+.dnBot option{ background:var(--panel, #121c2e); color:var(--text); }
+
+/* "hidden" must win over a row's own layout (display:grid/flex) - otherwise a search
+   marks rows as hidden and they stay on screen (Bots on / off, Deep Dive notes…) */
+.bsRow[hidden], .bsOff[hidden], .bsList[hidden], .bsNone[hidden],
+.dnNote[hidden], .dnDay[hidden], .dnList[hidden], .dnNone[hidden],
+.dfItem[hidden], .maSrcRow[hidden], .wsNavItem[hidden]{ display:none !important; }
+
+/* Deep Dive sections: their own zoom buttons */
+.exSecCtl .exZpct{ min-width:34px; font-size:9.5px !important; }
+.exSecCtl .exZpct.on{ color:#ffd166; border-color:rgba(255,209,102,.55); }
+.exSecCtl [data-exs="zout"], .exSecCtl [data-exs="zin"]{ font-size:9.5px !important; font-weight:700; }
+
+/* Open Trades: the summary table */
+.otSum{ margin:6px 0 10px; }
+.otSumTable tbody tr.otSumRow{ cursor:pointer; }
+.otSumTable tbody tr.otSumRow.up td:first-child{ box-shadow:inset 3px 0 0 rgba(46,189,133,.8); }
+.otSumTable tbody tr.otSumRow.down td:first-child{ box-shadow:inset 3px 0 0 rgba(246,70,93,.75); }
+.otSumTable tbody tr.otSumRow.up{ background:rgba(46,189,133,.06); }
+.otSumTable tbody tr.otSumRow.down{ background:rgba(246,70,93,.06); }
+.otSumTable tbody tr.otSumRow.up:hover{ background:rgba(46,189,133,.13); }
+.otSumTable tbody tr.otSumRow.down:hover{ background:rgba(246,70,93,.13); }
+.otSumTable tr.otSumRow.up .otSumPnl, .otSumTable tr.otSumRow.up [data-c="pct"], .otSumTable tr.otSumRow.up [data-c="r"]{ color:#2ebd85; font-weight:700; }
+.otSumTable tr.otSumRow.down .otSumPnl, .otSumTable tr.otSumRow.down [data-c="pct"], .otSumTable tr.otSumRow.down [data-c="r"]{ color:#f6465d; font-weight:700; }
+.otSumTable td.up{ color:#2ebd85; } .otSumTable td.down{ color:#f6465d; }
+.otSumTable .otSumDrill{ background:none; border:0; color:var(--accent,#00e5ff); cursor:pointer; padding:0 6px 0 0; font-size:11px; }
+.otSumTable tr.otSumDetail > td{ background:rgba(8,13,28,.55); padding:8px 12px 10px; white-space:normal; }
+.otSumFacts{ display:flex; flex-wrap:wrap; gap:6px 18px; }
+.otSumFacts span{ display:flex; flex-direction:column; min-width:110px; }
+.otSumFacts label{ font-size:9px; letter-spacing:.1em; text-transform:uppercase; opacity:.6; }
+.otSumFacts b.up{ color:#2ebd85; } .otSumFacts b.down{ color:#f6465d; } .otSumFacts b.warn{ color:#ffd166; }
+.otSumWhy{ margin:8px 0 0 16px; padding:0; font-size:11px; opacity:.85; }
+.otSumGo{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.otSumHint{ font-size:10.5px; margin-top:4px; }
+.otSum .dashTotal .up{ color:#2ebd85; } .otSum .dashTotal .down{ color:#f6465d; }
+.otCard.otFlash{ animation:otFlash 2.4s ease-out; }
+@keyframes otFlash{ 0%,30%{ box-shadow:0 0 0 2px var(--accent,#00e5ff), 0 0 22px rgba(0,229,255,.45); } 100%{ box-shadow:none; } }

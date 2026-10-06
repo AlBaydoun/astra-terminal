@@ -73,6 +73,7 @@ const BotLayout = {
     { id: 'intro',  label: 'Short explanation line',                             icon: 'ℹ' },
     { id: 'real',   label: 'REAL positions on the account (Live Desk)',          icon: '💵' },
     { id: 'stats',  label: 'Numbers — open now, in profit / loss, unrealised, at risk', icon: '#' },
+    { id: 'table',  label: 'Summary table — every open trade on one line (sortable, click to go to it)', icon: '☰' },
     { id: 'sort',   label: 'Order buttons (newest, best first, instrument, bot)', icon: '⇅' },
     { id: 'filter', label: 'Bot filter (show one bot’s trades)',                 icon: '⧩' },
     { id: 'list',   label: 'The open trades themselves (the cards)',             icon: '🗂' },

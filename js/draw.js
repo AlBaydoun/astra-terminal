@@ -137,6 +137,16 @@ const Draw = {
   onClick(p){
     if (!p || !p.point || !Chart.priceSeries) return;
     this.closeMenu();
+    /* the 📌 on a finished measurement pins it; the ✕ on a pinned one removes it */
+    const inR = r => r && p.point.x >= r.x && p.point.x <= r.x + r.w && p.point.y >= r.y && p.point.y <= r.y + r.h;
+    if (this.measure && inR(this._pinHit)){
+      this.items.push({ id: this.newId(), type: 'measure', p1: this.measure.p1, p2: this.measure.p2, dated: !!this.measure.dated });
+      this.measure = null; this.save(); this.redraw();
+      toast('Measurement pinned — it stays on this chart. Measure the next one; ✕ on a pinned one removes it.', 'ok');
+      return;
+    }
+    const un = (this._unpinHits || []).find(h => inR(h.r));
+    if (un){ this.remove(un.id); toast('Pinned measurement removed', 'info'); return; }
     /* with no tool chosen, a click picks up whatever drawing is under it */
     if (!this.tool){
       const i = this.hitTest(p.point.x, p.point.y);
@@ -162,12 +172,13 @@ const Draw = {
       this.setTool(null);
       return;
     }
-    /* measure: two clicks give price move, %, bars and elapsed time */
-    if (this.tool === 'measure'){
+    /* measure: two clicks give price move, %, bars and elapsed time
+       (the "Date range" tool adds the start / end date and the exact duration) */
+    if (this.tool === 'measure' || this.tool === 'dmeasure'){
       if (!this.temp) this.measure = null;
       if (time == null){ toast('Click inside the chart area', 'warn'); return; }
       if (!this.temp){ this.temp = { time, price }; this.redraw(); return; }
-      this.measure = { p1: this.temp, p2: { time, price } };
+      this.measure = { p1: this.temp, p2: { time, price }, dated: this.tool === 'dmeasure' };
       this.temp = null;
       this.redraw();
       return;
@@ -243,7 +254,7 @@ const Draw = {
 
   onMove(p){
     if (!p || !p.point) return;
-    if (this.temp || this.tool === 'measure'){
+    if (this.temp || this.tool === 'measure' || this.tool === 'dmeasure'){
       this.cursor = { x: p.point.x, y: p.point.y };
       if (this.temp) this.redraw();
     }
@@ -285,10 +296,11 @@ const Draw = {
     if (!Chart.priceSeries) return;
     this.drawVP(ctx);
     if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
+    this._pinHit = null; this._unpinHits = [];
     for (const it of this.items) this.drawItem(ctx, it, false);
-    if (this.measure) this.drawMeasure(ctx, this.measure);
-    if (this.tool === 'measure' && this.temp && this.cursor)
-      this.drawMeasure(ctx, { p1: this.temp, _to: this.cursor });
+    if (this.measure) this.drawMeasure(ctx, this.measure, 'live');
+    if ((this.tool === 'measure' || this.tool === 'dmeasure') && this.temp && this.cursor)
+      this.drawMeasure(ctx, { p1: this.temp, _to: this.cursor, dated: this.tool === 'dmeasure' });
     /* live preview while a position or pattern is being placed */
     if (this.temp && this.cursor){
       if (this.tool === 'long' || this.tool === 'short')
@@ -299,7 +311,7 @@ const Draw = {
     if (this.stroke && this.stroke.length > 1) this.drawPencil(ctx, this.stroke);
     this.drawSelection(ctx);
     if (this.sel) this.showBar();          /* the bar follows the drawing when the chart moves */
-    if (this.temp && this.cursor && this.tool && ['hline', 'pencil', 'text', 'measure', 'long', 'short', 'barspattern'].indexOf(this.tool) === -1){
+    if (this.temp && this.cursor && this.tool && ['hline', 'pencil', 'text', 'measure', 'dmeasure', 'long', 'short', 'barspattern'].indexOf(this.tool) === -1){
       const a = this.toXY(this.temp);
       if (a) this.drawItem(ctx, { type: this.tool, p1: this.temp,
         p2: { time: 0, price: 0 }, _previewTo: this.cursor }, true, a);
@@ -334,11 +346,11 @@ const Draw = {
     ctx.font = '700 12px Rajdhani, sans-serif';
     const w1 = ctx.measureText(lines[0]).width;
     ctx.font = '600 11px Rajdhani, sans-serif';
-    const w2 = lines[1] ? ctx.measureText(lines[1]).width : 0;
+    const w2 = Math.max(0, ...lines.slice(1).map(l => ctx.measureText(l).width));
     const w = Math.max(w1, w2) + 18;
-    const h = lines[1] ? 36 : 21;
+    const h = 21 + 15 * (lines.length - 1);
     const x = Math.min(Math.max(cx - w / 2, 2), this.cssW - w - 2);
-    const y = below ? topY : topY - h;
+    const y = Math.max(2, Math.min(below ? topY : topY - h, this.cssH - h - 2));   /* a tall (dated) label stays on screen */
     ctx.fillStyle = 'rgba(' + base + ',0.96)';
     if (ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x, y, w, h, 5); ctx.fill(); }
     else ctx.fillRect(x, y, w, h);
@@ -346,10 +358,10 @@ const Draw = {
     ctx.fillStyle = '#04060d';
     ctx.font = '700 12px Rajdhani, sans-serif';
     ctx.fillText(lines[0], x + w / 2, y + 15);
-    if (lines[1]){
+    for (let i = 1; i < lines.length; i++){
       ctx.fillStyle = 'rgba(4,6,13,0.72)';
       ctx.font = '600 11px Rajdhani, sans-serif';
-      ctx.fillText(lines[1], x + w / 2, y + 30);
+      ctx.fillText(lines[i], x + w / 2, y + 15 + 15 * i);
     }
     ctx.restore();
     return { x, y, w, h };
@@ -360,7 +372,31 @@ const Draw = {
      colour, the time spanned is tinted separately underneath, and the readout
      carries the move, the percentage, the bar count, the elapsed time and the
      volume traded across the span. */
-  drawMeasure(ctx, m){
+  /* "Mon 29 Sep 2026 14:15" — a chart time in your own clock (the axis is shifted by TZ_OFF) */
+  measureWhen(t){
+    const d = new Date((t - (typeof TZ_OFF === 'number' ? TZ_OFF : 0)) * 1000);
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  },
+  /* "2 days 19 h 15 min" */
+  exactSpan(secs){
+    secs = Math.abs(Math.round(secs));
+    const d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+    return [d ? d + (d === 1 ? ' day' : ' days') : '', h ? h + ' h' : '', m || (!d && !h) ? m + ' min' : ''].filter(Boolean).join(' ');
+  },
+  /* a small square button drawn on the canvas (📌 to pin, ✕ to remove) */
+  canvasBtn(ctx, x, y, label, base){
+    const r = { x, y, w: 18, h: 18 };
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,13,28,0.92)';
+    if (ctx.roundRect){ ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 4); ctx.fill(); } else ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = 'rgba(' + base + ',0.9)'; ctx.lineWidth = 1; ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
+    ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 1);
+    ctx.restore();
+    return r;
+  },
+  drawMeasure(ctx, m, role){
     const a = this.toXY(m.p1);
     const b = m._to || this.toXY(m.p2);
     if (!a || !b) return;
@@ -409,9 +445,22 @@ const Draw = {
     const diff = p2 - p1;
     const pct = p1 ? diff / p1 * 100 : 0;
     const span = this.spanStats(t1, t2);
-    this.readout(ctx, midX, up ? y0 - 6 : y1 + tBand + 6,
-      [(diff >= 0 ? '+' : '') + fmtPrice(diff) + '   (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)', span.text],
-      base, !up);
+    const lines = [(diff >= 0 ? '+' : '') + fmtPrice(diff) + '   (' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%)', span.text];
+    if (m.dated && t1 != null && t2 != null){
+      const from = Math.min(t1, t2), to = Math.max(t1, t2);
+      lines.push('From ' + this.measureWhen(from));
+      lines.push('To     ' + this.measureWhen(to));
+      lines.push(this.exactSpan(to - from) + ' (your time)');
+    }
+    /* a tall label that does not fit above the box goes below it (and the other way round) */
+    const need = 21 + 15 * (lines.length - 1) + 8;
+    let above = up;
+    if (above && y0 - need < 4 && y1 + tBand + need < this.cssH) above = false;
+    else if (!above && y1 + tBand + need > this.cssH && y0 - need > 4) above = true;
+    const box = this.readout(ctx, midX, above ? y0 - 6 : y1 + tBand + 6, lines, base, !above);
+    /* a finished measurement offers 📌; a pinned one offers ✕ */
+    if (box && role === 'live') this._pinHit = this.canvasBtn(ctx, box.x + box.w + 4, box.y, '📌', base);
+    if (box && role === 'pinned' && m.id) (this._unpinHits = this._unpinHits || []).push({ id: m.id, r: this.canvasBtn(ctx, box.x + box.w + 4, box.y, '✕', base) });
     ctx.restore();
   },
 
@@ -472,6 +521,7 @@ const Draw = {
   },
 
   drawItem(ctx, it, preview, aPre){
+    if (it.type === 'measure'){ this.drawMeasure(ctx, it, 'pinned'); return; }
     ctx.save();
     if (it.type === 'pencil'){
       ctx.restore();
@@ -882,6 +932,10 @@ const Draw = {
     const N = this.NEAR;
     const S = Chart.priceSeries;
     if (!S) return false;
+    if (it.type === 'measure'){
+      const a = this.toXY(it.p1), b = this.toXY(it.p2); if (!a || !b) return false;
+      return x >= Math.min(a.x, b.x) - N && x <= Math.max(a.x, b.x) + N && y >= Math.min(a.y, b.y) - N && y <= Math.max(a.y, b.y) + N;
+    }
 
     if (it.type === 'hline'){
       const ly = S.priceToCoordinate(it.price);
@@ -1101,7 +1155,7 @@ const Draw = {
      by default because typing a letter with the chart focused is how you search
      for a symbol — turning them on moves symbol search onto the "/" key. */
   KEYS: {
-    t: 'trend', r: 'ray', h: 'hline', f: 'fib', m: 'measure',
+    t: 'trend', r: 'ray', h: 'hline', f: 'fib', m: 'measure', d: 'dmeasure',
     l: 'long', s: 'short', j: 'forecast', b: 'barspattern',
     p: 'pencil', n: 'text', a: 'alert', x: 'del', v: 'vline',
   },

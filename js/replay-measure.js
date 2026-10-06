@@ -6,19 +6,23 @@
    "From entry" needs one click only: it measures from the trade's entry.
    Bolted onto TradeReview; draws on its own canvas over the chart. Read-only. */
 const ReplayMeasure = {
-  on: false, mode: 'two',          // 'two' = click A then B · 'entry' = from the entry
+  on: false, mode: 'two',          // 'two' = click A then B · 'dated' = the same with dates · 'entry' = from the entry
   a: null, b: null, hover: null,   // {time, price}
   canvas: null,
+  pinned: [],                      // measurements kept on the chart: {a, b, mode, trade}
+  _pinHit: null, _unpinHits: [],
 
   init(){
     const T = TradeReview; if (!T || !T.host) return;
     const controls = T.host.querySelector('#trBack')?.parentElement; if (!controls) return;
     controls.insertAdjacentHTML('beforeend',
       `<span class="rmTools"><button id="rmTwo" title="Measure between two points: click the first candle, then the second">📏 Measure</button>` +
+      `<button id="rmDates" title="Measure between two points, plus the start and end date and time and the exact duration">📅 Dates</button>` +
       `<button id="rmEntry" title="One click: what the trade would have made if it had been closed at that candle">📐 From entry</button>` +
-      `<button id="rmClear" title="Remove the measurement">✕</button><span id="rmOut" class="rmOut"></span></span>`);
+      `<button id="rmClear" title="Remove the measurement (and every pinned one)">✕</button><span id="rmOut" class="rmOut"></span></span>`);
     T.host.querySelector('#rmTwo').onclick = () => this.toggle('two');
     T.host.querySelector('#rmEntry').onclick = () => this.toggle('entry');
+    T.host.querySelector('#rmDates').onclick = () => this.toggle('dated');
     T.host.querySelector('#rmClear').onclick = () => this.clear();
     /* re-hook whenever the replay builds a fresh chart */
     const create = T.createChart.bind(T); T.createChart = () => { create(); this.hook(); };
@@ -30,13 +34,14 @@ const ReplayMeasure = {
     if (this.on && this.mode === mode){ this.on = false; }
     else { this.on = true; this.mode = mode; this.a = this.b = null; if (mode === 'entry' && TradeReview.selected){ const t = TradeReview.selected; this.a = { time: t.entryTime / 1000, price: t.entry, entry: true }; } }
     this.buttons(); this.render();
-    if (this.on) toast(mode === 'two' ? 'Click the first candle, then the second' : 'Click the candle where you would have closed the trade', 'info');
+    if (this.on) toast(mode !== 'entry' ? 'Click the first candle, then the second' : 'Click the candle where you would have closed the trade', 'info');
   },
-  clear(){ this.on = false; this.a = this.b = this.hover = null; this.buttons(); this.render(); },
+  clear(){ this.on = false; this.a = this.b = this.hover = null; this.pinned = []; this.buttons(); this.render(); },
   buttons(){
     const h = TradeReview.host; if (!h) return;
     h.querySelector('#rmTwo')?.classList.toggle('active', this.on && this.mode === 'two');
     h.querySelector('#rmEntry')?.classList.toggle('active', this.on && this.mode === 'entry');
+    h.querySelector('#rmDates')?.classList.toggle('active', this.on && this.mode === 'dated');
     const stage = h.querySelector('#trChart'); if (stage) stage.classList.toggle('rmArmed', this.on);
   },
 
@@ -52,7 +57,7 @@ const ReplayMeasure = {
     T.chart.timeScale().subscribeVisibleLogicalRangeChange(() => this.render());
     this.render();
   },
-  unhook(){ if (this.canvas){ this.canvas.remove(); this.canvas = null; } },
+  unhook(){ if (this.canvas){ this.canvas.remove(); this.canvas = null; } this.pinned = []; this.a = this.b = this.hover = null; },
 
   /* the candle + price under a chart event */
   at(p){
@@ -70,6 +75,16 @@ const ReplayMeasure = {
     return b ? b.time : time;
   },
   click(p){
+    /* 📌 pins the finished measurement, ✕ removes a pinned one - works with the tool on or off */
+    const inR = r => r && p.point && p.point.x >= r.x && p.point.x <= r.x + r.w && p.point.y >= r.y && p.point.y <= r.y + r.h;
+    if (this.a && this.b && inR(this._pinHit)){
+      this.pinned.push({ a: this.a, b: this.b, mode: this.mode, trade: TradeReview.selected });
+      this.a = this.b = this.hover = null;
+      if (this.mode === 'entry' && TradeReview.selected){ const t = TradeReview.selected; this.a = { time: t.entryTime / 1000, price: t.entry, entry: true }; }
+      this.render(); toast('Measurement pinned — measure the next one. ✕ on a pinned one removes it.', 'ok'); return;
+    }
+    const un = this._unpinHits.find(h => inR(h.r));
+    if (un){ this.pinned.splice(this.pinned.indexOf(un.pin), 1); this.render(); return; }
     if (!this.on) return;
     const pt = this.at(p); if (!pt) return;
     if (this.mode === 'entry'){
@@ -94,6 +109,10 @@ const ReplayMeasure = {
     const ms = Math.abs(b.time - a.time) * 1000;
     const span = ms < 3600000 ? Math.round(ms / 60000) + ' min' : ms < 86400000 ? (ms / 3600000).toFixed(1) + ' h' : (ms / 86400000).toFixed(1) + ' days';
     const out = { dp, pct, bars, span };
+    if (this._dated){
+      const lo = Math.min(a.time, b.time), hi = Math.max(a.time, b.time);
+      out.dated = { from: this.when(lo), to: this.when(hi), exact: typeof Draw !== 'undefined' && Draw.exactSpan ? Draw.exactSpan(hi - lo) : span };
+    }
     if (t && Number.isFinite(t.qty)){
       const dir = t.dir > 0 ? 1 : -1;
       const rate = typeof BotEngine !== 'undefined' ? BotEngine.cashRate(t, true) : 1;
@@ -115,9 +134,26 @@ const ReplayMeasure = {
       lines.push(`${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}% from the entry · ${m.bars} candles · ${m.span}`);
     } else {
       lines.push(`${m.dp >= 0 ? '+' : ''}${f(Math.abs(m.dp))} · ${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}% · ${m.bars} candles · ${m.span}`);
+      if (m.dated){ lines.push('From ' + m.dated.from); lines.push('To   ' + m.dated.to); lines.push(m.dated.exact + ' (your time)'); }
       if (m.money != null) lines.push(`worth ${money(m.money)} for this trade's size${m.fromEntry != null ? ' · closed at the 2nd point: ' + money(m.fromEntry) + ' (recorded ' + money(m.recorded) + ')' : ''}`);
     }
     return lines;
+  },
+
+  /* replay times are real epoch seconds - shown in your own clock */
+  when(t){
+    const d = new Date(t * 1000);
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  },
+  /* a small square button on the canvas (📌 / ✕) */
+  btn(ctx, x, y, label, col){
+    const r = { x, y, w: 18, h: 18 };
+    ctx.fillStyle = 'rgba(8,13,28,.95)'; ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
+    ctx.save(); ctx.font = '11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 1); ctx.restore();
+    return r;
   },
 
   /* ---------- drawing ---------- */
@@ -127,16 +163,26 @@ const ReplayMeasure = {
     const dpr = window.devicePixelRatio || 1;
     if (c.width !== W * dpr || c.height !== H * dpr){ c.width = W * dpr; c.height = H * dpr; c.style.width = W + 'px'; c.style.height = H + 'px'; }
     const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    this._pinHit = null; this._unpinHits = []; this._labels = [];
+    /* pinned ones belong to the trade they were measured on */
+    for (const pin of this.pinned) if (pin.trade === T.selected) this.drawOne(ctx, W, H, pin.a, pin.b, pin.mode, pin);
     const out = T.host.querySelector('#rmOut');
     const a = this.a, b = this.b || this.hover;
-    if (!a || !b){ if (out) out.textContent = this.on ? (this.mode === 'entry' ? (a ? 'now click the candle where you would have closed' : 'open a trade first') : (a ? 'now click the second candle' : 'click the first candle')) : ''; return; }
+    if (!a || !b){ if (out) out.textContent = this.on ? (this.mode === 'entry' ? (a ? 'now click the candle where you would have closed' : 'open a trade first') : (a ? 'now click the second candle' : 'click the first candle')) : (this.pinned.length ? this.pinned.length + ' pinned' : ''); return; }
+    const lines = this.drawOne(ctx, W, H, a, b, this.mode, this.b ? 'live' : null);
+    if (out && lines) out.textContent = lines.join('  ·  ');
+  },
+  /* one measurement; role 'live' offers 📌, a pinned one (object) offers ✕ */
+  drawOne(ctx, W, H, a, b, mode, role){
+    const T = TradeReview;
     const x = time => T.chart.timeScale().timeToCoordinate(time), y = price => T.series.priceToCoordinate(price);
     const xa = x(this.snap(a.time)), ya = y(a.price), xb = x(this.snap(b.time)), yb = y(b.price);
+    this._dated = mode === 'dated';
     const m = this.measure(a, b);
-    const entryMode = this.mode === 'entry';
+    this._dated = false;
+    const entryMode = mode === 'entry';
     const lines = this.text(m, entryMode);
-    if (out) out.textContent = lines.join('  ·  ');
-    if (xa == null || xb == null || ya == null || yb == null) return;
+    if (xa == null || xb == null || ya == null || yb == null) return lines;
     const good = entryMode ? m.fromEntry >= 0 : m.dp >= 0;
     const col = good ? '#5be8cf' : '#ff879b';
     /* the box between the two points */
@@ -155,8 +201,18 @@ const ReplayMeasure = {
     const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, h = lines.length * 15 + 10;
     let lx = Math.max(xa, xb) + 10, ly = Math.min(ya, yb) - h - 6;
     if (lx + w > W - 4) lx = Math.min(xa, xb) - w - 10; if (lx < 4) lx = 4; if (ly < 4) ly = Math.max(ya, yb) + 8; if (ly + h > H - 4) ly = H - h - 4;
+    /* never on top of another label: step down below it */
+    for (let k = 0; k < 6; k++){
+      const hit = this._labels.find(r => lx < r.x + r.w && lx + w + 22 > r.x && ly < r.y + r.h && ly + h > r.y);
+      if (!hit) break; ly = hit.y + hit.h + 4; if (ly + h > H - 4){ ly = Math.max(4, hit.y - h - 4); }
+    }
+    this._labels.push({ x: lx, y: ly, w: w + 22, h });
     ctx.fillStyle = 'rgba(8,13,28,.9)'; ctx.fillRect(lx, ly, w, h); ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.strokeRect(lx + .5, ly + .5, w - 1, h - 1);
     lines.forEach((l, i) => { ctx.fillStyle = i === 0 ? col : '#c9d9ed'; ctx.fillText(l, lx + 8, ly + 16 + i * 15); });
+    const bx = lx + w + 4 + 18 > W ? lx - 22 : lx + w + 4;
+    if (role === 'live') this._pinHit = this.btn(ctx, bx, ly, '📌', col);
+    else if (role && typeof role === 'object') this._unpinHits.push({ pin: role, r: this.btn(ctx, bx, ly, '✕', col) });
+    return lines;
   },
 };
 document.addEventListener('DOMContentLoaded', () => setTimeout(() => { try { ReplayMeasure.init(); } catch(e){ console.warn('ASTRA replay measure:', e.message); } }, 30));

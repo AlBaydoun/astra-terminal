@@ -273,7 +273,7 @@ const BOT_BY_ID = {};
 for (const b of BOTS) BOT_BY_ID[b.id] = b;
 
 const Bots = {
-  active: 'dash',
+  active: 'explorer',            // the Bots tab opens on the Deep Dive (Al's choice, 2026-10-04)
   ledgers: {},
   cfgs: {},
   scan: { rows: [], at: 0, busy: false, universe: 0 },
@@ -284,6 +284,9 @@ const Bots = {
     /* bots the Strategy Lab has published come back before anything is wired */
     if (typeof StratLab !== 'undefined') try { StratLab.init(); } catch(e){}
     if (typeof Checker !== 'undefined') try { Checker.mountAll(); } catch(e){ console.warn('ASTRA checker bots:', e.message); }
+    /* the one-time correction of the recorded trades (yen / euro-index values,
+       old commission) - in the window that runs the bots, before any ledger loads */
+    if (this.isRunner() && typeof HistoryFix !== 'undefined') try { HistoryFix.runOnce(); } catch(e){ console.warn('ASTRA history fix:', e.message); }
     this.applyOff();
     for (const b of BOTS){
       this.ledgers[b.id] = BotEngine.load(b.id);
@@ -1061,6 +1064,51 @@ const Bots = {
     BotEngine.note(ledger, 'error', message, { sym, tf });
     console.error('ASTRA ' + message);
   },
+  /* ---- several timeframes per bot, the best one used ----
+     cfg.tfs = the timeframes you ticked (missing or one = exactly as before, cfg.tf).
+     Each cycle the bot uses the ticked timeframe where ITS OWN closed trades of the
+     last 60 days earned the most per trade (average R). A ticked timeframe with
+     fewer than 5 trades there is still unproven: it gets its turn every 4th cycle,
+     and whenever no proven timeframe is earning, so all of them keep being learned.
+     Chosen once per cycle (the ranking pass and the entries use the same one) and
+     shown under the timeframe chips. */
+  TF_MIN_TRADES: 5,
+  tfList(cfg){ const all = BotEngine.TFS; const l = Array.isArray(cfg && cfg.tfs) ? cfg.tfs.filter(t => all.includes(t)) : []; return l.length ? l : [(cfg && cfg.tf) || '15m']; },
+  tfStats(id, list){
+    const L = this.ledgers[id], since = Date.now() - 60 * 86400e3, out = {};
+    for (const tf of list) out[tf] = { n: 0, net: 0, r: 0 };
+    for (const t of (L && L.closed) || []){
+      if (!out[t.tf] || (t.exitTime || 0) < since) continue;
+      const s = out[t.tf]; s.n++; s.net += t.pnl || 0; s.r += Number.isFinite(t.r) ? t.r : 0;
+    }
+    for (const tf of list){ const s = out[tf]; s.avgR = s.n ? s.r / s.n : 0; }
+    return out;
+  },
+  _tfNow: {}, _tfCycle: {},
+  chooseTf(b){
+    const cfg = this.cfg(b.id) || {}, list = this.tfList(cfg);
+    if (list.length < 2){ this._tfNow[b.id] = null; return list[0]; }
+    const now = this._tfNow[b.id];
+    if (now && Date.now() - now.at < 20000) return now.tf;        // one choice per cycle
+    const st = this.tfStats(b.id, list), min = this.TF_MIN_TRADES;
+    const proven = list.filter(t => st[t].n >= min).sort((x, y) => st[y].avgR - st[x].avgR || st[y].net - st[x].net);
+    const unproven = list.filter(t => st[t].n < min).sort((x, y) => st[x].n - st[y].n);
+    const cyc = this._tfCycle[b.id] = (this._tfCycle[b.id] || 0) + 1;
+    let tf, why;
+    if (proven.length && st[proven[0]].avgR > 0 && !(unproven.length && cyc % 4 === 0)){
+      tf = proven[0]; const s = st[tf];
+      why = 'best record: ' + (s.avgR >= 0 ? '+' : '') + s.avgR.toFixed(2) + 'R per trade over ' + s.n + ' trades (last 60 days)';
+    } else if (unproven.length){
+      /* the unproven ones take turns, so a timeframe that rarely signals cannot block the others */
+      tf = unproven[Math.floor(cyc / (proven.length ? 4 : 1)) % unproven.length]; why = 'still learning it: ' + st[tf].n + ' of ' + min + ' trades so far';
+    } else {
+      tf = proven[0]; const s = st[tf];
+      why = 'none of your timeframes is earning — the least bad: ' + s.avgR.toFixed(2) + 'R per trade over ' + s.n + ' trades';
+    }
+    this._tfNow[b.id] = { tf, why, at: Date.now(), stats: st };
+    return tf;
+  },
+
   async runBot(b, manual){
     if (b.runPaper) return b.runPaper(b); // Fixed experiments own a paper-only runner.
     const cfg = this.cfg(b.id);
@@ -1094,13 +1142,13 @@ const Bots = {
       for (const sym of syms){
         if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) continue;
         let candles;
-        try { candles = await API.klines(sym, cfg.tf, b.warmup + 120); }
-        catch(e){ this.botError(L, b, sym, cfg.tf, e); continue; }
+        try { candles = await API.klines(sym, this.chooseTf(b), b.warmup + 120); }
+        catch(e){ this.botError(L, b, sym, this.chooseTf(b), e); continue; }
         if (!candles || candles.length < b.warmup || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) continue;
         preloaded[sym] = candles;
         let sig = null;
-        try { sig = b.signal(candles, Object.assign({}, cfg, { sym }), L, null); }
-        catch(e){ this.botError(L, b, sym, cfg.tf, e); continue; }
+        try { sig = b.signal(candles, Object.assign({}, cfg, { sym, tf: this.chooseTf(b) }), L, null); }
+        catch(e){ this.botError(L, b, sym, this.chooseTf(b), e); continue; }
         scored.push({ sym, score: (sig && (sig.score || 0)) || 0, dir: sig ? (sig.dir || sig.near || 0) : 0 });
       }
       scored.sort((x, y) => y.score - x.score);
@@ -1110,10 +1158,10 @@ const Bots = {
           .map(x => baseAsset(x.sym) + ' ' + Math.round(x.score)).join(', '), {});
     }
 
+    const tf = this.chooseTf(b);
     for (const sym of syms){
       if (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym)) continue;
       if (L.open.length >= BotEngine.rules(cfg).maxOpen) break;
-      const tf = cfg.tf;
       let candles, higher = null;
       try {
         candles = preloaded[sym] || await API.klines(sym, tf, b.warmup + 120);
@@ -1122,7 +1170,7 @@ const Bots = {
       if (!candles || candles.length < b.warmup || (typeof MarketSources !== 'undefined' && !MarketSources.allowed(sym))) continue;
 
       let sig;
-      try { sig = b.signal(candles, Object.assign({}, cfg, { sym }), L, higher); }
+      try { sig = b.signal(candles, Object.assign({}, cfg, { sym, tf }), L, higher); }
       catch(e){ this.botError(L, b, sym, tf, e); continue; }
       if (!sig) continue;
 

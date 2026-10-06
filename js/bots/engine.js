@@ -303,9 +303,22 @@ const BotEngine = {
       // Manual tickets explicitly convert profit currency using broker FX quotes.
       // Existing strategies/replays retain their former valuation assumptions.
       const cashPerPoint = spec.tickValue / spec.tickSize;
+      const acctCur = typeof Feed !== 'undefined' && Feed.account && Feed.account.currency;
       if(sig.manual && typeof ManualTicket!=='undefined'){
         fx=ManualTicket.fx(sig.sym);
         if(!fx)return {ok:false,reason:'Waiting for a fresh broker currency-conversion quote'};
+      }else if (acctCur && spec.currency && spec.currency !== acctCur && spec.pointValue > 0){
+        /* A contract priced in ANOTHER currency (DE40/EU50/FR40 in EUR, AU200 in AUD,
+           UK100 in GBP, USD/JPY in yen). Its tick value says 1 point = 1 unit, which
+           is true in EUR/AUD/GBP/JPY but not in the account's dollars — until
+           2026-10-04 every such trade was booked as if it were. MetaTrader's own
+           profit calculator (pointValue, in the account currency) gives the rate. */
+        /* the live broker exchange rate when the ticket can price it, else the per-point value */
+        const live = typeof ManualTicket !== 'undefined' ? ManualTicket.fx(sig.sym) : null;
+        const rate = spec.pointValue / contract;
+        if (live && live.profit > 0 && live.loss > 0) fx = live;
+        else if (Number.isFinite(rate) && rate > 0) fx = { profit: rate, loss: rate, currency: acctCur, from: spec.currency, via: 'pointValue' };
+        else return { ok: false, reason: 'Waiting for the broker’s value per point for ' + baseAsset(sig.sym) };
       }else if (Math.abs(cashPerPoint / contract - 1) > 0.000001){
         const acct = typeof Feed !== 'undefined' && Feed.account && Feed.account.currency;
         if (acct && spec.currency === acct && !(spec.pointValue > 0))

@@ -29,6 +29,18 @@ const BotNotes = {
     const d = new Date(at), today = new Date().toDateString() === d.toDateString();
     return (today ? 'today ' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ') + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   },
+  /* the phrase offered in an empty box: today's date, and for a trading bot its record so far */
+  suggest(id){
+    const d = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    try {
+      const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[id] : null, L = b && !Bots.isPage(b) && Bots.ledger ? Bots.ledger(id) : null;
+      if (L && L.closed && L.closed.length){
+        const c = L.closed, net = c.reduce((a, t) => a + (t.pnl || 0), 0), won = c.filter(t => t.pnl > 0).length;
+        return d + ' — ' + (net >= 0 ? 'up ' : 'down ') + fmtNum(Math.abs(net)) + ' over ' + c.length + ' trades, ' + Math.round(won / c.length * 100) + '% won. ';
+      }
+    } catch(e){}
+    return d + ' — ';
+  },
   preview(text){ const first = (text || '').split('\n').find(l => l.trim()) || ''; return first.length > 90 ? first.slice(0, 90) + '…' : first; },
 
   view(id){
@@ -40,7 +52,7 @@ const BotNotes = {
         <small class="bnSaved">${n ? 'saved ' + esc(this.when(n.at)) : ''}</small><i>${open ? '▾' : '▸'}</i>
       </button>
       <div class="bnBody"${open ? '' : ' hidden'}>
-        <textarea class="bnText" rows="4" spellcheck="true" placeholder="e.g. 26 Sep — blocked metals, it lost on silver twice. Check its crypto record again next Friday.">${n ? esc(n.text) : ''}</textarea>
+        <textarea class="bnText" rows="4" spellcheck="true" data-suggest="${esc(this.suggest(id))}" placeholder="${esc(this.suggest(id))}…   (press Tab to use this)">${n ? esc(n.text) : ''}</textarea>
         <div class="bnFoot"><span class="dim2">Saved automatically as you type · only you see this · no bot reads it</span>
           <button type="button" class="bMini" data-bnstamp title="Add today’s date on a new line">+ date</button></div>
       </div>
@@ -77,6 +89,21 @@ const BotNotes = {
     ta.addEventListener('input', fit); setTimeout(fit, 0);
   },
 
+  /* Tab in an EMPTY note box takes the suggested phrase (a filled box: Tab moves on as usual) */
+  wireSuggest(){
+    if (this._sugWired) return; this._sugWired = true;
+    document.addEventListener('keydown', e => {
+      const ta = e.target;
+      if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.altKey || !ta || !ta.matches || !ta.matches('textarea[data-suggest]')) return;
+      if (ta.value.trim()) return;
+      e.preventDefault();
+      ta.value = ta.dataset.suggest;
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }, true);
+  },
   /* true while you are typing in a notes box on this page — the page must not rebuild */
-  typing(host){ const a = document.activeElement; return !!(a && a.classList && a.classList.contains('bnText') && host.contains(a)); },
+  typing(host){ const a = document.activeElement; return !!(a && a.classList && (a.classList.contains('bnText') || a.classList.contains('dnText')) && host.contains(a)); },
 };
+
+BotNotes.wireSuggest();

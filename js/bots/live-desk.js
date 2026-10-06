@@ -686,7 +686,10 @@ const LiveDesk = {
     const dir = p.type === 'buy' ? 1 : -1;
     let qty = 1, fx = 1;
     if (spec && spec.contractSize > 0 && spec.tickSize > 0 && spec.tickValue > 0){
-      qty = p.volume * spec.contractSize; fx = (spec.tickValue / spec.tickSize) / spec.contractSize;
+      qty = p.volume * spec.contractSize;
+      /* the account-currency value per point (MetaTrader's own figure) — the tick value
+         of a EUR/AUD/GBP index is in that currency, not in the account's dollars */
+      fx = spec.pointValue > 0 ? spec.pointValue / spec.contractSize : (spec.tickValue / spec.tickSize) / spec.contractSize;
     } else if (p.price_current !== p.price_open && p.profit){
       qty = 1; fx = p.profit / ((p.price_current - p.price_open) * dir);
     }
@@ -751,7 +754,7 @@ const LiveDesk = {
       if (!spec || !q || !(q.price > 0)){ need.push(sym); out.push({ sym, unknown: true }); continue; }
       const stopPct = S.stops.mode === 'percent' ? S.stops.slPct : 0.5;
       const stopDist = q.price * stopPct / 100;
-      const riskPerLot = (stopDist / spec.tickSize) * spec.tickValue;
+      const riskPerLot = spec.pointValue > 0 ? stopDist * spec.pointValue : (stopDist / spec.tickSize) * spec.tickValue;
       const minLot = spec.volumeMin || spec.volumeStep || 0.01;
       const minRisk = minLot * riskPerLot;
       const lots = Math.floor((riskCash / riskPerLot) / (spec.volumeStep || 0.01)) * (spec.volumeStep || 0.01);

@@ -156,8 +156,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6v12M6 8h0M10 4v16M14 7v10M18 5v14"/><rect x="4" y="9" width="4" height="6"/><rect x="12" y="10" width="4" height="5"/></svg>
       </button>
       <div class="tsep"></div>
-      <button data-tool="measure" title="Measure — click two points for the move, %, bars and time">
+      <button data-tool="measure" title="Measure — click two points for the move, %, bars and time · 📌 on the result pins it">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12l10-10 10 10-10 10z"/><path d="M7 12h2M11 12h2M15 12h2"/></svg>
+      </button>
+      <button data-tool="dmeasure" title="Date range — like Measure, plus the start and end date and time and the exact duration · 📌 pins it">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 15h10"/><path d="M15 13l2 2-2 2"/></svg>
       </button>
       <button data-tool="pencil" title="Free drawing — sketch anything (Esc to stop)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
@@ -614,6 +617,7 @@
 <script src="js/bots/context.js"></script>
 <script src="js/bots/brainml.js"></script>
 <script src="js/bots/engine.js"></script>
+<script src="js/bots/history-fix.js"></script>
 <script src="js/bots/strategies.js"></script>
 <script src="js/bots/confluence.js"></script>
 <script src="js/bots/backtest.js"></script>

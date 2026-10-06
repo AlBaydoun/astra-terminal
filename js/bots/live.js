@@ -258,7 +258,10 @@ const Live = {
         return { ok: false, why: baseAsset(sig.sym) + ': contract size and tick value disagree — restart the MT5 bridge so MetaTrader’s own value per lot is known' };
     }
 
-    const riskPerLot = (stopDist / spec.tickSize) * spec.tickValue;
+    /* MetaTrader's own value per 1.0 of price, in the ACCOUNT currency, wins: the
+       tick value on DE40/EU50/FR40/AU200/UK100 is in EUR/AUD/GBP, so sizing on it
+       risked up to 30% more or less than the cap said */
+    const riskPerLot = spec.pointValue > 0 ? stopDist * spec.pointValue : (stopDist / spec.tickSize) * spec.tickValue;
     if (!(riskPerLot > 0)) return { ok: false, why: 'the contract value could not be worked out' };
 
     const riskCash = riskBase * riskPct / 100;

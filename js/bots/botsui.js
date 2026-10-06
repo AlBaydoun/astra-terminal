@@ -54,6 +54,8 @@ Object.assign(Bots, {
 
   bindBotSettings(host){
     host.querySelectorAll('[data-bsen]').forEach(el => el.addEventListener('change', () => Bots.setDisabled(el.dataset.bsen, !el.checked)));
+    host.querySelectorAll('[data-bsfind]').forEach(el => el.addEventListener('input', () => { BotDash.bsQ = el.value; BotDash.filterBotSettings(host); }));
+    BotDash.filterBotSettings(host);
     host.querySelectorAll('[data-bsofffold]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); lsSet('astra_bsoff_open', !lsGet('astra_bsoff_open', false)); this.render(); }));
     host.querySelectorAll('[data-bspause]').forEach(el => el.addEventListener('click', () => Bots.setPaused(el.dataset.bspause, !(Bots.cfg(el.dataset.bspause) || {}).paused)));
     host.querySelectorAll('[data-bsreset]').forEach(el => el.addEventListener('click', () => this.resetBot(el.dataset.bsreset)));
@@ -117,6 +119,13 @@ Object.assign(Bots, {
     if (!host) return;
     if(this.active!=='liveManual'&&typeof LiveManual!=='undefined'&&(LiveManual.auto?.running||LiveManual.auto?.starting))LiveManual.auto.stop('Stopped because you left the live desk.');
     if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.sync(this.active);
+    /* never rebuild ANY page under your hand while you are writing a note on it
+       (the Bots on / off page used to wipe a half-written note) */
+    if (host.dataset.bot === this.active && typeof BotNotes !== 'undefined' && BotNotes.typing(host)) return;
+    /* the Deep Dive notes are folded each time you arrive at the Deep Dive, until you unfold them */
+    if (this.active === 'explorer' && this._prevActive !== 'explorer' && typeof Explorer !== 'undefined'){ Explorer.notesOpen = false; Explorer.dnListOpen = false; Explorer.noteQ = ''; Explorer.noteBot = '*'; Explorer._tickerBot = undefined;
+      try { const st = Explorer.secState(); if (st.max === 'notes'){ st.max = null; Explorer.saveSec(st); } } catch(e){} Explorer.dirty = true; }
+    this._prevActive = this.active;
     if (this.active === 'permissions'){
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
       OpenTrades.stop();
@@ -144,6 +153,8 @@ Object.assign(Bots, {
       return;
     }
     if (this.active === 'botsettings'){
+      /* never rebuild under a hand that is typing in the search box */
+      if (host.dataset.bot === 'botsettings' && document.activeElement && document.activeElement.matches && document.activeElement.matches('[data-bsfind]')) return;
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
       OpenTrades.stop();
       host.dataset.bot = 'botsettings';
@@ -408,7 +419,7 @@ Object.assign(Bots, {
     }
     if (b.scan)
       return `<div class="botCtl">
-        ${this.tfSel(cfg)}
+        ${this.tfSel(cfg, b, true)}
         <label class="bc">Min score <input type="number" data-cfg="minScore" value="${cfg.minScore}" min="0" max="100"></label>
         <button class="bBtn" data-act="scan">Scan now</button>
         <span class="bcNote">${this.scan.busy ? 'scanning…' : this.scan.at ? 'updated ' + this.when(this.scan.at) : 'not scanned yet'}
@@ -416,7 +427,7 @@ Object.assign(Bots, {
       </div>`;
     if (b.manual) return typeof ManualRules !== 'undefined' ? ManualRules.view() : '';
     return `<div class="botCtl">
-      ${this.tfSel(cfg)}
+      ${this.tfSel(cfg, b)}
       <label class="bc">Min score <input type="number" data-cfg="minScore" value="${cfg.minScore}" min="0" max="100"></label>
       <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen}" min="0" max="10"></label>
       <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause</label>
@@ -514,12 +525,17 @@ Object.assign(Bots, {
     </div>`;
   },
 
-  tfSel(cfg){
-    return `<label class="bc">Timeframe
+  tfSel(cfg, b, single){
+    if (single || !b) return `<label class="bc">Timeframe
       <select data-cfg="tf">${BotEngine.TFS.map(t =>
-        `<option value="${t}"${t === cfg.tf ? ' selected' : ''}>${t}</option>`).join('')}</select></label>` +
-      (cfg.tfAuto !== undefined
-        ? `<label class="bc"><input type="checkbox" data-cfg="tfAuto" ${cfg.tfAuto ? 'checked' : ''}> Auto</label>` : '');
+        `<option value="${t}"${t === cfg.tf ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    /* tick one timeframe or several - with several, the bot uses whichever has done best */
+    const list = Bots.tfList(cfg), now = Bots._tfNow[b.id];
+    const st = list.length > 1 ? Bots.tfStats(b.id, list) : null;
+    return `<span class="bc tfPick" title="Tick one timeframe, or several: then the bot uses the one where its own trades have done best, and keeps trying the others">Timeframes
+      ${BotEngine.TFS.map(t => { const on = list.includes(t), s = st && st[t];
+        return `<button type="button" class="tfChip${on ? ' on' : ''}${now && now.tf === t ? ' now' : ''}" data-tftick="${t}" title="${on ? (s ? s.n + ' trades in the last 60 days · ' + (s.avgR >= 0 ? '+' : '') + s.avgR.toFixed(2) + 'R per trade' : 'in use') + ' — click to untick' : 'Click to let the bot use ' + t + ' too'}">${on ? '✓ ' : ''}${t}</button>`; }).join('')}
+      ${list.length > 1 ? `<small class="tfNow">${now ? 'now on <b>' + esc(now.tf) + '</b> — ' + esc(now.why) : 'picks the best of these on its next cycle'}</small>` : ''}</span>`;
   },
 
   /* ---------------- Market Scanner ---------------- */
@@ -1117,6 +1133,19 @@ Object.assign(Bots, {
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.liveManual) LiveManual.bind(host);
     else if (b.live) this.bindLive(host);
+    host.querySelectorAll('[data-tftick]').forEach(el => el.addEventListener('click', e => {
+      e.preventDefault();
+      const cfg = this.cfg(b.id), t = el.dataset.tftick;
+      let list = this.tfList(cfg);
+      list = list.includes(t) ? list.filter(x => x !== t) : list.concat([t]);
+      if (!list.length) return toast('A bot needs at least one timeframe', 'warn');
+      list = BotEngine.TFS.filter(x => list.includes(x));            // keep them in time order
+      cfg.tfs = list.length > 1 ? list : null;
+      if (!list.includes(cfg.tf)) cfg.tf = list[0];
+      if (list.length === 1) cfg.tf = list[0];
+      delete this._tfNow[b.id];
+      this.saveCfg(b.id); this.render();
+    }));
     host.querySelectorAll('[data-cfg]').forEach(el => {
       el.addEventListener('change', () => {
         const cfg = this.cfg(b.id);
