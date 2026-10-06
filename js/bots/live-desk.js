@@ -806,12 +806,12 @@ const LiveDesk = {
     /* switched off in ⚙ Layout: hidden, never removed — its live refresh keeps working */
     const off = !!(S.ui.hidden || {})[key] && !this.ALWAYS.includes(key);
     return `<section class="ldCard ${cls || ''}${folded ? ' folded' : ''}${half ? ' half' : ''}" data-ldsec="${key}" ${id ? 'id="' + id + '"' : ''}${off ? ' hidden' : ''}>
-      <div class="ldCardHead" draggable="true" data-lddrag="${key}" title="Drag to move this section">
-        <i>${icon}</i><b>${esc(title)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}
+      <div class="ldCardHead" draggable="true" data-lddrag="${key}" data-ldheadfold="${key}" title="Click to ${folded ? 'unfold' : 'fold'} · drag to move this section">
+        <em class="ldChev">${folded ? '▸' : '▾'}</em><i>${icon}</i><b>${esc(title)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}
         <span class="ldSecTools">
           <button data-ldmove="${key}|-1" title="Move up">▲</button><button data-ldmove="${key}|1" title="Move down">▼</button>
           <button data-ldhalf="${key}" title="${half ? 'Full width' : 'Half width'}">${half ? '⇔' : '⇹'}</button>
-          <button data-ldfold="${key}" title="${folded ? 'Unfold' : 'Fold away'}">${folded ? '▸' : '▾'}</button>
+          <button data-ldfold="${key}" title="${folded ? 'Unfold' : 'Fold away'}">${folded ? '▸ open' : '▾ fold'}</button>
         </span>
       </div><div class="ldCardBody">${body}</div></section>`;
   },
@@ -1281,7 +1281,7 @@ const LiveDesk = {
     const bar = r => {
       const pct = Math.min(100, r.minRisk / (f.riskCash || 1) * 100);
       return `<div class="ldFit ${r.fits ? 'ok' : 'no'}" title="${esc(baseAsset(r.sym) + ' — smallest order ' + r.minLot + ' lot risks ' + fmtNum(r.minRisk) + ' at a ' + r.stopPct + '% stop; you allow ' + fmtNum(f.riskCash) + (r.margin != null ? ' · margin ≈ ' + fmtNum(r.margin) : ''))}">
-        <span>${esc(typeof BotMarkets !== 'undefined' ? BotMarkets.short(r.sym) : baseAsset(r.sym))}</span><i><b style="width:${pct.toFixed(0)}%"></b></i><small>${r.fits ? (r.lots ? r.lots + ' lot' : r.minLot + ' lot') : fmtNum(r.minRisk)}</small></div>`;
+        <span>${esc(typeof BotMarkets !== 'undefined' ? BotMarkets.short(r.sym) : baseAsset(r.sym))}</span><i><b style="width:${pct.toFixed(0)}%"></b></i><small>${r.fits ? +(+(r.lots || r.minLot)).toFixed(4) + ' lot' : fmtNum(r.minRisk)}</small></div>`;
     };
     const body = `<div class="ldFitHead">With <b>${fmtNum(f.pool)} ${esc(a.currency)}</b> of bot money and <b>${S.riskPct}%</b> per trade, one trade may lose <b>${fmtNum(f.riskCash)} ${esc(a.currency)}</b>.
         <span class="up">${fits.length} pair${fits.length === 1 ? '' : 's'} fit</span>${big.length ? ` · <span class="down">${big.length} need a bigger budget</span>` : ''}${unk.length ? ` · <span class="dim2">${unk.length} not priced yet</span>` : ''}</div>
@@ -1637,4 +1637,12 @@ document.addEventListener('click', e => {
   LiveDesk._whyOpen = LiveDesk._whyOpen || new Set();
   box.hidden = !box.hidden; w.textContent = box.hidden ? 'why?' : 'hide';
   if (box.hidden) LiveDesk._whyOpen.delete(id); else LiveDesk._whyOpen.add(id);
+});
+
+/* a click anywhere on a section's title bar folds it (the buttons on the right keep their own jobs) */
+document.addEventListener('click', e => {
+  const h = e.target && e.target.closest && e.target.closest('[data-ldheadfold]'); if (!h) return;
+  if (e.target.closest('button, input, select, a, label')) return;
+  const S = LiveDesk.load(); S.ui.folded = S.ui.folded || {}; const k = h.dataset.ldheadfold;
+  S.ui.folded[k] = !S.ui.folded[k]; LiveDesk.save(); LiveDesk.rerender();
 });

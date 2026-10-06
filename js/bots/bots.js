@@ -284,6 +284,8 @@ const Bots = {
     /* bots the Strategy Lab has published come back before anything is wired */
     if (typeof StratLab !== 'undefined') try { StratLab.init(); } catch(e){}
     if (typeof Checker !== 'undefined') try { Checker.mountAll(); } catch(e){ console.warn('ASTRA checker bots:', e.message); }
+    /* researched ideas you added as paper bots come back on every start */
+    if (typeof Research !== 'undefined') try { Research.mountAll(); } catch(e){ console.warn('ASTRA research bots:', e.message); }
     /* the one-time correction of the recorded trades (yen / euro-index values,
        old commission) - in the window that runs the bots, before any ledger loads */
     if (this.isRunner() && typeof HistoryFix !== 'undefined') try { HistoryFix.runOnce(); } catch(e){ console.warn('ASTRA history fix:', e.message); }

@@ -308,6 +308,7 @@ Object.assign(Bots, {
       (b.dash ? BotDash.view()
         : b.explorer ? Explorer.view()
         : b.checker ? Checker.view()
+        : b.researchDesk ? Research.view()
         : b.analysis ? TradeAnalysis.view()
         : b.trades ? OpenTrades.view()
         : b.fit ? this.fitView()
@@ -1128,7 +1129,7 @@ Object.assign(Bots, {
         if (act === 'enable') Bots.setDisabled(id, false);
       }));
     }
-    if (b.explorer) Explorer.bind(host); else if (b.checker) Checker.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
+    if (b.explorer) Explorer.bind(host); else if (b.checker) Checker.bind(host); else if (b.researchDesk) Research.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.liveManual) LiveManual.bind(host);
