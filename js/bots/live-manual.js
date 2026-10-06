@@ -38,9 +38,12 @@ const LiveManual = {
       </div><button class="bBtn" data-lm-act="save">Save shared limits &amp; allow selected pair</button><p id="lmAllowed"></p></details>`,
       confirm:`<section class="wsTradeSection"><div id="lmPreview" class="lmPreview" hidden></div>
       <div class="lmActions"><button class="bBtn danger" id="lmSend" data-lm-act="send" disabled>Confirm real market order</button><button class="bBtn" id="lmReviewed" data-lm-act="reviewed" hidden>I checked the uncertain outcome in MT5</button></div><p id="lmMessage" role="status"></p>
-      <p>Accepted SL/TP levels are held by the broker and remain active with your PC off. Gaps can fill beyond a stop. Pending orders, trailing stops and stop edits are managed in MetaTrader. Automatic market entries have their own Start control below.</p></section>`,
-      auto: typeof ManualAuto!=='undefined'?this.automation().view():'',
-      tuning: typeof ManualAuto!=='undefined'?this.tuningView():'',
+      <p>Accepted SL/TP levels are held by the broker and remain active with your PC off. Gaps can fill beyond a stop. Pending orders, trailing stops and stop edits are managed in MetaTrader.</p></section>`,
+      /* automatic real trading has ONE home since 2026-10-06 (Al's choice): Live connection & safety.
+         The second route that used to live here stopped when you left the page and ignored the
+         desk's bot money and exit rules - two ways to do one thing was the confusion. */
+      auto:`<div class="lmAutoOff"><div class="lmAutoOffNote">⏸ <b>Switched off here.</b> Automatic bots on real money run from <b>Live connection &amp; safety</b> — one place, with the bot money, exit rules, kill switch and log. This section stays for you to look at; it cannot start. <button class="bBtn go" data-ws-bot="live">Open Live connection &amp; safety ↗</button></div>${typeof ManualAuto!=='undefined'?this.automation().view():''}</div>`,
+      tuning:typeof ManualAuto!=='undefined'?`<div class="lmAutoOff">${this.tuningView()}</div>`:'',
       positions:`<section class="wsTradeSection"><h3>3 · Real open trades</h3><div id="lmPositions"></div><p>These are broker positions across the account. Close buttons appear only for trades opened by this LIVE Trading Bot. Manage stop/target changes and other positions directly in MT5.</p></section>`,
     };
     const body=typeof BotLayout!=='undefined'?BotLayout.compose(this.id,parts,true):Object.values(parts).join('');
@@ -354,8 +357,10 @@ const LiveManual = {
     const bind=auto.bind;
     auto.bind=function(host){bind.call(this,host);const mode=host.querySelector('[data-ma="mode"]');mode.value='confluence';mode.disabled=true;mode.querySelector('[value="price"]').disabled=true;};
     const refresh=auto.refresh;
-    auto.refresh=function(){{const snap=JSON.stringify(Object.fromEntries(keepKeys.map(k=>[k,this.draft[k]])));if(snap!==this._saved){this._saved=snap;lsSet('astra_liveauto_draft',JSON.parse(snap));}}refresh.call(this);const host=document.querySelector('[data-auto-target="liveManual"]');if(host){host.querySelector('[data-ma="mode"]').disabled=true;host.querySelector('#maStatus').textContent=this.status+' · '+this.count+' REAL entries this session';}};
+    auto.refresh=function(){{const snap=JSON.stringify(Object.fromEntries(keepKeys.map(k=>[k,this.draft[k]])));if(snap!==this._saved){this._saved=snap;lsSet('astra_liveauto_draft',JSON.parse(snap));}}refresh.call(this);const host=document.querySelector('[data-auto-target="liveManual"]');if(host){host.querySelector('[data-ma="mode"]').disabled=true;host.querySelector('#maStatus').textContent=this.status+' · '+this.count+' REAL entries this session';const st=host.querySelector('[data-ma-start]');if(st){st.disabled=true;st.title='Switched off here — use Live connection & safety';}}};
     auto.start=async function(){
+      /* switched off 2026-10-06 (Al's choice): automatic real trading runs on the desk only */
+      this.status='Switched off here — automatic bots on real money run from Live connection & safety.';this.refresh();return false;
       await LiveManual.refresh();const why=LiveManual.stateGate();
       if(why){this.status=why;this.refresh();return false;}
       this._rm=null;const picked=this.picked(),rm=this.readyMap(),ok=picked.filter(id=>rm[id]?.ok),no=picked.filter(id=>!rm[id]?.ok);

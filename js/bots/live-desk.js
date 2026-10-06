@@ -74,6 +74,10 @@ const LiveDesk = {
     }
     /* the first version chose bots automatically by default; now you tick them */
     if (!s.v){ s.v = 2; s.bots.mode = 'manual'; }
+    /* 2026-10-06, Al's decision: Pattern · Indices had indices switched OFF inside the desk
+       (markets gold, crypto, stocks), so on real money it tried Apple, Coca-Cola and gold in yen
+       and never an index. It now follows the bot's own markets, exactly like its paper twin. */
+    if (!s.fix20261006){ s.fix20261006 = true; if (s.perBot && s.perBot.patIndices){ s.perBot.patIndices.markets = null; s.perBot.patIndices.pairsOff = []; } setTimeout(() => this.save(), 0); }
     this.state = s;
     return s;
   },
@@ -823,7 +827,16 @@ const LiveDesk = {
     ];
     const chain = gates.map((g, i) => `<div class="ldGate ${g.on ? 'on' : ''}"><i>${g.icon}</i><b>${esc(g.t)}</b><span>${esc(g.s)}</span></div>${i < 3 ? '<em class="ldGateArrow">›</em>' : ''}`).join('');
     const pool = this.budget(), now = this.budgetNow(), pnl = this.pnlSince(), openPl = this.openPnl();
+    const heroShut = !!((S.ui && S.ui.folded) || {}).hero;
+    const badge = mode === 'live' ? 'LIVE DESK · REAL MONEY' : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF';
+    if (heroShut) return `<div class="ldHero ldHeroMini">
+      <button class="ldHeroFold" data-ldfold="hero" title="Unfold the banner">▸</button>
+      <div class="ldBadge ${mode}"><i></i>${badge}</div>
+      <div class="ldGatesMini">${gates.map(g => `<span class="${g.on ? 'on' : ''}" title="${esc(g.t + ' — ' + g.s)}">${g.icon} ${esc(g.t)}</span>`).join('')}</div>
+      <span class="ldHeroMoney">bot money <b class="${now >= pool ? 'up' : 'down'}">${fmtNum(now)}</b> <small>${esc(a.currency)}</small></span>
+    </div>`;
     return `<div class="ldHero">
+      <button class="ldHeroFold" data-ldfold="hero" title="Fold the banner to one line">▾</button>
       <div class="ldHeroLeft">
         <div class="ldBadgeRow"><div class="ldBadge ${mode}"><i></i>${mode === 'live' ? 'LIVE DESK · REAL MONEY' : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF'}</div>
           <button class="bMini ldHowBtn" data-ldact="howto" title="How to trade with the desk — worked examples with pictures">📘 How to trade · examples</button>
@@ -1071,40 +1084,68 @@ const LiveDesk = {
   },
 
   /* ---------- WHICH BOTS — with the matryoshka inside each ---------- */
+  /* ---------- WHICH BOTS ----------
+     In the design of the old "Automatic entries · REAL" list (Al liked it, 2026-10-06):
+     search, sort, grouping, the qualified count, the six readiness dots with "why?",
+     the paper figures - plus what only the desk has: chosen / SHADOW / LIVE, the small
+     record curve, and "shape it" (markets, pairs, timeframes, stops, exits per bot). */
+  BOT_SORTS: [['strong', 'Strongest first'], ['pnl', 'Best paper result'], ['pf', 'Best profit factor'], ['trades', 'Most trades'], ['az', 'A → Z']],
+  BOT_GROUPS: [['status', 'By readiness'], ['family', 'By family'], ['chosen', 'Chosen first'], ['none', 'No groups']],
+  botView(){ const S = this.load(), v = (S.ui && S.ui.botView) || {}; return { sort: v.sort || 'strong', group: v.group || 'status' }; },
+  family(b){ return typeof ManualAuto !== 'undefined' && ManualAuto.family ? ManualAuto.family(b) : 'Strategy bots'; },
   botsView(S){
     const cands = this.candidates();
     const chosen = this.selected();
     const auto = S.bots.mode === 'auto';
-    const rows = cands.map((c, i) => {
+    const V = this.botView();
+    const door = S.minReady || 4;
+    const qual = cands.filter(c => c.ready.met >= 4).length;
+    const met = c => c.ready.met || 0, pf = c => c.row && c.row.trades ? (c.row.pf === Infinity ? 99 : (c.row.pf || 0)) : -1;
+    const pnl = c => c.row ? c.row.pnl : -1e12, trades = c => c.row ? c.row.trades : 0;
+    const cmp = { strong: (x, y) => ((met(y) >= 4) - (met(x) >= 4)) || (met(y) - met(x)) || (pf(y) - pf(x)) || (pnl(y) - pnl(x)),
+      pnl: (x, y) => pnl(y) - pnl(x), pf: (x, y) => pf(y) - pf(x), trades: (x, y) => trades(y) - trades(x),
+      az: (x, y) => String(x.b.name).localeCompare(String(y.b.name)) }[V.sort] || (() => 0);
+    const list = cands.slice().sort((x, y) => cmp(x, y) || String(x.b.name).localeCompare(String(y.b.name)));
+    const row = (c) => {
       const b = c.b, r = c.row, id = b.id;
       const on = chosen.includes(id);
       const ticked = auto ? on : S.bots.picked.includes(id);
       const a = Live.state.armed[id];
       const p = this.pb(id);
-      const dots = c.ready.checks.map(ch => `<i class="${ch.ok ? 'ok' : ''}" title="${esc(ch.label + ' — ' + ch.got)}"></i>`).join('');
-      const rec = r && r.trades ? `${r.trades} trades · ${Math.round(r.winRate)}% · <b class="${pctClass(r.pnl)}">${(r.pnl >= 0 ? '+' : '') + fmtNum(r.pnl)}</b> · PF ${r.pf === Infinity ? '∞' : (r.pf || 0).toFixed(2)}` : 'no paper trades yet';
-      const low = c.ready.met < (S.minReady || 4);
-      const why = c.paused ? 'paused' : (auto && low ? 'below the door · ' + c.ready.met + ' of ' + c.ready.of : low ? c.ready.met + ' of ' + c.ready.of + ' conditions — little evidence' : '');
-      const syms = this.symbolsFor(b);
-      const shaped = this.shaped(b);
-      const tfs = this.tfsFor(b);
-      return `<div class="ldBotBox${on ? ' on' : ''}${c.paused ? ' no' : ''}${a && a.mode === 'live' ? ' live' : ''}${p.open ? ' open' : ''}" data-ldbotrow="${esc(id)}">
-        <label class="ldBot">
-          <input type="checkbox" data-ldbot="${esc(id)}"${ticked ? ' checked' : ''}${auto || c.paused ? ' disabled' : ''}>
-          <span class="ldBotIcon">${typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.icon(WorkspaceUI.botIcon(b)) : ''}</span>
-          <span class="ldBotMain"><b>${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}</b>
-            ${on ? `<em class="ldTag ${a ? a.mode : ''}">${auto ? 'chosen by the desk' : 'chosen'}${a ? ' · ' + a.mode.toUpperCase() : ''}</em>` : ''}${why ? `<em class="ldTag ${c.paused || (auto && low) ? 'no' : 'warn'}">${esc(why)}</em>` : ''}${shaped ? '<em class="ldTag own">your settings · run by the desk</em>' : ''}
-            <span class="ldBotRec">${rec}</span>
-            <span class="ldBotWhere">${shaped ? (tfs || [c.cfg.tf]).join(', ') + ' · ' + (p.markets ? p.markets.map(g => (this.groups()[g] || {}).label || g).join(', ') : 'its own markets') : (c.cfg.tf || '15m') + (c.cfg.tfAuto ? ' auto' : '') + ' · its own markets'} · ${syms.length} pair${syms.length === 1 ? '' : 's'}</span>
-          </span>
-          ${this.spark(r && r.curve)}
-          <span class="ldDots" title="live-readiness conditions met">${dots}</span>
-          <span class="ldRank">${r && r.trades ? '#' + (i + 1) : '—'}</span>
-        </label>
+      const ok = c.ready.met >= 4;
+      const shaped = this.shaped(b), tfs = this.tfsFor(b), syms = this.symbolsFor(b);
+      const state = c.paused ? '<em class="maNo">paused</em>' : ok ? '<em class="maOk">✓ Qualified for real money</em>' : c.ready.of ? `<em class="maNo">Not yet · meets ${c.ready.met} of ${c.ready.of}</em>` : '<em class="maNo">No paper record yet</em>';
+      const dots = c.ready.checks && c.ready.checks.length ? `<span class="maDots" title="${esc(c.ready.checks.map(ch => (ch.ok ? '✓ ' : '✕ ') + ch.label + ' — ' + ch.got).join('\n'))}">${c.ready.checks.map(ch => `<i class="${ch.ok ? 'ok' : ''}"></i>`).join('')}</span>` : '';
+      const fig = r && r.trades ? `<span class="maFig">PF <b class="${pf(c) >= 1.3 ? 'up' : pf(c) < 1 ? 'down' : ''}">${r.pf === Infinity ? '∞' : (r.pf || 0).toFixed(2)}</b> · <b class="${r.pnl >= 0 ? 'up' : 'down'}">${(r.pnl >= 0 ? '+' : '') + fmtNum(r.pnl)}</b> · ${r.trades} trades · ${Math.round(r.winRate || 0)}%</span>` : '<span class="maFig">no paper trades yet</span>';
+      const tag = on ? `<em class="ldTag ${a ? a.mode : ''}">${auto ? 'chosen by the desk' : 'chosen'}${a ? ' · ' + a.mode.toUpperCase() : ''}</em>` : '';
+      const warn = ticked && !ok ? '<em class="maWarn">⚠ ticked at your own risk</em>' : '';
+      const whyOpen = this._whyOpen && this._whyOpen.has(id);
+      const where = (shaped ? (tfs || [c.cfg.tf]).join(', ') + ' · ' + (p.markets ? p.markets.map(g => (this.groups()[g] || {}).label || g).join(', ') : 'its own markets') : (c.cfg.tf || '15m') + (c.cfg.tfAuto ? ' auto' : '') + ' · its own markets') + ' · ' + syms.length + ' pair' + (syms.length === 1 ? '' : 's');
+      return `<div class="maSrcRow ldBotBox${ticked ? ' on' : ''}${ticked && !ok ? ' warn' : ''}${c.paused ? ' no' : ''}${a && a.mode === 'live' ? ' live' : ''}${p.open ? ' open' : ''}" data-ldbotrow="${esc(id)}" data-ldhay="${esc((b.name + ' ' + this.family(b) + ' ' + (on ? 'chosen' : '') + ' ' + (a ? a.mode : '') + (ok ? ' qualified' : '') + (shaped ? ' shaped' : '')).toLowerCase())}">
+        <label title="${!ok ? 'NOT qualified for real money — you may still tick it, at your own risk. Press why? to see what it is missing' : 'Tick to let this bot trade on the real account through the desk'}"><input type="checkbox" data-ldbot="${esc(id)}"${ticked ? ' checked' : ''}${auto || c.paused ? ' disabled' : ''}>
+          <span class="maName">${esc(typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name)}</span></label>
+        ${tag}${state}${dots}${fig}${warn}${shaped ? '<em class="ldTag own">your settings · run by the desk</em>' : ''}
+        ${this.spark(r && r.curve)}
+        ${c.ready.checks && c.ready.checks.length ? `<button type="button" class="maWhyBtn" data-ldwhy="${esc(id)}">${whyOpen ? 'hide' : 'why?'}</button>` : ''}
         <button class="ldOpenBtn" data-ldopen="${esc(id)}" title="Open this bot: its markets, pairs, timeframes, stops and exit rules">${p.open ? '▾ close' : '▸ shape it'}</button>
+        <div class="ldBotWhere dim2">${esc(where)}</div>
+        ${c.ready.checks && c.ready.checks.length ? `<div class="maWhy" data-ldwhybox="${esc(id)}"${whyOpen ? '' : ' hidden'}>${c.ready.checks.map(ch => `<div class="${ch.ok ? 'ok' : 'no'}"><b>${ch.ok ? '✓' : '✕'}</b><span>${esc(ch.label)}</span><i>${esc(ch.got)}</i></div>`).join('')}
+          <small>A bot needs at least 4 of these 6 on its paper record to count as qualified. When YOU tick it, the choice is yours; the automatic choice only takes bots past the door (${door} of 6).</small></div>` : ''}
         ${p.open ? this.botPanel(b, c) : ''}
       </div>`;
-    }).join('');
+    };
+    let rowsHtml;
+    if (!list.length) rowsHtml = '<div class="empty">No bot is switched on</div>';
+    else if (V.group === 'none') rowsHtml = list.map(row).join('');
+    else {
+      const key = c => V.group === 'family' ? this.family(c.b)
+        : V.group === 'chosen' ? (chosen.includes(c.b.id) ? '1|Chosen for the desk' : '2|Not chosen')
+        : (c.ready.met >= 4 ? '1|✓ Qualified for real money' : !c.ready.of ? '4|No paper record yet' : c.ready.met >= 3 ? '2|Close — 3 of 6 conditions met' : '3|Further away — 2 of 6 or fewer met');
+      const groups = new Map(); for (const c of list){ const k = key(c); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(c); }
+      let keys = [...groups.keys()];
+      if (V.group === 'family') keys.sort((x, y) => Math.max(...groups.get(y).map(met)) - Math.max(...groups.get(x).map(met)) || x.localeCompare(y)); else keys.sort();
+      rowsHtml = keys.map(k => `<div class="maGroupHead">${esc(k.replace(/^\d\|/, ''))}<span>${groups.get(k).length}</span></div>` + groups.get(k).map(row).join('')).join('');
+    }
     const body = `
       <div class="ldModeBar">
         <button class="ldModeBtn${!auto ? ' on' : ''}" data-ldmode="bots|manual"><i>☑</i><b>I tick them</b><span>any bot you tick runs — open it to shape where and how</span></button>
@@ -1112,10 +1153,21 @@ const LiveDesk = {
         <label class="ldCount ${auto ? '' : 'dim'}">how many <input type="number" min="1" max="8" step="1" data-ld="bots.count" value="${S.bots.count}"${auto ? '' : ' disabled'}></label>
         ${auto ? '<button class="bMini" data-ldact="repick" title="Choose again now, from today’s ranking">↻ choose again</button>' : ''}
         <label class="ldCount ${auto ? '' : 'dim'}" title="How many of the six live-readiness conditions (the dots) a bot must meet before the AUTOMATIC choice takes it">door
-          <select data-ld="minReady"${auto ? '' : ' disabled'}>${[4, 3, 2, 1].map(n => `<option value="${n}"${(S.minReady || 4) === n ? ' selected' : ''}>${n} of 6${n === 4 ? ' · recommended' : n === 1 ? ' · risky' : ''}</option>`).join('')}</select></label>
+          <select data-ld="minReady"${auto ? '' : ' disabled'}>${[4, 3, 2, 1].map(n => `<option value="${n}"${door === n ? ' selected' : ''}>${n} of 6${n === 4 ? ' · recommended' : n === 1 ? ' · risky' : ''}</option>`).join('')}</select></label>
       </div>
-      <div class="ldBots">${rows || '<div class="empty">No bot is switched on</div>'}</div>
-      <div class="ldNote">The six dots are the live-readiness conditions from the Performance Report. When YOU tick a bot, the choice is yours whatever the dots say — a bot with few dots is marked <b>little evidence</b>. The automatic choice only takes bots past the door. <b>▸ shape it</b> opens the bot: tick its markets, go inside a market to tick pairs, tick timeframes, give it its own stops and exit rules. Leave anything alone and it stays automatic. A bot you shaped is run by the desk itself with the bot’s own strategy; an untouched bot simply mirrors what its paper twin does.</div>`;
+      <div class="maSources ldSources">
+        <div class="maSrcHead"><b>Which bots may place REAL orders</b><span>${chosen.length} chosen</span></div>
+        <div class="maSrcTools">
+          <input type="search" class="ldBotFind" data-ldbotq="1" placeholder="Find a bot — name, family (pattern, research, US stocks…) or “qualified”" value="${esc(this._botQ || '')}">
+          <label>Sort <select data-ldbotsort="1">${this.BOT_SORTS.map(([v, t]) => `<option value="${v}"${v === V.sort ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label>Group <select data-ldbotgroup="1">${this.BOT_GROUPS.map(([v, t]) => `<option value="${v}"${v === V.group ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        </div>
+        <div class="maSrcNote">${qual ? `<b class="up">${qual} of ${cands.length}</b> bots are qualified for real money right now — tick the ones you want.` : `<b class="down">None of your ${cands.length} bots is qualified for real money yet.</b> Each one first has to prove itself on paper.`}
+          A bot qualifies when its paper record meets <b>at least 4 of 6</b> safety conditions — the six dots show which (green = met). Press <b>why?</b> on any bot to see its figures.
+          <br><b class="down">⚠ You may also tick a bot that has NOT qualified</b> — it is your decision, and you are warned with what it is missing when you tick it.</div>
+        <div class="maSrcList ldBots">${rowsHtml}</div>
+      </div>
+      <div class="ldNote"><b>▸ shape it</b> opens the bot: tick its markets, go inside a market to tick pairs, tick timeframes, give it its own stops and exit rules. Leave anything alone and it stays automatic. A bot you shaped is run by the desk itself with the bot’s own strategy; an untouched bot simply mirrors what its paper twin does.</div>`;
     return this.card('bots', 'Which bots', '🤖', body, chosen.length ? chosen.length + ' chosen' : 'none chosen yet', 'ldBotsCard');
   },
   spark(curve){
@@ -1329,6 +1381,7 @@ const LiveDesk = {
              arm: (host.querySelector('#ldArmInput') || {}).value || '', live: (host.querySelector('#ldLiveInput') || {}).value || '' };
   },
   restore(host, snap){
+    if (this._botQ && this.filterBots) this.filterBots(host);   /* a bot search survives the redraw */
     if (!snap) return;
     [...host.querySelectorAll('.ldAck')].forEach((b, i) => { if (snap.acks[i]) b.checked = true; });
     const a = host.querySelector('#ldArmInput'); if (a && snap.arm) a.value = snap.arm;
@@ -1381,7 +1434,10 @@ const LiveDesk = {
       const id = el.dataset.ldbot;
       if (el.checked){
         const c = this.candidates().find(x => x.b.id === id);
-        if (c && c.ready.met < (S.minReady || 4) && !(S.skip && S.skip['ok:' + id]) && !confirm(((BOT_BY_ID[id] || {}).name || id) + ' meets only ' + c.ready.met + ' of 6 readiness conditions — little evidence behind it. Run it on the real account anyway? The bot money is the most it can lose.')){ el.checked = false; return; }
+        if (c && c.ready.met < 4 && !(S.skip && S.skip['ok:' + id])){
+          const miss = c.ready.checks && c.ready.checks.length ? c.ready.checks.filter(ch => !ch.ok).map(ch => '  ✕ ' + ch.label + ' — ' + ch.got).join('\n') : '  ✕ no paper record yet';
+          if (!confirm('⚠ WARNING — ' + ((BOT_BY_ID[id] || {}).name || id) + ' has NOT qualified for real money' + (c.ready.of ? ' (meets ' + c.ready.met + ' of ' + c.ready.of + ', needs 4)' : '') + '.\n\nWhat it is missing:\n' + miss + '\n\nIts signals would place REAL orders on your JustMarkets account. A bot that is not proven on paper is more likely to lose real money. The bot money is the most it can lose.\n\nTick it anyway, at your own risk?')){ el.checked = false; return; }
+        }
         if (S.on && this.mode() === 'live' && !confirm('The desk is LIVE. ' + ((BOT_BY_ID[id] || {}).name || id) + ' will place real orders as soon as it is ticked. Continue?')){ el.checked = false; return; }
         S.skip = S.skip || {}; S.skip['ok:' + id] = Date.now(); delete S.skip[id];
         if (!S.bots.picked.includes(id)) S.bots.picked.push(id);
@@ -1556,3 +1612,29 @@ const LiveDesk = {
     }
   },
 };
+
+/* the desk's bot list: the search box hides rows in place */
+document.addEventListener('input', e => {
+  const q = e.target && e.target.matches && e.target.matches('[data-ldbotq]') ? e.target : null; if (!q) return;
+  LiveDesk._botQ = q.value;
+  LiveDesk.filterBots(q.closest('.ldCard') || document);
+});
+LiveDesk.filterBots = function(root){
+  const words = String(this._botQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+  (root || document).querySelectorAll('[data-ldbotrow]').forEach(r => { r.hidden = !words.every(w => (r.dataset.ldhay || '').includes(w)); });
+};
+
+/* the desk's bot list: sort, group and "why?" */
+document.addEventListener('change', e => {
+  const t = e.target; if (!t || !t.matches || !t.matches('[data-ldbotsort],[data-ldbotgroup]')) return;
+  const S = LiveDesk.load(); S.ui = S.ui || {}; S.ui.botView = S.ui.botView || {};
+  S.ui.botView[t.matches('[data-ldbotsort]') ? 'sort' : 'group'] = t.value; LiveDesk.save(); LiveDesk.rerender();
+});
+document.addEventListener('click', e => {
+  const w = e.target && e.target.closest && e.target.closest('[data-ldwhy]'); if (!w) return;
+  e.preventDefault(); e.stopPropagation();
+  const id = w.dataset.ldwhy, box = document.querySelector('[data-ldwhybox="' + CSS.escape(id) + '"]'); if (!box) return;
+  LiveDesk._whyOpen = LiveDesk._whyOpen || new Set();
+  box.hidden = !box.hidden; w.textContent = box.hidden ? 'why?' : 'hide';
+  if (box.hidden) LiveDesk._whyOpen.delete(id); else LiveDesk._whyOpen.add(id);
+});

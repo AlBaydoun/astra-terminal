@@ -2291,8 +2291,10 @@ html[data-panel="replay"] #obsMax .obsMaxBar [data-obsact]{ display:none; }
 .ldMatrix{ border-collapse:separate; border-spacing:3px; font-size:11px; }
 .ldMatrix th{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); text-align:left; padding:4px 6px; white-space:nowrap; }
 .ldMatrix td{ padding:0; }
-.ldCell{ display:flex; align-items:center; justify-content:center; gap:4px; min-width:58px; height:30px; border-radius:6px; cursor:pointer; font-family:"JetBrains Mono",monospace; border:1px solid transparent; }
-.ldCell i{ font-style:normal; font-size:10px; }
+/* a TABLE CELL, never a flex box: display:flex on a <td> takes it out of its column, so the
+   cells of a row wrapped and stacked and every count landed under the wrong market */
+.ldCell{ display:table-cell; text-align:center; vertical-align:middle; white-space:nowrap; min-width:58px; height:30px; border-radius:6px; cursor:pointer; font-family:"JetBrains Mono",monospace; border:1px solid transparent; }
+.ldCell i{ font-style:normal; font-size:10px; margin-right:4px; }
 .ldCell.on{ background:rgba(46,189,133,.14); border-color:rgba(46,189,133,.4); color:var(--text); }
 .ldCell.off{ background:rgba(246,70,93,.08); border-color:rgba(246,70,93,.3); color:var(--dim); text-decoration:line-through; }
 .ldCellNone{ text-align:center; color:var(--dim); opacity:.5; }
@@ -3150,3 +3152,34 @@ html[data-tile] #toasts { display: none !important; }
 .otSum .dashTotal .up{ color:#2ebd85; } .otSum .dashTotal .down{ color:#f6465d; }
 .otCard.otFlash{ animation:otFlash 2.4s ease-out; }
 @keyframes otFlash{ 0%,30%{ box-shadow:0 0 0 2px var(--accent,#00e5ff), 0 0 22px rgba(0,229,255,.45); } 100%{ box-shadow:none; } }
+
+/* live desk: the banner folds to one line; the bot list has a search box */
+.ldHero{ position:relative; }
+.ldHeroFold{ position:absolute; top:8px; right:10px; z-index:2; background:rgba(8,13,28,.6); border:1px solid rgba(120,150,220,.3); color:var(--text); border-radius:6px; width:24px; height:22px; cursor:pointer; font-size:12px; line-height:1; }
+.ldHeroFold:hover{ border-color:var(--accent,#00e5ff); color:var(--accent,#00e5ff); }
+.ldHero.ldHeroMini{ align-items:center; flex-wrap:wrap; gap:12px; padding:8px 44px 8px 12px; }
+.ldHero.ldHeroMini .ldHeroFold{ top:50%; transform:translateY(-50%); }
+.ldGatesMini{ display:flex; flex-wrap:wrap; gap:6px; }
+.ldGatesMini span{ font-size:11px; padding:2px 8px; border-radius:10px; border:1px solid rgba(120,150,220,.25); opacity:.6; }
+.ldGatesMini span.on{ opacity:1; border-color:rgba(46,189,133,.55); color:#2ebd85; }
+.ldHeroMoney{ margin-left:auto; font-size:12px; }
+.ldBotFind{ width:100%; margin:4px 0 8px; }
+.ldBotBox[hidden]{ display:none !important; }
+
+/* LIVE trading bot: the automatic-entry section is shown but switched off */
+.lmAutoOff{ position:relative; }
+.lmAutoOff .manualAuto, .lmAutoOff .tnWrap{ opacity:.6; filter:saturate(.6); }
+.lmAutoOffNote{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 6px; padding:8px 12px; border-radius:8px;
+  background:rgba(255,209,102,.08); border:1px solid rgba(255,209,102,.35); font-size:12px; }
+.lmAutoOffNote .bBtn{ margin-left:auto; }
+.lmAutoOff [data-ma-start]{ pointer-events:none; }
+/* the desk's bot list in the Automatic-entries design */
+.ldSources .maSrcRow{ flex-wrap:wrap; }
+.ldSources .maSrcRow .ldBotWhere{ flex-basis:100%; font-size:10.5px; margin-left:24px; }
+.ldSources .maSrcRow .ldOpenBtn{ margin-left:auto; }
+.ldSources .maSrcRow .ldBotPanel, .ldSources .maSrcRow > .ldPanel{ flex-basis:100%; }
+.ldSources .maSrcRow.live{ box-shadow:inset 3px 0 0 rgba(246,70,93,.8); }
+.ldSources .maSrcRow .ldOpenBtn{ position:static; }
+.ldSources .maSrcRow.open{ grid-column:1 / -1; }
+.ldSources .maGroupHead{ grid-column:1 / -1; }
+.ldSources .maSrcList{ max-height:none; }

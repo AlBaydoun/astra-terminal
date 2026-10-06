@@ -51,8 +51,8 @@ const BotLayout = {
     { id: 'order',      label: 'Your market order (the ticket)',                icon: '🎫' },
     { id: 'rules',      label: 'Live account rules & position budgets',         icon: '⚖' },
     { id: 'confirm',    label: 'Order preview & confirm',                       icon: '✅', always: true },
-    { id: 'auto',       label: 'Automatic entries (bots and limits)',           icon: '🤖' },
-    { id: 'tuning',     label: 'Tuning — sliders for size, stop, target',       icon: '🎚' },
+    { id: 'auto',       label: 'Automatic entries (switched off — the desk runs the bots)', icon: '🤖' },
+    { id: 'tuning',     label: 'Tuning — sliders (switched off with it)',        icon: '🎚' },
     { id: 'positions',  label: 'Real open trades',                              icon: '📂' },
   ],
   /* Live connection & safety: the STOP EVERYTHING banner never disappears */

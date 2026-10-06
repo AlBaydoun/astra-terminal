@@ -365,7 +365,9 @@ const Live = {
 
     const order = {
       code: this.state.code,
-      symbol: sig.sym,
+      /* the BROKER's name for the instrument: a bot may carry ASTRA's name (ETHUSD.m) while the
+         account lists it as ETHUSD.s - sent untranslated, MetaTrader answered symbol_not_found */
+      symbol: typeof Feed !== 'undefined' && Feed.brokerName ? Feed.brokerName(sig.sym) : sig.sym,
       side: sig.dir > 0 ? 'buy' : 'sell',
       lots: g.lots,
       sl: g.sl,
