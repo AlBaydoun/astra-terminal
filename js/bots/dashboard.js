@@ -244,7 +244,7 @@ const BotDash = {
     const groups = ['Overview', 'Trading desk', 'Scanners & research', 'Strategy bots', 'Settings & safety'];
     const box = b => `<label class="msItem${hidden.includes(b.id) ? ' off' : ''}"><input type="checkbox" data-msshow="${esc(b.id)}"${hidden.includes(b.id) ? '' : ' checked'}><span>${esc(WorkspaceUI.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</label>`;
     const n = hidden.filter(id => entries.some(b => b.id === id)).length;
-    return `<section class="msWrap"><h3>☰ Pages in the left menu <small>${n ? n + ' hidden' : 'all shown'}</small></h3>
+    return `<section class="msWrap"><div class="msCount">${n ? '<b class="warn">' + n + ' page' + (n === 1 ? '' : 's') + ' hidden</b>' : 'Every page is shown'}</div>
       <p class="dim2">Untick a page to take it out of the menu on the left. It keeps working (a hidden bot still trades — switch a bot OFF above for that). Tick it again to bring it back. <b>Live connection &amp; safety</b> stays while a bot is armed, because it holds STOP EVERYTHING.</p>
       <div class="msGroups">${groups.map(g => { const list = entries.filter(b => WorkspaceUI.group(b) === g); return list.length ? `<div class="msGroup"><b>${esc(g)}</b>${list.map(box).join('')}</div>` : ''; }).join('')}</div>
       ${n ? '<button class="bMini" data-msall="1">Show every page again</button>' : ''}</section>`;

@@ -207,10 +207,10 @@ const BotLayout = {
   /* Bots on / off */
   BOTSET_PARTS: [
     { id: 'notes',   label: 'My notes',                                               icon: '📝' },
+    { id: 'menu',    label: 'Pages in the left menu — show or hide each one',         icon: '☰' },
     { id: 'intro',   label: 'What switching a bot off does (explanation)',            icon: 'ℹ' },
     { id: 'actions', label: 'Switch all on / unpause all / reset every locked bot',   icon: '⚡' },
     { id: 'list',    label: 'The bots (switch, pause, reset each one)',               icon: '🤖' },
-    { id: 'menu',    label: 'Pages in the left menu — show or hide each one',         icon: '☰' },
   ],
   /* Instrument permissions */
   PERM_PARTS: [
@@ -263,7 +263,7 @@ const BotLayout = {
     if (typeof TradeReview !== 'undefined' && TradeReview.applyLayout && TradeReview.host) TradeReview.applyLayout(); },
   _force: false,
   /* pages whose parts each fold (their fold bars are drawn by compose) */
-  FOLDING: ['liveManual', 'manual', 'live', 'open', 'dash', 'report'],
+  FOLDING: ['liveManual', 'manual', 'live', 'open', 'dash', 'report', 'botsettings'],
   toggleFold(page, pid){
     const A = this.all(), L = A[page] || (A[page] = this.get(page)); L.folded = L.folded || [];
     const shut = !L.folded.includes(pid); L.folded = shut ? L.folded.concat([pid]) : L.folded.filter(x => x !== pid);
@@ -328,7 +328,7 @@ const BotLayout = {
       else if (part.grid) grid.push(`<div class="blCell" data-blpart="${pid}">${h}</div>`);
       else if (this.FOLDING.includes(id) && !part.always && !part.ownFold){
         const f = (this.all()[id] || {}).folded || [], shut = f.includes(pid);
-        flush(); out.push(`<div class="blPart blFoldable${shut ? ' blFolded' : ''}" data-blpart="${pid}"><button type="button" class="blFoldBar" data-blfold="${esc(id)}|${pid}" aria-expanded="${!shut}"><i>${shut ? '▸' : '▾'}</i> ${esc(part.label)}</button><div class="blFoldBody"${shut ? ' hidden' : ''}>${h}</div></div>`);
+        flush(); out.push(`<div class="blPart blFoldable${shut ? ' blFolded' : ''}" data-blpart="${pid}"><button type="button" class="blFoldBar" data-blfold="${esc(id)}|${pid}" aria-expanded="${!shut}"><i>${shut ? '▸' : '▾'}</i> ${esc(part.label)}</button><span class="blQuickMove"><button type="button" data-blqmv="${esc(id)}|${pid}|-1" title="Move this section up">▲</button><button type="button" data-blqmv="${esc(id)}|${pid}|1" title="Move this section down">▼</button></span><div class="blFoldBody"${shut ? ' hidden' : ''}>${h}</div></div>`);
       }
       else { flush(); out.push(`<div class="blPart" data-blpart="${pid}">${h}</div>`); }
     }
@@ -418,6 +418,8 @@ document.addEventListener('click', e => {
   if (t.closest('[data-blclose]')){ BotLayout.open = false; BotLayout.rebuild(); return; }
   const dm = t.closest('[data-bldmv]'); if (dm){ const [k, d] = dm.dataset.bldmv.split('|'); LiveDesk.moveSec(k, +d); BotLayout.rebuild(); return; }
   const m = t.closest('[data-blmv]'); if (m){ const [id, pid, d] = m.dataset.blmv.split('|'); BotLayout.move(id, pid, +d); return; }
+  /* the ▲ ▼ beside a fold bar: past the sections you switched off, so one press always moves it on screen */
+  const qm = t.closest('[data-blqmv]'); if (qm){ e.preventDefault(); e.stopPropagation(); const [id, pid, d] = qm.dataset.blqmv.split('|'); BotLayout.move(id, pid, +d, (BotLayout._visible || {})[id]); return; }
   const r = t.closest('[data-blreset]'); if (r){ BotLayout.reset(r.dataset.blreset); return; }
   const fb = t.closest('[data-blfold]'); if (fb){ e.preventDefault(); const [pg, pid] = fb.dataset.blfold.split('|'); BotLayout.toggleFold(pg, pid); return; }
 });
