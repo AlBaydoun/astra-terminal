@@ -230,10 +230,24 @@ const BotDash = {
           <button type="button" class="bsOffHead" data-bsofffold="1" aria-expanded="${offOpen}"><i>${offOpen ? '▾' : '▸'}</i> Switched off <small>${offList.length} bot${offList.length === 1 ? '' : 's'} · treated as deleted, record kept</small></button>
           <div class="bsList bsOffList"${offOpen ? '' : ' hidden'}>${offList.map(row).join('')}</div></div>` : '') +
         '<div class="empty bsNone" hidden>No bot matches.</div>',
+      menu: this.menuSwitchesView(),
     };
     /* ⚙ Layout: the page in your order */
     if (withNotes != null && typeof BotLayout !== 'undefined') return `<div class="bsWrap">${BotLayout.compose('botsettings', Object.assign({ notes: withNotes }, P), true)}</div>`;
-    return `<div class="bsWrap">${P.intro}${P.actions}${P.list}</div>`;
+    return `<div class="bsWrap">${P.intro}${P.actions}${P.list}${P.menu}</div>`;
+  },
+  /* which pages appear in the left menu - a hidden page keeps working, it is only out of sight */
+  menuSwitchesView(){
+    if (typeof WorkspaceUI === 'undefined' || !WorkspaceUI.hidden) return '';
+    const hidden = WorkspaceUI.hidden();
+    const entries = BOTS.filter(b => !Bots.disabled(b.id)).concat({ id: 'permissions', name: 'Instrument permissions' });
+    const groups = ['Overview', 'Trading desk', 'Scanners & research', 'Strategy bots', 'Settings & safety'];
+    const box = b => `<label class="msItem${hidden.includes(b.id) ? ' off' : ''}"><input type="checkbox" data-msshow="${esc(b.id)}"${hidden.includes(b.id) ? '' : ' checked'}><span>${esc(WorkspaceUI.name(b))}</span>${b.live ? '<small class="wsReal">REAL</small>' : ''}</label>`;
+    const n = hidden.filter(id => entries.some(b => b.id === id)).length;
+    return `<section class="msWrap"><h3>☰ Pages in the left menu <small>${n ? n + ' hidden' : 'all shown'}</small></h3>
+      <p class="dim2">Untick a page to take it out of the menu on the left. It keeps working (a hidden bot still trades — switch a bot OFF above for that). Tick it again to bring it back. <b>Live connection &amp; safety</b> stays while a bot is armed, because it holds STOP EVERYTHING.</p>
+      <div class="msGroups">${groups.map(g => { const list = entries.filter(b => WorkspaceUI.group(b) === g); return list.length ? `<div class="msGroup"><b>${esc(g)}</b>${list.map(box).join('')}</div>` : ''; }).join('')}</div>
+      ${n ? '<button class="bMini" data-msall="1">Show every page again</button>' : ''}</section>`;
   },
 
 

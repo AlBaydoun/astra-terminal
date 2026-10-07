@@ -210,6 +210,7 @@ const BotLayout = {
     { id: 'intro',   label: 'What switching a bot off does (explanation)',            icon: 'ℹ' },
     { id: 'actions', label: 'Switch all on / unpause all / reset every locked bot',   icon: '⚡' },
     { id: 'list',    label: 'The bots (switch, pause, reset each one)',               icon: '🤖' },
+    { id: 'menu',    label: 'Pages in the left menu — show or hide each one',         icon: '☰' },
   ],
   /* Instrument permissions */
   PERM_PARTS: [

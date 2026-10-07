@@ -54,6 +54,8 @@ Object.assign(Bots, {
 
   bindBotSettings(host){
     host.querySelectorAll('[data-bsen]').forEach(el => el.addEventListener('change', () => Bots.setDisabled(el.dataset.bsen, !el.checked)));
+    host.querySelectorAll('[data-msshow]').forEach(el => el.addEventListener('change', () => WorkspaceUI.setHidden(el.dataset.msshow, !el.checked)));
+    host.querySelectorAll('[data-msall]').forEach(el => el.addEventListener('click', () => { lsSet(WorkspaceUI.HIDE_KEY, []); Bots.renderNav(); this.render(); toast('Every page is back in the menu', 'ok'); }));
     host.querySelectorAll('[data-bsfind]').forEach(el => el.addEventListener('input', () => { BotDash.bsQ = el.value; BotDash.filterBotSettings(host); }));
     BotDash.filterBotSettings(host);
     host.querySelectorAll('[data-bsofffold]').forEach(el => el.addEventListener('click', e => { e.preventDefault(); lsSet('astra_bsoff_open', !lsGet('astra_bsoff_open', false)); this.render(); }));

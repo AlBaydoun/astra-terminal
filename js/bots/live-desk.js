@@ -825,14 +825,19 @@ const LiveDesk = {
       { on: S.on, icon: '🛡️', t: 'Desk armed', s: S.on ? this.managedIds().length + ' bot' + (this.managedIds().length === 1 ? '' : 's') + ' in ' + mode.toUpperCase() : 'off' },
       { on: mode === 'live', icon: '🔴', t: 'Real money', s: mode === 'live' ? 'orders can be sent' : 'shadow — nothing sent' },
     ];
-    const chain = gates.map((g, i) => `<div class="ldGate ${g.on ? 'on' : ''}"><i>${g.icon}</i><b>${esc(g.t)}</b><span>${esc(g.s)}</span></div>${i < 3 ? '<em class="ldGateArrow">›</em>' : ''}`).join('');
+    const KEYS = ['bridge', 'code', 'arm', 'live'];
+    const TIP = { bridge: 'Start the live bridge — shows you how', code: 'Type the six-digit session code', arm: 'Arm the desk (puts the chosen bots in shadow)', live: 'Go live: type TRADE REAL MONEY' };
+    const next = gates.findIndex(g => !g.on);
+    const chain = gates.map((g, i) => `<button type="button" class="ldGate ${g.on ? 'on' : ''}${i === next ? ' next' : ''}" data-ldgate="${KEYS[i]}" title="${esc((g.on ? '✓ done — ' : '') + TIP[KEYS[i]] + ' · click to go there')}"><i>${g.icon}</i><b>${esc(g.t)}</b><span>${esc(g.s)}</span></button>${i < 3 ? '<em class="ldGateArrow">›</em>' : ''}`).join('');
+    const nextLine = next < 0 ? '<div class="ldNextStep done">✓ All four gates are open — real orders can be sent.</div>'
+      : `<button type="button" class="ldNextStep" data-ldgate="${KEYS[next]}">Next step: <b>${esc(TIP[KEYS[next]])}</b> ›</button>`;
     const pool = this.budget(), now = this.budgetNow(), pnl = this.pnlSince(), openPl = this.openPnl();
     const heroShut = !!((S.ui && S.ui.folded) || {}).hero;
     const badge = mode === 'live' ? 'LIVE DESK · REAL MONEY' : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF';
     if (heroShut) return `<div class="ldHero ldHeroMini">
       <button class="ldHeroFold" data-ldfold="hero" title="Unfold the banner">▸</button>
       <div class="ldBadge ${mode}"><i></i>${badge}</div>
-      <div class="ldGatesMini">${gates.map(g => `<span class="${g.on ? 'on' : ''}" title="${esc(g.t + ' — ' + g.s)}">${g.icon} ${esc(g.t)}</span>`).join('')}</div>
+      <div class="ldGatesMini">${gates.map((g, i) => `<button type="button" class="${g.on ? 'on' : ''}" data-ldgate="${['bridge', 'code', 'arm', 'live'][i]}" title="${esc(g.t + ' — ' + g.s + ' · click to go there')}">${g.icon} ${esc(g.t)}</button>`).join('')}</div>
       <span class="ldHeroMoney">bot money <b class="${now >= pool ? 'up' : 'down'}">${fmtNum(now)}</b> <small>${esc(a.currency)}</small></span>
     </div>`;
     return `<div class="ldHero">
@@ -844,7 +849,7 @@ const LiveDesk = {
         <p>${mode === 'live' ? 'The chosen bots place real orders within the bot money. The desk watches every open trade and applies your exit rules.'
             : mode === 'shadow' ? 'The chosen bots work out every real order and write it down — nothing is sent. Read the log for a while, then go live below.'
             : 'Set the bot money, the exit rules and the bots below, then arm the desk. Everything starts in shadow.'}</p>
-        <div class="ldGates">${chain}</div>
+        <div class="ldGates">${chain}</div>${nextLine}
       </div>
       <div class="ldHeroRight">
         ${this.ring(pool, a.balance, a.currency)}
@@ -1645,4 +1650,42 @@ document.addEventListener('click', e => {
   if (e.target.closest('button, input, select, a, label')) return;
   const S = LiveDesk.load(); S.ui.folded = S.ui.folded || {}; const k = h.dataset.ldheadfold;
   S.ui.folded[k] = !S.ui.folded[k]; LiveDesk.save(); LiveDesk.rerender();
+});
+
+/* ---- the four gates are doors: each takes you to the place that opens it ----
+   bridge / code -> "1 · Connect to the account" (how to start the bridge, the code box)
+   arm / live    -> the desk's "Arm the desk" card (ARM THE DESK, then TRADE REAL MONEY)
+   Folded parts are unfolded on the way, the place flashes, and the cursor waits in the box. */
+LiveDesk.goGate = function(which){
+  const host = document.getElementById('botBody'); if (!host) return;
+  const flash = el => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.remove('ldFlash'); void el.offsetWidth; el.classList.add('ldFlash'); setTimeout(() => el.classList.remove('ldFlash'), 2400); };
+  const focusSoon = sel => setTimeout(() => { const i = document.querySelector('#botBody ' + sel); if (i && !i.disabled) i.focus(); }, 450);
+  if (which === 'bridge' || which === 'code'){
+    let part = host.querySelector('[data-blpart="connect"]');
+    if (!part) return toast('The connect section is switched off in ⚙ Layout — switch it on there', 'warn');
+    if (part.hidden) return toast('The connect section is switched off in ⚙ Layout — switch it on there', 'warn');
+    if (part.classList.contains('blFolded')){ const bar = part.querySelector('.blFoldBar'); if (bar) bar.click(); part = document.querySelector('#botBody [data-blpart="connect"]') || part; }
+    flash(part);
+    if (which === 'code'){
+      if (!(Live.bridge && Live.bridge.trading)) toast('First start the live bridge (START-LIVE-TRADING.bat) — the code box appears once it is running', 'info');
+      else focusSoon('#lvCode');
+    } else if (Live.bridge && Live.bridge.trading) toast('The live bridge is already running', 'ok');
+    return;
+  }
+  /* arm / live: the desk's own card */
+  const S = this.load(); S.ui = S.ui || {}; S.ui.folded = S.ui.folded || {};
+  const deskPart = host.querySelector('[data-blpart="desk"]');
+  if (deskPart && deskPart.classList.contains('blFolded')){ const bar = deskPart.querySelector('.blFoldBar'); if (bar) bar.click(); }
+  const go = () => {
+    const card = document.querySelector('#botBody [data-ldsec="arm"]'); if (!card) return toast('The arming card is not on the page', 'warn');
+    flash(card);
+    if (which === 'arm'){ if (this.load().on) toast('The desk is already armed', 'ok'); else focusSoon('#ldArmInput'); }
+    else if (!this.load().on) toast('Arm the desk first (ARM THE DESK) — then the TRADE REAL MONEY box opens', 'info');
+    else focusSoon('#ldLiveInput');
+  };
+  if (S.ui.folded.arm){ S.ui.folded.arm = false; this.save(); this.rerender(); setTimeout(go, 350); } else go();
+};
+document.addEventListener('click', e => {
+  const g = e.target && e.target.closest && e.target.closest('[data-ldgate]'); if (!g) return;
+  e.preventDefault(); e.stopPropagation(); LiveDesk.goGate(g.dataset.ldgate);
 });

@@ -40,8 +40,11 @@ const WorkspaceUI = {
       : b.live || b.id === 'permissions' ? 'shield' : b.id === 'botsettings' ? 'manual' : 'bot';
   },
   nav(active){
-    const entries = BOTS.filter(b => !Bots.disabled(b.id)).concat({id:'permissions', name:'Instrument permissions'}, {id:'botsettings', name:'Bots on / off'});
+    let entries = BOTS.filter(b => !Bots.disabled(b.id)).concat({id:'permissions', name:'Instrument permissions'}, {id:'botsettings', name:'Bots on / off'});
     const fold = this.navFold();
+    /* pages you hid from the menu (remembered per browser); they keep working, they are only out of sight */
+    const hiddenIds = this.hidden().filter(id => entries.some(b => b.id === id));
+    entries = entries.filter(b => !hiddenIds.includes(b.id));
     return `<div class="wsNavTop"><span class="wsEyebrow">YOUR WORKSPACE<span class="wsFoldAll"><button type="button" data-navfoldall="1" title="Fold every group">▸ all</button><button type="button" data-navfoldall="0" title="Unfold every group">▾ all</button></span></span>
       <label class="wsSearch">${this.icon('search')}<input id="wsBotSearch" type="search" aria-label="Search bots and pages" placeholder="Find a bot or page…" value="${esc(this.query)}" autocomplete="off"></label></div>
       <div class="wsNavGroups">` + [this.FAV_GROUP,'Overview','Trading desk','Scanners & research','Strategy bots','Settings & safety'].map(group =>
@@ -84,11 +87,28 @@ const WorkspaceUI = {
     f.splice(i, 1); f.splice(j, 0, id); lsSet(this.FAV_KEY, f);
     if (typeof Bots !== 'undefined') Bots.renderNav();
   },
+  /* pages hidden from the menu */
+  HIDE_KEY: 'astra_navhidden',
+  hidden(){ const v = lsGet(this.HIDE_KEY, []); return Array.isArray(v) ? v : []; },
+  setHidden(id, on){
+    /* the safety page cannot leave the menu while real trading is armed - it holds STOP EVERYTHING */
+    if (on && id === 'live' && typeof Live !== 'undefined'){
+      try { Live.load(); if (Object.keys(Live.state.armed || {}).length) return toast('Live connection & safety stays in the menu while a bot is armed — it holds STOP EVERYTHING. Disarm first.', 'warn'); } catch(e){}
+    }
+    if (on && id === 'botsettings') return toast('Bots on / off stays in the menu — it is where hidden pages come back', 'warn');
+    const h = this.hidden().filter(x => x !== id); if (on) h.push(id);
+    lsSet(this.HIDE_KEY, h);
+    if (on){ const f = this.favs(); if (f.includes(id)) lsSet(this.FAV_KEY, f.filter(x => x !== id)); }
+    if (typeof Bots !== 'undefined'){ Bots.renderNav(); if (Bots.active === 'botsettings') Bots.render(); }
+    toast(on ? 'Hidden from the menu — Bots on / off → Pages in the left menu brings it back' : 'Back in the menu', 'ok');
+  },
   /* which workspace groups are folded (remembered per browser) */
   NAVFOLD_KEY: 'astra_navfold',
   navFold(){ const v = lsGet(this.NAVFOLD_KEY, {}); return v && typeof v === 'object' ? v : {}; },
   setNavFold(group, shut){
-    const f = this.navFold(); if (shut) f[group] = true; else delete f[group]; lsSet(this.NAVFOLD_KEY, f);
+    const f = this.navFold();
+    if (group === '__hidden') f[group] = !!shut ? true : false; else if (shut) f[group] = true; else delete f[group];
+    lsSet(this.NAVFOLD_KEY, f);
     const g = document.querySelector('#botNav .wsNavGroup[data-ws-group="' + CSS.escape(group) + '"]'); if (!g) return;
     g.classList.toggle('wsFolded', shut);
     const b = g.querySelector('[data-navfold]'); b.setAttribute('aria-expanded', String(!shut)); b.title = (shut ? 'Unfold ' : 'Fold ') + group; b.querySelector('i').textContent = shut ? '▸' : '▾';
@@ -100,6 +120,7 @@ const WorkspaceUI = {
       this.setNavFold(b.dataset.navfold, !b.closest('.wsNavGroup').classList.contains('wsFolded'));
     }));
     nav.querySelectorAll('[data-fav]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); this.toggleFav(b.dataset.fav); }));
+
     nav.querySelectorAll('[data-favmv]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); this.moveFav(b.dataset.favid, +b.dataset.favmv); }));
     nav.querySelectorAll('[data-navfoldall]').forEach(b => b.addEventListener('click', e => {
       e.preventDefault(); e.stopPropagation();
