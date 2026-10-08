@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Live control checks — isolated</title><link rel="stylesheet" href="../css/style.css"><style>body{display:block;overflow:auto;padding:24px}#results{white-space:pre-wrap;padding:16px}#botBody{max-width:1350px;margin:auto}</style></head><body><h1>Live control · isolated checks</h1><p>No real account, persistent storage or network orders. All broker responses below are simulated.</p><pre id="results"></pre><button id="badCodeDemo">Simulate rejected code</button><div id="botBody"></div>
+<script>
+const memory={};const lsGet=(k,d)=>memory[k]?structuredClone(memory[k]):d,lsSet=(k,v)=>{memory[k]=structuredClone(v);return true;};
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtNum=v=>Number(v).toFixed(2),fmtPrice=fmtNum,baseAsset=s=>s;
+const toast=(t)=>document.getElementById('results').textContent+='\n'+t;
+const BOTS=[{id:'example',name:'Example paper bot'}],BOT_BY_ID={example:BOTS[0]};
+const symbols=['BTCUSD.m','ETHUSD.m','XAUUSD.m','XAGUSD.m'];
+const specs=Object.fromEntries(symbols.map((s,i)=>[s,{tickSize:0.01,tickValue:1,pointValue:100,contractSize:100,volumeMin:0.01,volumeStep:0.01,volumeMax:10}]));
+const Feed={account:{balance:800,equity:800,currency:'USD'},specFor:s=>specs[s],isLive:()=>true};
+const Bots={active:'live',universe:()=>symbols,quoteFor:()=>({price:2000}),cfg:()=>({}),disabled:()=>false,isPage:()=>false,allowed:()=>symbols,groupOf:()=> 'crypto',marketGroups:()=>({}),render(){document.getElementById('botBody').innerHTML=this.liveView('');this.bindLive(document.getElementById('botBody'));document.querySelectorAll('[data-act]').forEach(el=>el.onclick=()=>this.liveAction(el.dataset.act));}};
+window.fetch=async()=>{throw Error('Network disabled in this fixture');};
+</script><script src="../js/bots/live.js"></script><script src="../js/bots/live-desk.js"></script><script src="../js/bots/liveui.js"></script><script src="live-control-checks.js"></script></body></html>

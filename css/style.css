@@ -3256,4 +3256,19 @@ button.ldGate.next{ border-color:rgba(255,209,102,.8) !important; box-shadow:0 0
 .blQuickMove button:hover{ color:var(--text); border-color:rgba(0,229,255,.4); }
 .blFoldable > .blFoldBar{ padding-right:58px; }
 .msWrap{ margin-top:0; }
+/* One permanent home for live startup, independent of rearrangeable desk cards. */
+.liveControl{padding:16px;margin-bottom:18px;border:1px solid var(--accent,#00c8de);border-radius:14px;background:var(--panel,#101d30)}
+.liveControlGrid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.4fr);gap:16px;margin-top:14px}
+.liveControl .ldCard{width:100%;margin:0}
+.liveControl .ldCardBody{display:block!important}
+.liveControl .ldSecTools,.liveControl .ldChev{display:none}
+.liveControl .ldCardHead{pointer-events:none}
+.liveControl input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:10px;max-width:100%;min-width:0!important;flex:1}
+.liveControl .lvRow{flex-wrap:wrap}
+.ldInlineCaps{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.ldInlineCaps>summary{cursor:pointer;font-weight:600;color:var(--text);padding:8px}
+.ldPriorityFits{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:14px 0}
+.ldPriorityFits article{display:flex;flex-direction:column;gap:9px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.ldPriorityFits article>b{font-size:17px}.ldPriorityFits article>span,.ldPriorityFits article>small{color:var(--dim);line-height:1.5}
+@media(max-width:850px){.liveControlGrid{grid-template-columns:1fr}}
 .msCount{ font-size:11.5px; color:var(--dim); margin-bottom:2px; } .msCount .warn{ color:#ffd166; }

@@ -94,8 +94,12 @@ const Live = {
         body: JSON.stringify({ code, ticket: 0 }), signal: AbortSignal.timeout(4000),
       });
       const j = await r.json().catch(() => ({}));
-      if (r.status === 403 || j.error === 'bad_code')
+      if (r.status === 403 || j.error === 'bad_code'){
+        this.rejectSession();
         return { ok: false, why: 'That code was refused. Read the six digits again in the bridge window.' };
+      }
+      if (r.status !== 404 || j.error !== 'not_found')
+        return { ok: false, why: 'The bridge did not confirm this code. Nothing has been linked.' };
       this.load();
       this.state.code = code;
       this.state.linked = true;
@@ -113,6 +117,17 @@ const Live = {
     this.state.code = ''; this.state.linked = false;
     this.save();
     this.audit('unlink', 'Session code cleared');
+  },
+
+  rejectSession(){
+    // A restarted bridge issues a new code. Reconnecting must not resume real
+    // orders silently: preserve selected bots, but require Go live again.
+    this.load();
+    this.state.code = ''; this.state.linked = false;
+    for (const a of Object.values(this.state.armed)) a.mode = 'shadow';
+    this.save();
+    this.audit('session-expired', 'Bridge rejected the session code. Real entries paused; reconnect in Live control centre, then explicitly go live again.');
+    if (typeof LiveDesk !== 'undefined') LiveDesk.rerender();
   },
 
   /* ---------- arming ---------- */
@@ -396,6 +411,7 @@ const Live = {
       });
       const j = await r.json().catch(() => ({}));
       const ok = r.ok && j.ok;
+      if (j.error === 'bad_code') this.rejectSession();
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
                     entry: j.price || sig.entry, sl: g.sl, tp: g.tp, sent: true, ok, desk: g.desk,
                     ticket: j.ticket || null, retcode: j.retcode, brokerSaid: j.comment || j.message || j.error,

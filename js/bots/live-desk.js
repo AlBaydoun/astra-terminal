@@ -750,20 +750,24 @@ const LiveDesk = {
     const S = this.load();
     const pool = this.budgetNow();
     const riskCash = pool * S.riskPct / 100;
-    const syms = this.allSymbols();
+    const selected = this.allSymbols();
+    const preferred = this.universe().filter(s => /^(BTCUSD|ETHUSD|XAUUSD|XAGUSD)([._]|$)/i.test(s));
+    const syms = [...new Set([...preferred, ...selected])];
     const out = [], need = [];
     for (const sym of syms){
       const spec = typeof Feed !== 'undefined' && Feed.specFor ? Feed.specFor(sym) : null;
       const q = Bots.quoteFor(sym);
-      if (!spec || !q || !(q.price > 0)){ need.push(sym); out.push({ sym, unknown: true }); continue; }
+      if (!spec || !q || !(q.price > 0)){ need.push(sym); out.push({ sym, unknown: true, preferred: preferred.includes(sym), selected: selected.includes(sym) }); continue; }
       const stopPct = S.stops.mode === 'percent' ? S.stops.slPct : 0.5;
       const stopDist = q.price * stopPct / 100;
       const riskPerLot = spec.pointValue > 0 ? stopDist * spec.pointValue : (stopDist / spec.tickSize) * spec.tickValue;
       const minLot = spec.volumeMin || spec.volumeStep || 0.01;
       const minRisk = minLot * riskPerLot;
-      const lots = Math.floor((riskCash / riskPerLot) / (spec.volumeStep || 0.01)) * (spec.volumeStep || 0.01);
-      const m = this.marginOf(sym, Math.max(minLot, lots), q.price);
-      out.push({ sym, minLot, minRisk, lots: Math.max(0, lots), fits: minRisk <= riskCash + 1e-9, margin: m, stopPct, riskCash });
+      // Use the execution sizer so this preview respects lot ceilings and steps.
+      // It remains a sample stop, not a promise that the next signal can trade.
+      const sized = this.size({sym, entry:q.price, sl:q.price-stopDist});
+      out.push({ sym, minLot, minRisk, lots: sized.ok ? sized.lots : 0, fits: !!sized.ok, margin: sized.margin, stopPct, riskCash,
+        why: sized.ok ? '' : sized.why, selected: selected.includes(sym), preferred: preferred.includes(sym) });
     }
     if (need.length && typeof Feed !== 'undefined' && Feed.loadSpecs && Date.now() - this.specsAsked > 20000){
       this.specsAsked = Date.now();
@@ -796,7 +800,7 @@ const LiveDesk = {
     };
     return `<div class="ldWrap ${mode}">
       ${this.heroView(S, mode)}
-      <div class="ldSecs">${this.order().map(k => parts[k]()).join('')}</div>
+      <div class="ldSecs">${this.order().filter(k => k !== 'arm').map(k => parts[k]()).join('')}</div>
     </div>`;
   },
   /* every card folds, moves and can take half the width; all of it remembered */
@@ -847,7 +851,7 @@ const LiveDesk = {
           <button class="bMini ldHowBtn" data-ldact="howto" title="How to trade with the desk — worked examples with pictures">📘 How to trade · examples</button>
           <button class="bMini" data-ldact="resetui" title="Every section back in its place, unfolded">↺ layout</button></div>
         <p>${mode === 'live' ? 'The chosen bots place real orders within the bot money. The desk watches every open trade and applies your exit rules.'
-            : mode === 'shadow' ? 'The chosen bots work out every real order and write it down — nothing is sent. Read the log for a while, then go live below.'
+            : mode === 'shadow' ? 'The chosen bots work out every real order and write it down — nothing is sent. Read the log for a while, then go live in the control centre above.'
             : 'Set the bot money, the exit rules and the bots below, then arm the desk. Everything starts in shadow.'}</p>
         <div class="ldGates">${chain}</div>${nextLine}
       </div>
@@ -987,7 +991,7 @@ const LiveDesk = {
     const a = this.account();
     const pool = this.budget();
     const chip = (label, mode, value) => `<button class="bMini${S.budget.mode === mode && +S.budget.value === +value ? ' on' : ''}" data-ldbudget="${mode}|${value}">${label}</button>`;
-    const risk = pool * S.riskPct / 100;
+    const risk = this.budgetNow() * S.riskPct / 100;
     const body = `
       <div class="ldMoneyRow">
         <label class="ldBig"><span>The bots may use</span>
@@ -999,7 +1003,8 @@ const LiveDesk = {
           <span>${a.known ? 'of your ' + fmtNum(a.balance) + ' ' + a.currency + ' balance — the other ' + fmtNum(Math.max(0, a.balance - pool)) + ' is invisible to the bots' : 'the balance is not known yet — connect the bridge'}</span>
         </div>
       </div>
-      <div class="ldChips">${chip('50', 'usd', 50)}${chip('100', 'usd', 100)}${chip('200', 'usd', 200)}${chip('500', 'usd', 500)}${chip('10%', 'pct', 10)}${chip('25%', 'pct', 25)}${chip('50%', 'pct', 50)}</div>
+      <div class="ldChips">${chip('50', 'usd', 50)}${chip('100', 'usd', 100)}${chip('200', 'usd', 200)}${chip('400', 'usd', 400)}${chip('800', 'usd', 800)}${chip('25%', 'pct', 25)}${chip('50%', 'pct', 50)}${chip('100%', 'pct', 100)}</div>
+      <label class="lvField">Stop-risk budget per trade · ${esc(a.currency)}<input id="ldRiskCash" type="number" min="0.01" step="0.01" value="${risk.toFixed(2)}"><small>Lot size adjusts automatically to the stop distance and broker lot steps. Saving this amount sets the equivalent percentage of bot money; the cash amount changes with that money. Gaps and costs can increase the actual loss.</small></label>
       <div class="ldSliders">
         <label><span>Risk per trade <b>${S.riskPct}%</b> <i>= ${fmtNum(risk)} ${esc(a.currency)} if the stop is hit</i></span>
           <input type="range" min="0.25" max="10" step="0.25" data-ld="riskPct" value="${S.riskPct}"></label>
@@ -1010,8 +1015,9 @@ const LiveDesk = {
         <label><span>Margin the bots may tie up <b>${S.marginCapPct}%</b> <i>of the bot money${a.leverage ? ' · leverage 1:' + a.leverage : ''}</i></span>
           <input type="range" min="10" max="100" step="5" data-ld="marginCapPct" value="${S.marginCapPct}"></label>
       </div>
-      <div class="ldNote">When the bot money is gone — every last unit lost — the desk switches itself off. Nothing else on the account is ever touched.</div>
-      ${this.ceilingsNote(S)}`;
+      <div class="ldNote">When the bot money is gone — every last unit lost — the desk switches itself off. This is an app allocation, not a separate broker wallet; gaps and execution costs can exceed a stop budget.</div>
+      ${this.ceilingsNote(S)}
+      <details class="ldInlineCaps"><summary>Account ceilings · edit here</summary>${Bots.lvStep2(Live.load())}</details>`;
     return this.card('money', 'Bot money', '💰', body, 'how much of the account belongs to the bots');
   },
   ceilingsNote(S){
@@ -1019,7 +1025,7 @@ const LiveDesk = {
     const C = Live.state.caps;
     const clash = [];
     if (S.maxOpen > C.maxOpen) clash.push('you allow ' + S.maxOpen + ' positions but the hard ceiling is ' + C.maxOpen);
-    return `<div class="ldNote ${clash.length ? 'ldClash' : ''}"><b>Hard ceilings</b> (folded below the desk): biggest order ${C.maxLots} lot · ${C.maxOpen} real position${C.maxOpen === 1 ? '' : 's'} at once · stop for the day at ${C.maxDailyLossPct}% and disarm at ${C.maxTotalLossPct}% of the WHOLE balance · hours ${esc(C.sessionFrom)}–${esc(C.sessionTo)}. The desk can never go past them${clash.length ? ' — <b>' + clash.join('; ') + '</b>, so the ceiling wins; raise it there if you mean it' : ''}.</div>`;
+    return `<div class="ldNote ${clash.length ? 'ldClash' : ''}"><b>Hard ceilings</b> (edit just below): biggest order ${C.maxLots} lot · ${C.maxOpen} real position${C.maxOpen === 1 ? '' : 's'} at once · stop for the day at ${C.maxDailyLossPct}% and disarm at ${C.maxTotalLossPct}% of the WHOLE balance · hours ${esc(C.sessionFrom)}–${esc(C.sessionTo)}. The desk can never go past them${clash.length ? ' — <b>' + clash.join('; ') + '</b>, so the ceiling wins; review both limits here' : ''}.</div>`;
   },
 
   /* the exit-rule controls, for the desk (prefix '') or for one bot (prefix 'pb|id|') */
@@ -1290,6 +1296,7 @@ const LiveDesk = {
     };
     const body = `<div class="ldFitHead">With <b>${fmtNum(f.pool)} ${esc(a.currency)}</b> of bot money and <b>${S.riskPct}%</b> per trade, one trade may lose <b>${fmtNum(f.riskCash)} ${esc(a.currency)}</b>.
         <span class="up">${fits.length} pair${fits.length === 1 ? '' : 's'} fit</span>${big.length ? ` · <span class="down">${big.length} need a bigger budget</span>` : ''}${unk.length ? ` · <span class="dim2">${unk.length} not priced yet</span>` : ''}</div>
+      <div class="ldPriorityFits">${f.rows.filter(r => r.preferred && !r.unknown).map(r => `<article><b>${esc(baseAsset(r.sym))}</b><span>Minimum ${r.minLot} lot · sample stop ${r.stopPct}%</span><strong class="${r.fits ? 'up' : 'down'}">${fmtNum(r.minRisk)} ${esc(a.currency)} minimum stop risk</strong><span>${r.fits ? 'Automatic size: ' + r.lots + ' lot' : esc(r.why)}</span><small>${r.selected ? 'In selected bots’ market scope' : 'Not in selected bots’ market scope — choose a bot that scans this market'}</small></article>`).join('')}</div>
       <div class="ldFits">${f.rows.filter(r => !r.unknown).sort((x, y) => x.minRisk - y.minRisk).map(bar).join('')}</div>
       <div class="ldNote">A bar is the money the SMALLEST order the broker accepts would lose at a ${S.stops.mode === 'percent' ? S.stops.slPct + '%' : 'typical 0.5%'} stop, against what you allow per trade. A pair past the line is refused at order time — raise the bot money or the risk, or leave it out.</div>`;
     return this.card('fit', 'What fits the money', '📏', body, fits.length + ' of ' + f.rows.length + ' fit');
@@ -1301,7 +1308,7 @@ const LiveDesk = {
     const linked = Live.state.linked && Live.bridge.trading;
     if (mode === 'off'){
       return this.card('arm', 'Arm the desk', '🛡️', `
-        <div class="ldArmWho">${names.length ? 'Arming puts <b>' + esc(names.join(', ')) + '</b> on the real account in <b>SHADOW</b>: every order worked out from ' + fmtNum(this.budget()) + ' of bot money and written down, nothing sent.' : '<b>No bot is chosen yet.</b> ' + (S.bots.mode === 'auto' ? 'None passes the door — lower it, or tick bots yourself.' : 'Tick at least one bot above.')}</div>
+        <div class="ldArmWho">${names.length ? 'Arming puts <b>' + esc(names.join(', ')) + '</b> on the real account in <b>SHADOW</b>: every order worked out from ' + fmtNum(this.budget()) + ' of bot money and written down, nothing sent.' : '<b>No bot is chosen yet.</b> ' + (S.bots.mode === 'auto' ? 'None passes the door — lower it, or tick bots yourself.' : 'Choose at least one bot in Which bots below.')}</div>
         <div class="lvAck">
           <label><input type="checkbox" class="ldAck"> I understand a backtest and paper record do not predict future results.</label>
           <label><input type="checkbox" class="ldAck"> I understand real fills, spreads, gaps and slippage will differ from the simulation.</label>
@@ -1408,6 +1415,11 @@ const LiveDesk = {
   },
   bind(host){
     const S = this.load();
+    host.querySelector('#ldRiskCash')?.addEventListener('change', e => {
+      const cash = Number(e.target.value), pool = this.budgetNow();
+      if (!(pool > 0) || !Number.isFinite(cash) || cash <= 0 || cash > pool * 0.1){ toast('Enter a positive risk amount no higher than 10% of the bot money.', 'warn'); return; }
+      S.riskPct = cash / pool * 100; this.save(); e.target.blur(); this.rerender();
+    });
     host.querySelectorAll('[data-ld]').forEach(el => el.addEventListener('change', () => {
       const numeric = el.type === 'number' || el.type === 'range' || el.dataset.ld === 'minReady';
       const v = numeric ? parseFloat(el.value) : el.value;
@@ -1661,7 +1673,7 @@ LiveDesk.goGate = function(which){
   const flash = el => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.remove('ldFlash'); void el.offsetWidth; el.classList.add('ldFlash'); setTimeout(() => el.classList.remove('ldFlash'), 2400); };
   const focusSoon = sel => setTimeout(() => { const i = document.querySelector('#botBody ' + sel); if (i && !i.disabled) i.focus(); }, 450);
   if (which === 'bridge' || which === 'code'){
-    let part = host.querySelector('[data-blpart="connect"]');
+    let part = host.querySelector('#liveConnect') || host.querySelector('[data-blpart="connect"]');
     if (!part) return toast('The connect section is switched off in ⚙ Layout — switch it on there', 'warn');
     if (part.hidden) return toast('The connect section is switched off in ⚙ Layout — switch it on there', 'warn');
     if (part.classList.contains('blFolded')){ const bar = part.querySelector('.blFoldBar'); if (bar) bar.click(); part = document.querySelector('#botBody [data-blpart="connect"]') || part; }

@@ -18,14 +18,13 @@ Object.assign(Bots, {
     const parts = {
       notes: notes || '',
       links: `<div class="wsTradeLinks"><button data-ws-bot="liveManual">Open LIVE trading bot · manual orders</button></div>`,
-      banner: this.lvBanner(st, B, armed),
-      connect: this.lvStep1(S, B),
+      banner: '',
+      connect: '',
       desk: typeof LiveDesk !== 'undefined' ? LiveDesk.view() : '',
       classic: `<details class="lvClassic"${handArmed ? ' open' : ''}>
-        <summary><i>⚙</i> Hard ceilings every real order obeys · and the classic way: arm one bot by name</summary>
+        <summary><i>⚙</i> Advanced: individually armed bots</summary>
         <div class="lvClassicBody">
           <p class="dim2">The desk above works inside these ceilings — it can never go past them. Arming a single bot by its name is still here for a bot you want to run on its own allow-list, outside the desk’s choices.</p>
-          ${this.lvStep2(S)}
           ${this.lvStep3(S)}
           ${armed.length ? this.lvArmed(S) : ''}
         </div>
@@ -35,7 +34,9 @@ Object.assign(Bots, {
       note: `<div class="botNote warn">Live results here are read back from MetaTrader itself. Paper and live are kept
         completely apart — nothing on this page touches the paper ledgers, and nothing there affects this.</div>`,
     };
-    return `<div class="lvWrap">${typeof BotLayout !== 'undefined' ? BotLayout.compose('live', parts, true) : Object.values(parts).join('')}</div>`;
+    // Startup is always visible, independent of saved section hiding / ordering.
+    const startup = `<section id="liveControl" class="liveControl"><div class="botH">LIVE CONTROL CENTRE <span class="dim2">Connect · prepare · start · stop</span></div>${this.lvBanner(st, B, armed)}<div class="liveControlGrid"><div id="liveConnect">${this.lvStep1(S, B)}</div><div>${typeof LiveDesk !== 'undefined' ? LiveDesk.armView(LiveDesk.load(), LiveDesk.mode()) : ''}</div></div></section>`;
+    return `<div class="lvWrap">${startup}${typeof BotLayout !== 'undefined' ? BotLayout.compose('live', parts, true) : Object.values(parts).join('')}</div>`;
   },
 
   lvBanner(st, B, armed){
