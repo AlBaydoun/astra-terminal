@@ -35,7 +35,7 @@ Object.assign(Bots, {
         completely apart — nothing on this page touches the paper ledgers, and nothing there affects this.</div>`,
     };
     // Startup is always visible, independent of saved section hiding / ordering.
-    const startup = `<section id="liveControl" class="liveControl"><div class="botH">LIVE CONTROL CENTRE <span class="dim2">Connect · prepare · start · stop</span></div>${this.lvBanner(st, B, armed)}<div class="liveControlGrid"><div id="liveConnect">${this.lvStep1(S, B)}</div><div>${typeof LiveDesk !== 'undefined' ? LiveDesk.armView(LiveDesk.load(), LiveDesk.mode()) : ''}</div></div></section>`;
+    const startup = `<section id="liveControl" class="liveControl"><div class="botH">LIVE CONTROL CENTRE <span class="dim2">Connect · prepare · start · stop</span></div><p class="dim2">Broker stop loss and take profit remain active with the PC off once accepted by MetaTrader. New entries, trailing stops and app exit rules require this PC, ASTRA and the bridge to stay running.</p>${this.lvBanner(st, B, armed)}${typeof LiveOffline !== 'undefined' ? LiveOffline.view() : ''}<div class="liveControlGrid"><div id="liveConnect">${this.lvStep1(S, B)}</div><div>${typeof LiveDesk !== 'undefined' ? LiveDesk.armView(LiveDesk.load(), LiveDesk.mode()) : ''}</div></div></section>`;
     return `<div class="lvWrap">${startup}${typeof BotLayout !== 'undefined' ? BotLayout.compose('live', parts, true) : Object.values(parts).join('')}</div>`;
   },
 
@@ -55,12 +55,12 @@ Object.assign(Bots, {
 
   /* ---- step 1: the bridge ---- */
   lvStep1(S, B){
-    const done = S.linked && B.trading;
+    const done = Live.connected();
     return `<div class="lvStep ${done ? 'done' : ''}">
       <div class="lvHead"><i>1</i> Connect to the account
         ${done ? '<b class="ok">connected</b>' : ''}</div>
       ${B.trading
-        ? (S.linked
+        ? (done
             ? `<div class="lvBody"><p>The live bridge is running and this terminal is linked to it.</p>
                  <button class="bMini" data-act="lvunlink">Forget the code</button></div>`
             : `<div class="lvBody">
@@ -335,9 +335,16 @@ Object.assign(Bots, {
   },
 
   async liveAction(a){
+    if (a === 'lvoffline'){
+      const preparation = LiveOffline.prepare();
+      if (typeof LiveDesk !== 'undefined') LiveDesk._force = true;
+      this.render();
+      await preparation;
+      return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
+    }
     if (a === 'lvrefresh'){
       await Live.probe(); await Live.sync();
-      toast(Live.bridge.trading ? 'Live bridge answering' : 'The live bridge is not running', Live.bridge.trading ? 'ok' : 'info');
+      toast(Live.connected() ? 'Broker connection and session verified' : (Live.bridge.reason || 'Connection not verified'), Live.connected() ? 'ok' : 'warn');
       return (typeof LiveDesk !== 'undefined' && (LiveDesk._force = true), this.render());
     }
     if (a === 'lvkill'){

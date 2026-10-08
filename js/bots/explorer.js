@@ -542,6 +542,7 @@ const Explorer = {
   dirty: false,
   view(){
     this.dirty = false;
+    if (typeof LiveExplorer !== 'undefined' && LiveExplorer.selected) return LiveExplorer.tabs() + '<div id="liveDive">' + LiveExplorer.view() + '</div>';
     const rows = this.filtered(), st = this.stats(rows), open = this.openNow();
     const crumbs = [`<button class="exCrumb${this.path.length ? '' : ' on'}" data-excrumb="-1">Everything</button>`]
       .concat(this.path.map((f, i) => `<i>›</i><button class="exCrumb${i === this.path.length - 1 ? ' on' : ''}" data-excrumb="${i}">${esc(f.dim === 'trade' ? 'Trade' : f.dim === 'time' ? 'Stretch' : f.range ? (f.dim === 'pnl' ? 'Result' : 'R') : this.dim(f.dim).label)}: ${esc(f.label)}</button>`)).join('');
@@ -580,7 +581,7 @@ const Explorer = {
     this._shownIds = shownSecs.map(x => x.id);
     const offN = this.layoutIds().filter(id => hidden[id]).length;
     const frozen = this.heroFrozen();
-    return `<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
+    return `${typeof LiveExplorer !== 'undefined' ? LiveExplorer.tabs() : ''}<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
       <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
         ${(() => { const bid = this.notesBot(); return bid && BOT_BY_ID[bid] ? `<button class="bMini exToBot" data-extobot="${esc(bid)}" title="Go straight to ${esc(this.botName(bid))} — its own page (settings, markets, timeframes, notes). The Back button brings you here again.">⚙ Open ${esc(this.botName(bid))} ↗</button>` : ''; })()}
         <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
@@ -716,6 +717,8 @@ const Explorer = {
     this.dirty = true; Bots.render();
   },
   bind(host){
+    if (typeof LiveExplorer !== 'undefined') LiveExplorer.bind(host);
+    if (typeof LiveExplorer !== 'undefined' && LiveExplorer.selected) return;
     host.querySelectorAll('[data-exdrill]').forEach(b => b.addEventListener('click', () => {
       const i = b.dataset.exdrill.indexOf('|');
       this.drill(b.dataset.exdrill.slice(0, i), b.dataset.exdrill.slice(i + 1));

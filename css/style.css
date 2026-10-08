@@ -3272,3 +3272,15 @@ button.ldGate.next{ border-color:rgba(255,209,102,.8) !important; box-shadow:0 0
 .ldPriorityFits article>b{font-size:17px}.ldPriorityFits article>span,.ldPriorityFits article>small{color:var(--dim);line-height:1.5}
 @media(max-width:850px){.liveControlGrid{grid-template-columns:1fr}}
 .msCount{ font-size:11.5px; color:var(--dim); margin-bottom:2px; } .msCount .warn{ color:#ffd166; }
+
+/* Explicit shutdown preparation, separate from live activation. */
+.liveOffline{margin:12px 0;padding:14px;border:1px solid var(--line,#294058);border-radius:10px;background:rgba(35,85,112,.12)}
+.liveOffline p{color:var(--dim,#9ab0c5);margin:6px 0 12px;line-height:1.5}.liveOffline .botNote{margin-top:12px}
+/* Broker reporting inside Deep Dive, visually separate from paper results. */
+.liveDiveTabs{display:flex;gap:10px;padding:12px 0;position:relative;z-index:2}
+.liveDiveTabs .on{border-color:var(--green,#28cfa2);box-shadow:inset 0 -2px var(--green,#28cfa2)}
+#liveDive{padding:20px;border:1px solid #477c8b;border-radius:16px;background:linear-gradient(140deg,rgba(34,139,143,.12),transparent 55%)}
+.liveDiveHead{display:flex;justify-content:space-between;align-items:center;gap:20px}.liveDiveHead h2{margin:8px 0;font-size:26px}.liveDiveHead p{opacity:.75}.liveDiveEyebrow{font-size:11px;letter-spacing:2px;color:#39bda8}
+.liveDiveStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:18px 0}.liveDiveStat,.liveDiveSides>div{padding:18px;border:1px solid #627e8140;border-radius:12px;background:rgba(100,145,160,.08)}.liveDiveStat strong{display:block;font-size:25px;margin-top:12px}.liveDiveStat small{opacity:.75}
+.liveDiveSides{display:grid;grid-template-columns:1fr 1fr;gap:12px}.liveDiveSides strong{display:block;font-size:26px;margin:10px 0}.liveDiveSides small{opacity:.7}.liveDiveFilters{display:flex;gap:16px;flex-wrap:wrap;margin:24px 0}.liveDiveFilters input,.liveDiveFilters select{padding:8px;border-radius:6px;background:var(--bg,#17232e);color:inherit;border:1px solid #627e8180}
+.liveDiveTrade{margin:10px 0;border:1px solid #627e8160;border-radius:10px;background:rgba(100,145,160,.06)}.liveDiveTrade summary{cursor:pointer;padding:16px}.liveDiveTrade summary strong{float:right}.liveDiveTrade p{padding:12px}.liveDiveFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;padding:16px;border-top:1px solid #627e8140}.liveDiveFields dt{font-size:11px;opacity:.65}.liveDiveFields dd{margin:5px 0;overflow-wrap:anywhere}

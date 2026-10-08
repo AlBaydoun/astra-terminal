@@ -40,6 +40,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from manual_execution import ManualExecution
+from filling import market_filling
 
 try:
     import MetaTrader5 as mt5
@@ -346,6 +347,19 @@ def candles(symbol, tf, limit, since=None):
     ]
 
 
+def shutdown_status():
+    """Read-only broker snapshot. Unknown positions must never mean zero."""
+    with _lock:
+        term, acc = mt5.terminal_info(), mt5.account_info()
+        pos, orders = mt5.positions_get(), mt5.orders_get()
+    if not term or not term.connected or not acc or pos is None or orders is None:
+        raise RuntimeError('Cannot verify broker positions and pending orders')
+    return {"ok": True, "account": acc.login, "server": acc.server,
+            "positions": [{"ticket":p.ticket,"symbol":p.symbol,"sl":p.sl,"tp":p.tp,
+                           "type":"buy" if p.type == 0 else "sell"} for p in pos],
+            "pendingOrders": len(orders)}
+
+
 def positions():
     with _lock:
         pos = mt5.positions_get() or []
@@ -440,6 +454,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"error": "bad_code",
                                "message": "Wrong session code. Read the six digits in the bridge window."}, 403)
 
+        if u.path == "/session":
+            # Authentication-only heartbeat: never sends or changes an order.
+            acc = mt5.account_info()
+            term = mt5.terminal_info()
+            connected = bool(term and term.connected and acc)
+            allowed = bool(connected and term.trade_allowed and not term.tradeapi_disabled
+                           and acc.trade_allowed and acc.trade_expert)
+            return self._send({"ok": True, "connected": connected, "tradeAllowed": allowed,
+                               "account": getattr(acc, "login", None)})
+
         if u.path == "/manual-review":
             if body.get('acknowledgement') != 'CHECKED MT5':
                 return self._send({'ok': False, 'message': 'Explicit MT5 review is required'}, 400)
@@ -501,6 +525,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"error": "stop_wrong_side",
                                "message": "The stop is on the wrong side of the price."}, 400)
 
+        try:
+            filling = market_filling(mt5, mt5.symbol_info(sym))
+        except ValueError as e:
+            return self._send({"error": "filling_unavailable", "message": str(e)}, 503)
         req = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": sym,
@@ -512,7 +540,7 @@ class Handler(BaseHTTPRequestHandler):
             "magic": MAGIC,
             "comment": str(b.get("comment", "ASTRA"))[:31],
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": filling,
         }
         if tp > 0:
             req["tp"] = tp
@@ -549,6 +577,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"error": "no_quote"}, 503)
 
         closing_buy = pos.type == mt5.POSITION_TYPE_SELL
+        try:
+            filling = market_filling(mt5, mt5.symbol_info(pos.symbol))
+        except ValueError as e:
+            return self._send({"error": "filling_unavailable", "message": str(e)}, 503)
         req = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": pos.symbol,
@@ -560,7 +592,7 @@ class Handler(BaseHTTPRequestHandler):
             "magic": MAGIC,
             "comment": "ASTRA close",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": filling,
         }
         log_order("CLOSE ticket=%s %s %s" % (ticket, pos.symbol, pos.volume))
         with _lock:
@@ -647,6 +679,8 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         try:
+            if u.path == "/shutdown-check":
+                return self._send(shutdown_status())
             if u.path == "/health":
                 acc = mt5.account_info()
                 return self._send({

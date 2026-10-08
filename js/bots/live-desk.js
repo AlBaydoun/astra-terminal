@@ -502,7 +502,7 @@ const LiveDesk = {
     if (String(typed || '').trim().toUpperCase() !== this.LIVE_PHRASE) return { ok: false, why: 'Type ' + this.LIVE_PHRASE + ' to let the desk place real orders.' };
     Live.load();
     if (!Live.state.linked) return { ok: false, why: 'The bridge session code has not been entered (step 1).' };
-    if (!Live.bridge.trading) return { ok: false, why: 'The live bridge is not running — start START-LIVE-TRADING.bat.' };
+    if (!Live.connected()) return { ok: false, why: Live.bridge.reason || 'Verify the broker connection first.' };
     let n = 0;
     for (const id of this.managedIds()){ const a = Live.state.armed[id]; if (a.mode !== 'live'){ a.mode = 'live'; a.liveAt = Date.now(); n++; } }
     Live.save();
@@ -555,7 +555,7 @@ const LiveDesk = {
   },
   async modify(ticket, sl, tp, why){
     Live.load();
-    if (!Live.state.linked || !Live.bridge.trading) return { ok: false, message: 'the live bridge is not linked' };
+    if (!Live.connected()) return { ok: false, message: 'the live bridge is not linked' };
     try {
       const j = await this.post('/modify', { ticket, sl: +sl, tp: +(tp || 0) });
       this.note(j.ok ? 'modify' : 'modify-failed', 'Ticket ' + ticket + ' — stop ' + fmtPrice(sl) + (tp > 0 ? ' · target ' + fmtPrice(tp) : ' · no target') +
@@ -567,7 +567,7 @@ const LiveDesk = {
   },
   async closeTicket(ticket, why){
     Live.load();
-    if (!Live.state.linked || !Live.bridge.trading) return { ok: false, message: 'the live bridge is not linked' };
+    if (!Live.connected()) return { ok: false, message: 'the live bridge is not linked' };
     try {
       const j = await this.post('/close', { ticket });
       this.note(j.ok ? 'close' : 'close-failed', 'Ticket ' + ticket + ' closed at the market' + (why ? ' — ' + why : '') + (j.ok ? '' : ' — REFUSED: ' + (j.message || j.error || j.comment)), j);
@@ -613,7 +613,7 @@ const LiveDesk = {
     if ((p.price_current - t.best) * dir > 0) t.best = p.price_current;
     const pl = this.plan(p), X = pl.X;
     if (pl.locked && !t.locked) t.locked = true;
-    if (!Live.state.linked || !Live.bridge.trading) return;
+    if (!Live.connected()) return;
     if (now - (t.lastAt || 0) < 8000) return;
     /* 1. the minimum target */
     if (X.targetPct > 0 && !t.locked && pl.movePct >= X.targetPct){
@@ -675,6 +675,8 @@ const LiveDesk = {
   },
   init(){
     this.load();
+    if (!this.connectionTimer) this.connectionTimer = setInterval(() => Live.probe(), 10000);
+    Live.probe();
     if (!this.timer) this.timer = setInterval(() => this.manage(), 5000);
     if (!this.scanTimer) this.scanTimer = setInterval(() => this.scan(), this.SCAN_EVERY);
     if (!this.pulseTimer) this.pulseTimer = setInterval(() => this.refreshPulse(), 1000);
@@ -825,9 +827,9 @@ const LiveDesk = {
     const B = Live.bridge, a = this.account();
     const gates = [
       { on: !!B.trading, icon: '🔌', t: 'Bridge', s: B.trading ? 'live bridge running' : 'read-only / off' },
-      { on: !!Live.state.linked, icon: '🔑', t: 'Code', s: Live.state.linked ? 'session code entered' : 'not entered' },
+      { on: Live.connected(), icon: '🔑', t: 'Code', s: Live.connected() ? 'session verified' : 'not verified / disconnected' },
       { on: S.on, icon: '🛡️', t: 'Desk armed', s: S.on ? this.managedIds().length + ' bot' + (this.managedIds().length === 1 ? '' : 's') + ' in ' + mode.toUpperCase() : 'off' },
-      { on: mode === 'live', icon: '🔴', t: 'Real money', s: mode === 'live' ? 'orders can be sent' : 'shadow — nothing sent' },
+      { on: mode === 'live' && Live.connected(), icon: '🔴', t: 'Real money', s: mode === 'live' && Live.connected() ? 'orders can be sent' : 'shadow — nothing sent' },
     ];
     const KEYS = ['bridge', 'code', 'arm', 'live'];
     const TIP = { bridge: 'Start the live bridge — shows you how', code: 'Type the six-digit session code', arm: 'Arm the desk (puts the chosen bots in shadow)', live: 'Go live: type TRADE REAL MONEY' };
@@ -837,7 +839,7 @@ const LiveDesk = {
       : `<button type="button" class="ldNextStep" data-ldgate="${KEYS[next]}">Next step: <b>${esc(TIP[KEYS[next]])}</b> ›</button>`;
     const pool = this.budget(), now = this.budgetNow(), pnl = this.pnlSince(), openPl = this.openPnl();
     const heroShut = !!((S.ui && S.ui.folded) || {}).hero;
-    const badge = mode === 'live' ? 'LIVE DESK · REAL MONEY' : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF';
+    const badge = mode === 'live' ? (Live.connected() ? 'LIVE DESK · REAL MONEY' : 'LIVE DESK · CONNECTION PAUSED') : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF';
     if (heroShut) return `<div class="ldHero ldHeroMini">
       <button class="ldHeroFold" data-ldfold="hero" title="Unfold the banner">▸</button>
       <div class="ldBadge ${mode}"><i></i>${badge}</div>
@@ -847,7 +849,7 @@ const LiveDesk = {
     return `<div class="ldHero">
       <button class="ldHeroFold" data-ldfold="hero" title="Fold the banner to one line">▾</button>
       <div class="ldHeroLeft">
-        <div class="ldBadgeRow"><div class="ldBadge ${mode}"><i></i>${mode === 'live' ? 'LIVE DESK · REAL MONEY' : mode === 'shadow' ? 'DESK IN SHADOW' : 'DESK OFF'}</div>
+        <div class="ldBadgeRow"><div class="ldBadge ${mode}"><i></i>${badge}</div>
           <button class="bMini ldHowBtn" data-ldact="howto" title="How to trade with the desk — worked examples with pictures">📘 How to trade · examples</button>
           <button class="bMini" data-ldact="resetui" title="Every section back in its place, unfolded">↺ layout</button></div>
         <p>${mode === 'live' ? 'The chosen bots place real orders within the bot money. The desk watches every open trade and applies your exit rules.'
@@ -891,7 +893,7 @@ const LiveDesk = {
       <div class="ldNodes" id="ldNodes">${this.nodesHtml()}</div>
       <div class="ldPulseGrid"><div><h5>Today’s signals — how far they got</h5><div id="ldFunnel">${this.funnelHtml(mode)}</div></div><div><h5>The bot money — in motion</h5><div id="ldMoneyPic">${this.moneyPicHtml(S)}</div></div></div>
       <div class="ldTicker"><div class="ldTickerIn" id="ldTickerIn" data-top="${(S.log[0] || {}).t || 0}">${this.tickerHtml(S)}</div></div>`;
-    return this.card('pulse', 'What is happening', '📡', body, mode === 'live' ? 'live · real orders possible' : 'shadow · rehearsal', 'ldPulse', 'ldPulseCard');
+    return this.card('pulse', 'What is happening', '📡', body, mode === 'live' ? (Live.connected() ? 'live · connection verified' : 'live · connection paused') : 'shadow · rehearsal', 'ldPulse', 'ldPulseCard');
   },
   nodesHtml(){
     const ids = this.managedIds();
@@ -1305,7 +1307,7 @@ const LiveDesk = {
     Live.load();
     const ids = this.selected();
     const names = ids.map(id => (BOT_BY_ID[id] || {}).name || id);
-    const linked = Live.state.linked && Live.bridge.trading;
+    const linked = Live.connected();
     if (mode === 'off'){
       return this.card('arm', 'Arm the desk', '🛡️', `
         <div class="ldArmWho">${names.length ? 'Arming puts <b>' + esc(names.join(', ')) + '</b> on the real account in <b>SHADOW</b>: every order worked out from ' + fmtNum(this.budget()) + ' of bot money and written down, nothing sent.' : '<b>No bot is chosen yet.</b> ' + (S.bots.mode === 'auto' ? 'None passes the door — lower it, or tick bots yourself.' : 'Choose at least one bot in Which bots below.')}</div>
@@ -1318,14 +1320,14 @@ const LiveDesk = {
         'everything starts in shadow', '', 'ldArm');
     }
     const managed = this.managedIds();
-    return this.card('arm', mode === 'live' ? 'The desk is LIVE' : 'The desk is armed — in shadow', mode === 'live' ? '🔴' : '🛡️', `
+    return this.card('arm', mode === 'live' ? (linked ? 'The desk is LIVE' : 'LIVE selected · connection paused') : 'The desk is armed — in shadow', mode === 'live' ? '🔴' : '🛡️', `
       ${mode === 'shadow' ? `
         <p>${linked ? 'The bridge is live and linked. Typing the phrase below lets every desk bot place <b>real orders</b> — within the bot money, the exit rules and the limits on this page.' : '<b>To go live:</b> start START-LIVE-TRADING.bat and enter its six-digit code in step 1 above. Until then the desk stays in shadow.'}</p>
         ${S.bots.mode === 'auto' ? '<p class="ldWarn">Automatic choice is on: the desk may swap bots in and out on its own later; a newly chosen bot trades real money under the same rules. Every swap is written in the log.</p>' : ''}
         <div class="lvRow"><input id="ldLiveInput" type="text" placeholder="type ${this.LIVE_PHRASE}" spellcheck="false" autocomplete="off"${linked ? '' : ' disabled'}><button class="bMini danger" data-ldact="golive"${linked ? '' : ' disabled'}>Go live</button>
           <button class="bMini" data-ldact="off">Switch the desk off</button></div>`
       : `
-        <p>Real orders can be sent. <b>Back to shadow</b> stops new orders instantly and keeps the desk watching the open trades; <b>Switch off</b> disarms every desk bot. Open positions are never closed by either — use the cards below or the kill switch at the top.</p>
+        <p><span data-live-connection-message>${linked ? 'Connection verified; orders still require a valid signal and risk checks.' : 'Connection unverified — new real orders are blocked.'}</span> <b>Back to shadow</b> stops new orders instantly and keeps the desk watching the open trades; <b>Switch off</b> disarms every desk bot. Open positions are never closed by either — use the cards below or the kill switch at the top.</p>
         <div class="lvRow"><button class="bBtn" data-ldact="shadow">Back to shadow</button><button class="bMini" data-ldact="off">Switch the desk off</button></div>`}`,
       managed.length + ' bot' + (managed.length === 1 ? '' : 's') + ': ' + (managed.map(id => (BOT_BY_ID[id] || {}).name || id).join(', ') || 'none'), '', 'ldArm ' + mode);
   },

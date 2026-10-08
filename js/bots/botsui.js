@@ -179,7 +179,7 @@ Object.assign(Bots, {
       LiveManual.status(); return;
     }
 
-    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;
+    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap, #liveDive') && !Explorer.dirty) return;
     if (b.checker && host.dataset.bot === b.id && host.querySelector('.ckWrap') && !Checker.dirty){ Checker.renderStatus(); return; }   /* the checker redraws on your clicks and after each study */   /* the Deep Dive redraws only on your clicks */
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       TradeAnalysis.refresh();
@@ -249,6 +249,7 @@ Object.assign(Bots, {
            <button class="botGuideBtn" data-guide="${esc(b.id)}" title="How this bot works — the full guide">?</button></b><span>${esc(b.blurb)}</span></div>
          ${b.live
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
+           : b.explorer && typeof LiveExplorer !== 'undefined' && LiveExplorer.selected ? `<span class="paperTag" title="Real broker records; this report cannot send orders">LIVE REPORT · READ ONLY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
          ${typeof BotLayout !== 'undefined' && BotLayout.hasLayout(b) ? BotLayout.button(b.id) : ''}
        </div>`;

@@ -128,7 +128,7 @@ const LiveManual = {
     if(!this.health||Date.now()-this.health.readAt>30000)return 'Refresh the real account before submitting.';
     if(this.health.manualTickets!==1)return 'BRIDGE UPDATE NEEDED · close the ordinary bridge window and reopen START-MT5-Bridge.bat to load this ticket’s broker support.';
     if(!this.health.trading||!Live.bridge.trading)return 'READ-ONLY · start the live bridge and enter its session code in Live connection & account limits.';
-    if(!S.linked||!/^\d{6}$/.test(S.code||''))return 'Enter the live bridge session code in the connection page.';
+    if(!Live.connected()||!/^\d{6}$/.test(S.code||''))return 'Enter the live bridge session code in the connection page.';
     if(S.killedAt||!a)return 'LOCKED · explicitly arm LIVE trading bot first.';
     if(a.mode!=='live'||!this.unlocked)return 'SHADOW / LOCKED · no real orders will be sent.';
     return '';
@@ -163,7 +163,8 @@ const LiveManual = {
       if(!Array.isArray(p.positions)||!Number.isFinite(h.equity)||!h.account)throw Error('Incomplete broker account response');
       if(this.health&&(this.health.account!==h.account||this.health.server!==h.server)){this.unlocked=false;this.invalidate();this.message='Broker account changed. Reconnect and arm again.';}
       this.health={...h,readAt:Date.now()};this.positions=p.positions;
-      Live.bridge={...Live.bridge,...h,checked:Date.now()};
+      // A price-feed health response cannot renew authenticated trading status.
+      await Live.probe();
       if(this.draft.sym)await Feed.quotes([this.draft.sym],{strict:true});
       this.renderPositions();
     }catch(e){this.health=null;this.preview=null;this.message='Account refresh failed: '+e.message;}

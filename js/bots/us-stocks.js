@@ -62,6 +62,11 @@ const USStocks = {
   prepare(A){
     const c = A.c, n = c.length;
     if (A.ny) return A;
+    // Checker exposes ATR as a percentage, but these strategies size price
+    // distances and need the original ATR plus their own SMA/RSI periods.
+    A.atr14 = IND.atr(c, 14);
+    A.sma200 = IND.sma(A.close, 200);
+    A.rsi2 = IND.rsi(A.close, 2);
     const nyMin = new Array(n), nyDay = new Array(n);
     for (let i = 0; i < n; i++){
       const raw = c[i].rawTime || c[i].time;

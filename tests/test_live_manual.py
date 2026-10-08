@@ -32,7 +32,7 @@ class FakeMT5:
     def __init__(self):
         self.account=NS(login=1,server='Mock',currency='USD',equity=1000,balance=1000,margin_free=1000,trade_allowed=True,trade_expert=True)
         self.terminal=NS(connected=True,trade_allowed=True)
-        self.spec=NS(visible=True,trade_mode=4,point=.01,trade_tick_size=.01,trade_stops_level=1,currency_base='ETH',currency_profit='USD',volume_min=.01,volume_step=.01,volume_max=100,digits=2)
+        self.spec=NS(filling_mode=2,trade_exemode=2,visible=True,trade_mode=4,point=.01,trade_tick_size=.01,trade_stops_level=1,currency_base='ETH',currency_profit='USD',volume_min=.01,volume_step=.01,volume_max=100,digits=2)
         self.tick=NS(time=int(time.time())+10800,time_msc=(int(time.time())+10800)*1000,bid=100,ask=100.1)
         self.positions=[];self.orders=[];self.deals=[];self.sent=[];self.check_code=0;self.no_response=False;self.profit_missing=False
     def account_info(self):return self.account
@@ -180,6 +180,37 @@ class ManualTests(unittest.TestCase):
         responses=[];handler._send=lambda obj,status=200:responses.append((obj,status));bridge.log_order=lambda *a:None
         handler.do_POST();self.assertEqual(responses[-1][1],403)
         bridge.TRADING_ENABLED=True;bridge.SESSION_CODE='654321';handler.do_POST();self.assertEqual(responses[-1][1],403);self.assertFalse(self.api.sent)
+
+    def test_automated_order_uses_broker_fok_and_keeps_protection(self):
+        self.api.ORDER_FILLING_FOK=0;self.api.spec.filling_mode=1
+        with patch.dict(sys.modules,{'MetaTrader5':self.api}):
+            spec=importlib.util.spec_from_file_location('astra_mock',BRIDGE/'astra_mt5.py');bridge=importlib.util.module_from_spec(spec);spec.loader.exec_module(bridge)
+        bridge.ensure_selected=lambda sym:True;bridge.log_order=lambda *a:None
+        handler=bridge.Handler.__new__(bridge.Handler);responses=[];handler._send=lambda obj,status=200:responses.append((obj,status))
+        handler._order({'symbol':'ETHUSD.s','side':'buy','lots':.01,'sl':99,'tp':103})
+        self.assertTrue(responses[-1][0]['ok'])
+        self.assertEqual(self.api.sent[0]['type_filling'],0)
+        self.assertEqual((self.api.sent[0]['sl'],self.api.sent[0]['tp']),(99,103))
+
+    def test_shutdown_snapshot_never_treats_unknown_positions_as_empty(self):
+        with patch.dict(sys.modules,{'MetaTrader5':self.api}):
+            spec=importlib.util.spec_from_file_location('astra_mock',BRIDGE/'astra_mt5.py');bridge=importlib.util.module_from_spec(spec);spec.loader.exec_module(bridge)
+        self.assertEqual(bridge.shutdown_status()['positions'],[])
+        self.api.positions=None
+        with self.assertRaises(RuntimeError):bridge.shutdown_status()
+        self.api.positions=[];self.api.orders=None
+        with self.assertRaises(RuntimeError):bridge.shutdown_status()
+        self.assertFalse(self.api.sent)
+
+    def test_session_endpoint_is_read_only_and_checks_terminal(self):
+        self.api.terminal.tradeapi_disabled=False
+        with patch.dict(sys.modules,{'MetaTrader5':self.api}):
+            spec=importlib.util.spec_from_file_location('astra_mock',BRIDGE/'astra_mt5.py');bridge=importlib.util.module_from_spec(spec);spec.loader.exec_module(bridge)
+        bridge.TRADING_ENABLED=True;bridge.SESSION_CODE='654321'
+        handler=bridge.Handler.__new__(bridge.Handler);handler.path='/session';handler._read_json=lambda:{'code':'654321'}
+        responses=[];handler._send=lambda obj,status=200:responses.append((obj,status))
+        handler.do_POST();self.assertTrue(responses[-1][0]['tradeAllowed']);self.assertFalse(self.api.sent)
+        self.api.terminal.connected=False;handler.do_POST();self.assertFalse(responses[-1][0]['connected']);self.assertFalse(self.api.sent)
 
 
 if __name__=='__main__':unittest.main()

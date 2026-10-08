@@ -68,52 +68,108 @@ const Live = {
   },
 
   /* ---------- the bridge ---------- */
+  connected(){
+    // Read without replacing state: arming callers hold references into it.
+    const saved = lsGet('astra_live', null) || this.state;
+    return !!(saved && saved.linked && this.bridge.trading && this.bridge.authenticated &&
+      Date.now() - this.bridge.checked < 20000);
+  },
+
   async probe(){
+    if (this.probing) return this.probing;
+    this.probing = this.probeOnce();
+    try { return await this.probing; } finally { this.probing = null; }
+  },
+
+  async probeOnce(){
+    const code = this.load().code;
+    const previous = this.bridge;
     try {
       const r = await fetch(this.BRIDGE + '/health', { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+      if (!r.ok) throw Error('Bridge health check failed');
       const j = await r.json();
       this.bridge = { trading: !!j.trading, account: j.account || null, balance: j.balance,
-                      currency: j.currency || '', server: j.server || '', magic: j.magic, checked: Date.now() };
+        currency: j.currency || '', server: j.server || '', magic: j.magic, checked: Date.now(),
+        authenticated: false, reason: j.trading ? 'Enter the current session code.' : 'Bridge is read-only.' };
+      if (code && j.trading){
+        const v = await fetch(this.BRIDGE + '/session', { method: 'POST',
+          headers: {'content-type':'application/json'}, body: JSON.stringify({code}),
+          signal: AbortSignal.timeout(3000) });
+        const auth = await v.json();
+        // Ignore replies for a code the operator has since replaced or cleared.
+        if (this.load().code !== code) return this.bridge;
+        if (auth.error === 'bad_code') this.rejectSession();
+        else if (v.ok && auth.ok && auth.connected && auth.tradeAllowed && auth.account === j.account){
+          if (previous.authenticated && previous.account !== j.account) this.rejectSession();
+          else { this.bridge.authenticated = true; this.bridge.reason = ''; }
+        } else this.bridge.reason = !v.ok ? 'Restart the bridge to load the connection update.' :
+          !auth.connected ? 'MetaTrader is disconnected from the broker.' : 'MetaTrader automated trading is disabled.';
+      }
     } catch(e){
-      this.bridge = { trading: false, account: null, balance: null, currency: '', server: '', checked: Date.now() };
+      this.bridge = { trading: false, authenticated: false, account: null, balance: null,
+        currency: '', server: '', checked: Date.now(), reason: 'Connection lost: ' + e.message };
     }
+    this.refreshConnection();
     return this.bridge;
   },
 
-  /* Validate the session code without any side effect: asking to close ticket 0
-     is refused for a bad code (403) and simply not found for a good one (404). */
+  refreshConnection(){
+    if (typeof document === 'undefined' || typeof Bots === 'undefined') return;
+    const st = this.status();
+    const banner = document.querySelector('#liveControl .lvBanner');
+    if (banner){
+      banner.className = 'lvBanner ' + st.cls;
+      const title = banner.querySelector('.lvbLeft > b'), detail = banner.querySelector('.lvbLeft > span');
+      if (title) title.textContent = st.label;
+      if (detail) detail.textContent = st.text;
+    }
+    // Do not replace a code while the operator is typing it.
+    const box = document.getElementById('liveConnect');
+    const key = [this.connected(), this.bridge.trading, this.load().linked].join('|');
+    if (box && box.dataset.connection !== key && !box.contains(document.activeElement)){
+      box.innerHTML = Bots.lvStep1(this.state, this.bridge); box.dataset.connection = key;
+      box.querySelectorAll('[data-act]').forEach(el => el.onclick = () => Bots.liveAction(el.dataset.act));
+    }
+    if (typeof LiveDesk !== 'undefined' && LiveDesk.refreshPulse) LiveDesk.refreshPulse(true);
+    const ready = this.connected();
+    document.querySelectorAll('.ldGate').forEach(el => {
+      if (['code','bridge','live'].includes(el.dataset.ldgate)){
+        const on = el.dataset.ldgate === 'bridge' ? this.bridge.trading : el.dataset.ldgate === 'live' ? ready && this.liveCount() > 0 : ready;
+        el.classList.toggle('on', !!on);
+        const text = el.querySelector('span'); if(text) text.textContent = on ? 'verified' : 'not verified / disconnected';
+      }
+    });
+    document.querySelectorAll('[data-live-connection-message]').forEach(el => { el.textContent = ready ? 'Connection verified; orders still require a valid signal and risk checks.' : 'Connection unverified — new real orders are blocked.'; });
+    const armTitle = document.querySelector('.ldArm.live .ldCardHead > b');
+    if (armTitle) armTitle.textContent = ready ? 'The desk is LIVE' : 'LIVE selected · connection paused';
+    document.querySelectorAll('.ldBadge.live').forEach(el => { el.textContent = ready ? 'LIVE DESK · REAL MONEY' : 'LIVE DESK · CONNECTION PAUSED'; });
+    document.querySelectorAll('.ldNextStep.done').forEach(el => {
+      el.textContent = ready ? 'Connection verified — entries remain subject to risk and signal checks.' : 'Connection unverified — new real entries paused.';
+    });
+  },
+
+  /* Read-only validation; never call an order or close endpoint to test a code. */
   async link(code){
     code = String(code || '').trim();
-    if (!/^\d{6}$/.test(code)) return { ok: false, why: 'The code is six digits.' };
-    await this.probe();
-    if (!this.bridge.trading)
-      return { ok: false, why: 'The live bridge is not running. Close the read-only bridge and start START-LIVE-TRADING.bat.' };
+    if (!/^\d{6}$/.test(code)) return { ok:false, why:'The code is six digits.' };
     try {
-      const r = await fetch(this.BRIDGE + '/close', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code, ticket: 0 }), signal: AbortSignal.timeout(4000),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (r.status === 403 || j.error === 'bad_code'){
-        this.rejectSession();
-        return { ok: false, why: 'That code was refused. Read the six digits again in the bridge window.' };
-      }
-      if (r.status !== 404 || j.error !== 'not_found')
-        return { ok: false, why: 'The bridge did not confirm this code. Nothing has been linked.' };
-      this.load();
-      this.state.code = code;
-      this.state.linked = true;
-      this.state.startBalance = this.bridge.balance;
-      this.save();
-      this.audit('link', 'Linked to account ' + this.bridge.account + ' on ' + this.bridge.server);
-      return { ok: true };
-    } catch(e){
-      return { ok: false, why: 'The bridge did not answer: ' + e.message };
-    }
+      const r = await fetch(this.BRIDGE + '/session', {method:'POST',
+        headers:{'content-type':'application/json'}, body:JSON.stringify({code}), signal:AbortSignal.timeout(4000)});
+      const j = await r.json();
+      if (!r.ok || !j.ok || !j.connected || !j.tradeAllowed)
+        return {ok:false, why:j.error === 'bad_code' ? 'The code changed. Enter the current bridge code.' :
+          'Cannot verify trading access. Restart the updated bridge and check MetaTrader connection and automated trading.'};
+      this.load(); this.state.code=code; this.state.linked=true; this.save();
+      await this.probe();
+      if (!this.connected()) return {ok:false,why:this.bridge.reason || 'Connection could not be verified.'};
+      this.audit('link','Session verified with the broker account');
+      return {ok:true};
+    } catch(e){ return {ok:false,why:'Bridge did not answer: '+e.message}; }
   },
 
   unlink(){
     this.load();
+    this.bridge.authenticated = false;
     this.state.code = ''; this.state.linked = false;
     this.save();
     this.audit('unlink', 'Session code cleared');
@@ -123,6 +179,7 @@ const Live = {
     // A restarted bridge issues a new code. Reconnecting must not resume real
     // orders silently: preserve selected bots, but require Go live again.
     this.load();
+    this.bridge.authenticated = false;
     this.state.code = ''; this.state.linked = false;
     for (const a of Object.values(this.state.armed)) a.mode = 'shadow';
     this.save();
@@ -175,7 +232,7 @@ const Live = {
     if (String(typed || '').trim().toUpperCase() !== 'TRADE REAL MONEY')
       return { ok: false, why: 'Type TRADE REAL MONEY to switch this bot from shadow to live.' };
     if (!this.state.linked) return { ok: false, why: 'The bridge session code has not been entered.' };
-    if (!this.bridge.trading) return { ok: false, why: 'The live bridge is not running.' };
+    if (!this.connected()) return { ok: false, why: 'Verify the live connection first.' };
     a.mode = 'live'; a.liveAt = Date.now();
     this.save();
     this.audit('golive', bot.name + ' switched to LIVE — it can now place real orders');
@@ -310,7 +367,7 @@ const Live = {
        live bridge and its code, and so does every hand-armed bot */
     const rehearsing = !!(a.desk && a.mode !== 'live');
     if (!this.state.linked && !rehearsing) return { ok: false, reason: 'the bridge session code has not been entered' };
-    if (!this.bridge.trading && !rehearsing) return { ok: false, reason: 'the live bridge is not running' };
+    if (!this.connected() && !rehearsing) return { ok: false, reason: this.bridge.reason || 'Live connection has not been verified recently' };
     if (rehearsing && !(this.bridge.balance > 0) && !(this.state.startBalance > 0)) return { ok: false, reason: 'the account balance is not known yet — is the MT5 bridge running?' };
 
     /* a bot the live desk armed is judged by the desk's own choices — its
@@ -335,7 +392,10 @@ const Live = {
     }
 
     const sl = desk ? desk.sl : sig.sl, tp = desk ? desk.tp : (sig.tp || 0);
-    if (!(sl > 0)) return { ok: false, reason: 'no stop-loss' };
+    if (!Number.isFinite(sl) || !(sl > 0)) return { ok: false, reason: 'no valid stop-loss' };
+    if (!Number.isFinite(tp) || !(tp > 0)) return { ok: false, reason: 'A broker take-profit is required for unattended trades; set a target in Exit rules.' };
+    if (sig.dir > 0 ? sl >= sig.entry || tp <= sig.entry : sl <= sig.entry || tp >= sig.entry)
+      return {ok:false, reason:'Stop and target must be on opposite sides of the entry.'};
 
     /* the size is worked out here, from the real balance — never taken from the
        paper engine, which sizes against its own virtual account */
@@ -370,6 +430,7 @@ const Live = {
     this.load();
     const deskBot = typeof LiveDesk !== 'undefined' && !!(this.state.armed[bot.id] || {}).desk;
     if (deskBot) LiveDesk.saw(bot, sig);
+    if ((this.state.armed[bot.id] || {}).mode === 'live') await this.probe();
     const g = this.check(bot, sig, gate, quote);
     if (!g.ok){
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, sent: false,
@@ -404,6 +465,7 @@ const Live = {
       return { ok: true, shadow: true };
     }
 
+    this.inFlight = (this.inFlight || 0) + 1;
     try {
       const r = await fetch(this.BRIDGE + '/order', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -435,8 +497,9 @@ const Live = {
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
                     sent: true, ok: false, brokerSaid: e.message, at: Date.now() });
       this.audit('order-failed', bot.name + ' order could not be sent — ' + e.message);
+      this.uncertainOrder = true;
       return { ok: false, reason: e.message };
-    }
+    } finally { this.inFlight--; }
   },
 
   record(o){
@@ -501,8 +564,9 @@ const Live = {
     const armed = this.armedList().length;
     const live = this.liveCount();
     if (this.state.killedAt) return { cls: 'bad', label: 'STOPPED', text: this.state.killReason };
-    if (!this.bridge.trading) return { cls: 'idle', label: 'READ-ONLY', text: 'The live bridge is not running — nothing can be sent.' };
+    if (!this.bridge.trading) return { cls: 'idle', label: this.bridge.reason?.startsWith('Connection lost') ? 'DISCONNECTED' : 'READ-ONLY', text: this.bridge.reason || 'The live bridge is not running — nothing can be sent.' };
     if (!this.state.linked) return { cls: 'idle', label: 'NOT LINKED', text: 'The bridge is live but its session code has not been entered here.' };
+    if (!this.connected()) return { cls: 'bad', label: 'CONNECTION UNVERIFIED', text: this.bridge.reason || 'Waiting for a fresh authenticated heartbeat. Entries paused.' };
     if (!armed) return { cls: 'idle', label: 'IDLE', text: 'Linked to the account, but no bot is armed.' };
     const desk = typeof LiveDesk !== 'undefined' && LiveDesk.isOn() ? ' · desk on' : '';
     if (live) return { cls: 'live', label: 'LIVE · ' + live + ' BOT' + (live > 1 ? 'S' : '') + desk,

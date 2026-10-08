@@ -1,4 +1,5 @@
 """Manual ticket valuation and final checks. Injected MT5 API makes tests non-trading."""
+from filling import market_filling
 import math
 import secrets
 import threading
@@ -158,7 +159,7 @@ class ManualExecution:
             raise ValueError('Account budgets changed; refresh the preview')
         reward = profit(lots,tp) if tp else None
         request = dict(action=m.TRADE_ACTION_DEAL,symbol=sym,volume=lots,type=kind,price=entry,sl=round(sl,spec.digits),
-                       deviation=20,magic=self.magic,comment='ASTRA liveManual',type_time=m.ORDER_TIME_GTC,type_filling=m.ORDER_FILLING_IOC)
+                       deviation=20,magic=self.magic,comment='ASTRA liveManual',type_time=m.ORDER_TIME_GTC,type_filling=market_filling(m,spec))
         if tp:
             request['tp'] = round(tp,spec.digits)
         return dict(ok=True,account=account.login,server=account.server,currency=account.currency,balance=account.balance,equity=equity,
