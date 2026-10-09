@@ -127,6 +127,7 @@ Object.assign(Bots, {
     /* the Deep Dive notes are folded each time you arrive at the Deep Dive, until you unfold them */
     if (this.active === 'explorer' && this._prevActive !== 'explorer' && typeof Explorer !== 'undefined'){ Explorer.notesOpen = false; Explorer.dnListOpen = false; Explorer.noteQ = ''; Explorer.noteBot = '*'; Explorer._tickerBot = undefined;
       try { const st = Explorer.secState(); if (st.max === 'notes'){ st.max = null; Explorer.saveSec(st); } } catch(e){} Explorer.dirty = true; }
+    if (this.active === 'livedive' && this._prevActive !== 'livedive' && typeof LiveDive !== 'undefined'){ LiveDive.notesOpen = false; LiveDive.dnListOpen = false; LiveDive.noteQ = ''; LiveDive.noteBot = '*'; LiveDive._tickerBot = undefined; LiveDive.dirty = true; }
     this._prevActive = this.active;
     if (this.active === 'permissions'){
       if (host.dataset.bot === 'manual') this.manualDraft = this.snapshotForm(host);
@@ -179,7 +180,8 @@ Object.assign(Bots, {
       LiveManual.status(); return;
     }
 
-    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap, #liveDive') && !Explorer.dirty) return;
+    if (b.liveDive && host.dataset.bot === b.id && host.querySelector('.exWrap') && !LiveDive.dirty) return;
+    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;
     if (b.checker && host.dataset.bot === b.id && host.querySelector('.ckWrap') && !Checker.dirty){ Checker.renderStatus(); return; }   /* the checker redraws on your clicks and after each study */   /* the Deep Dive redraws only on your clicks */
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       TradeAnalysis.refresh();
@@ -249,7 +251,7 @@ Object.assign(Bots, {
            <button class="botGuideBtn" data-guide="${esc(b.id)}" title="How this bot works — the full guide">?</button></b><span>${esc(b.blurb)}</span></div>
          ${b.live
            ? `<span class="paperTag live" title="Real orders are possible from this page">REAL MONEY</span>`
-           : b.explorer && typeof LiveExplorer !== 'undefined' && LiveExplorer.selected ? `<span class="paperTag" title="Real broker records; this report cannot send orders">LIVE REPORT · READ ONLY</span>`
+           : b.liveDive ? `<span class="paperTag" title="Real trades read from MetaTrader; this page cannot send or close an order">LIVE REPORT · READ ONLY</span>`
            : `<span class="paperTag" title="This page cannot send an order to a broker">PAPER ONLY</span>`}
          ${typeof BotLayout !== 'undefined' && BotLayout.hasLayout(b) ? BotLayout.button(b.id) : ''}
        </div>`;
@@ -306,9 +308,10 @@ Object.assign(Bots, {
         backtest: this.btView(b.id),
       });
     } else host.innerHTML = head +
-      (typeof BotNotes !== 'undefined' && !b.explorer ? BotNotes.view(b.id) : '') +
+      (typeof BotNotes !== 'undefined' && !b.explorer && !b.liveDive ? BotNotes.view(b.id) : '') +
       this.controls(b, cfg) +
       (b.dash ? BotDash.view()
+        : b.liveDive ? LiveDive.view()
         : b.explorer ? Explorer.view()
         : b.checker ? Checker.view()
         : b.researchDesk ? Research.view()
@@ -1132,7 +1135,7 @@ Object.assign(Bots, {
         if (act === 'enable') Bots.setDisabled(id, false);
       }));
     }
-    if (b.explorer) Explorer.bind(host); else if (b.checker) Checker.bind(host); else if (b.researchDesk) Research.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
+    if (b.liveDive) LiveDive.bind(host); else if (b.explorer) Explorer.bind(host); else if (b.checker) Checker.bind(host); else if (b.researchDesk) Research.bind(host); else if (b.analysis) TradeAnalysis.bind(host);
     if (b.fit) host.querySelectorAll('[data-fitsort]').forEach(el =>
       el.addEventListener('click', () => { MarketFit.setSort(el.dataset.fitsort); this.render(); }));
     if (b.liveManual) LiveManual.bind(host);

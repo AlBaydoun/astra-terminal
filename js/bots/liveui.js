@@ -65,6 +65,7 @@ Object.assign(Bots, {
                  <button class="bMini" data-act="lvunlink">Forget the code</button></div>`
             : `<div class="lvBody">
                  <p>The live bridge is running. Read the <b>six-digit session code</b> printed in its window and type it here.</p>
+                 ${B.startedAt ? `<p class="dim2">The bridge answering ASTRA was opened at <b>${new Date(B.startedAt * 1000).toLocaleString()}</b> — use the code from THAT window. If it is not the window you are looking at, close every bridge window and start START-LIVE-TRADING.bat once.</p>` : `<p class="dim2">This bridge is an older version: if the code is refused, close EVERY bridge window (an old one may still be open in the background) and start START-LIVE-TRADING.bat once.</p>`}
                  <div class="lvRow"><input id="lvCode" type="text" inputmode="numeric" maxlength="6"
                    placeholder="000000" autocomplete="off" spellcheck="false">
                    <button class="bBtn go" data-act="lvlink">Link</button></div>

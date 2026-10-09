@@ -89,7 +89,7 @@ const Live = {
       if (!r.ok) throw Error('Bridge health check failed');
       const j = await r.json();
       this.bridge = { trading: !!j.trading, account: j.account || null, balance: j.balance,
-        currency: j.currency || '', server: j.server || '', magic: j.magic, checked: Date.now(),
+        currency: j.currency || '', server: j.server || '', magic: j.magic, checked: Date.now(), startedAt: j.startedAt || null,
         authenticated: false, reason: j.trading ? 'Enter the current session code.' : 'Bridge is read-only.' };
       if (code && j.trading){
         const v = await fetch(this.BRIDGE + '/session', { method: 'POST',
@@ -439,6 +439,10 @@ const Live = {
       return { ok: false, reason: g.reason };
     }
 
+    /* what the market looked like at the moment of sending: the Live Deep Dive measures spread
+       and slippage from these (new fields; older records simply do not have them) */
+    const mkt = { spread: quote && quote.spread > 0 ? quote.spread : null, spreadMeasured: !!(quote && quote.bid > 0 && quote.ask > 0),
+                  quoteAge: quote && Number.isFinite(quote.ageSec) ? +quote.ageSec.toFixed(1) : null, sigEntry: sig.entry };
     const order = {
       code: this.state.code,
       /* the BROKER's name for the instrument: a bot may carry ASTRA's name (ETHUSD.m) while the
@@ -455,7 +459,7 @@ const Live = {
     if (g.mode !== 'live'){
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
                     entry: sig.entry, sl: g.sl, tp: g.tp, sent: false, shadow: true, desk: g.desk,
-                    at: Date.now(), tf: sig.tf, model: sig.model });
+                    at: Date.now(), tf: sig.tf, model: sig.model, ...mkt });
       this.audit('shadow-order', bot.name + ' would have ' + order.side.toUpperCase() + ' ' +
         baseAsset(sig.sym) + ' ' + g.lots + ' lots', order);
       if (g.desk && typeof LiveDesk !== 'undefined'){
@@ -477,7 +481,7 @@ const Live = {
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
                     entry: j.price || sig.entry, sl: g.sl, tp: g.tp, sent: true, ok, desk: g.desk,
                     ticket: j.ticket || null, retcode: j.retcode, brokerSaid: j.comment || j.message || j.error,
-                    at: Date.now(), tf: sig.tf, model: sig.model });
+                    at: Date.now(), tf: sig.tf, model: sig.model, ...mkt });
       this.audit(ok ? 'order' : 'order-failed',
         bot.name + ' ' + order.side.toUpperCase() + ' ' + baseAsset(sig.sym) + ' ' + g.lots + ' lots — ' +
         (ok ? 'filled at ' + j.price + ', ticket ' + j.ticket : 'refused: ' + (j.message || j.error || j.comment)), j);
@@ -495,7 +499,7 @@ const Live = {
       return { ok, result: j };
     } catch(e){
       this.record({ bot: bot.id, botName: bot.name, sym: sig.sym, dir: sig.dir, lots: g.lots,
-                    sent: true, ok: false, brokerSaid: e.message, at: Date.now() });
+                    sent: true, ok: false, brokerSaid: e.message, at: Date.now(), ...mkt });
       this.audit('order-failed', bot.name + ' order could not be sent — ' + e.message);
       this.uncertainOrder = true;
       return { ok: false, reason: e.message };

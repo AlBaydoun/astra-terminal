@@ -15,6 +15,7 @@ Endpoints (localhost only):
     /quotes?symbols=A,B           current prices
     /candles?symbol=X&tf=1h       candles
     /positions                    open positions
+    /deals?days=N[&entries=1]     closing deals (and, with entries=1, the opening ones)
 
 REAL ORDERS
     By default this bridge CANNOT place an order — the endpoint refuses every
@@ -82,6 +83,7 @@ _symbols_cache = {"t": 0.0, "list": []}
 # this window ends live trading immediately.
 TRADING_ENABLED = False
 SESSION_CODE = ""
+STARTED_AT = int(time.time())   # shown in ASTRA, so you can tell WHICH bridge window answers
 MAGIC = 20260902          # stamps every order ASTRA sends, so they are identifiable
 MANUAL_EXECUTION = ManualExecution(mt5, MAGIC)
 ORDER_LOG = os.path.join(os.path.expanduser("~"), "astra-data", "live-orders.log")
@@ -400,6 +402,31 @@ def deals(days=30):
     return out[:500]
 
 
+def entry_deals(days=30):
+    """The OPENING deals (entry 0) - read only. They carry what a closing deal does
+    not: when and at what price a position was opened, its opening charges and the
+    comment ASTRA wrote on it ("ASTRA <bot id>"), so every real trade can be put
+    back with the bot that opened it. Used by the Live Deep Dive."""
+    to = datetime.now() + timedelta(days=1)
+    frm = datetime.now() - timedelta(days=max(1, min(365, days)))
+    with _lock:
+        rows = mt5.history_deals_get(frm, to) or []
+    out = []
+    for d in rows:
+        if getattr(d, "entry", None) != 0:
+            continue
+        out.append({
+            "ticket": d.ticket, "position": d.position_id, "order": d.order,
+            "symbol": d.symbol, "volume": d.volume, "price": d.price,
+            "type": "buy" if d.type == 0 else "sell",
+            "commission": d.commission, "swap": d.swap,
+            "fee": getattr(d, "fee", 0), "time": d.time,
+            "magic": d.magic, "comment": d.comment,
+        })
+    out.sort(key=lambda r: r["time"], reverse=True)
+    return out[:1000]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -697,6 +724,7 @@ class Handler(BaseHTTPRequestHandler):
                     "magic": MAGIC,
                     "manualTickets": 1,
                     "manualTicketSizing": 2,
+                    "startedAt": STARTED_AT, "pid": os.getpid(),
                 })
 
             if u.path == "/manual-preview":
@@ -781,6 +809,8 @@ class Handler(BaseHTTPRequestHandler):
 
             if u.path == "/deals":
                 days = int(q.get("days", ["30"])[0] or 30)
+                if q.get("entries", ["0"])[0] == "1":
+                    return self._send({"deals": deals(days), "entries": entry_deals(days)})
                 return self._send({"deals": deals(days)})
 
             return self._send({"error": "not_found"}, 404)
@@ -789,6 +819,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *a):
         pass  # keep the console quiet
+
+
+class _OneServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+
+    def server_bind(self):
+        import socket
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):     # Windows: nobody may share this port with us
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+def _open_server():
+    try:
+        return _OneServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        return None
 
 
 def main():
@@ -807,6 +854,20 @@ def main():
         import random
         TRADING_ENABLED = True
         SESSION_CODE = "%06d" % random.randint(0, 999999)
+
+    # ONE bridge per PC. Windows lets a second program open the same port quietly when
+    # the first allowed address reuse - then ASTRA keeps talking to the OLD window while
+    # you read the session code in the NEW one, and every order is refused as "wrong code".
+    srv = _open_server()
+    if srv is None:
+        print("")
+        print("=" * 64)
+        print("  ANOTHER ASTRA BRIDGE IS ALREADY RUNNING ON THIS PC (port %d)." % PORT)
+        print("  Close every other bridge window first (START-MT5-Bridge or")
+        print("  START-LIVE-TRADING), then start this one again.")
+        print("  Nothing was started.")
+        print("=" * 64)
+        return
 
     connect()
     names = all_symbols()
@@ -833,7 +894,6 @@ def main():
         print("Read-only: this bridge cannot place an order.")
 
     print("Leave this window open while you use ASTRA. Close it to stop.")
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

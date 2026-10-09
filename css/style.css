@@ -3284,3 +3284,22 @@ button.ldGate.next{ border-color:rgba(255,209,102,.8) !important; box-shadow:0 0
 .liveDiveStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:18px 0}.liveDiveStat,.liveDiveSides>div{padding:18px;border:1px solid #627e8140;border-radius:12px;background:rgba(100,145,160,.08)}.liveDiveStat strong{display:block;font-size:25px;margin-top:12px}.liveDiveStat small{opacity:.75}
 .liveDiveSides{display:grid;grid-template-columns:1fr 1fr;gap:12px}.liveDiveSides strong{display:block;font-size:26px;margin:10px 0}.liveDiveSides small{opacity:.7}.liveDiveFilters{display:flex;gap:16px;flex-wrap:wrap;margin:24px 0}.liveDiveFilters input,.liveDiveFilters select{padding:8px;border-radius:6px;background:var(--bg,#17232e);color:inherit;border:1px solid #627e8180}
 .liveDiveTrade{margin:10px 0;border:1px solid #627e8160;border-radius:10px;background:rgba(100,145,160,.06)}.liveDiveTrade summary{cursor:pointer;padding:16px}.liveDiveTrade summary strong{float:right}.liveDiveTrade p{padding:12px}.liveDiveFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;padding:16px;border-top:1px solid #627e8140}.liveDiveFields dt{font-size:11px;opacity:.65}.liveDiveFields dd{margin:5px 0;overflow-wrap:anywhere}
+
+/* Live Deep Dive: the Deep Dive's engine on the real account */
+.lvDiveStatus{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border:1px solid #477c8b;border-radius:10px;background:rgba(34,139,143,.10);font-size:12.5px}
+.lvDiveStatus>span:first-child{color:#39bda8}.lvDiveStatus.warn{border-color:rgba(255,209,102,.6);background:rgba(255,209,102,.08)}.lvDiveStatus.warn>span:first-child{color:#ffd166}.lvDiveStatus button{margin-left:auto}
+.lvDiveTrade{margin-top:14px;padding:12px 14px;border:1px solid #477c8b80;border-radius:12px;background:rgba(34,139,143,.06)}.lvDiveTrade h4{margin:0 0 8px;font-size:14px}
+.lvDiveTrade .liveDiveFields{padding:4px 0 10px;border:0}
+.lvDiveDeals{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}.lvDiveDeals th{text-align:left;color:var(--dim);font-weight:500;padding:4px 6px;border-bottom:1px solid #627e8160}.lvDiveDeals td{padding:5px 6px;border-bottom:1px solid #627e8130;white-space:nowrap}
+.lvCosts{margin-top:12px;padding-top:10px;border-top:1px solid #627e8140}.lvCostsHead{font-size:12px;color:#39bda8;margin-bottom:6px}
+.lvCostRow{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.lvCost{padding:8px 10px;border:1px solid #627e8140;border-radius:9px;background:rgba(100,145,160,.06)}
+.lvCost span{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}.lvCost b{display:block;font-size:16px;margin:3px 0}.lvCost small{font-size:11px;color:var(--dim)}.lvCost.exAct{cursor:pointer}.lvCost.exAct:hover{border-color:#39bda8}
+.posPanel.pp-free{ position:fixed; right:auto; bottom:auto; z-index:60; max-height:60vh; }
+.posPanel .ppHead{ cursor:grab; user-select:none; } body.ppDragging, body.ppDragging *{ cursor:grabbing !important; }
+.ppHead .ppAll{ color:#ffd166 !important; border:1px solid rgba(255,209,102,.5) !important; border-radius:6px; padding:1px 6px !important; font-size:10px !important; text-transform:none; }
+.lvRowPx{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:4px 16px; font-size:11.5px; color:var(--dim); padding-top:4px; border-top:1px dashed #627e8130; }
+.lvRowPx b{ color:var(--text,#dce6f2); font-weight:600; } .lvRowPx .lvNow b{ color:#39bda8; } .lvRowPx i{ font-style:normal; }
+.lvAcctBig{ display:grid; grid-template-columns:auto 1fr; align-items:baseline; gap:2px 14px; width:100%; text-align:left; padding:10px 14px; border:1px solid #477c8b; border-radius:12px; background:rgba(34,139,143,.08); color:inherit; cursor:pointer; }
+.lvAcctBig span{ grid-column:1 / -1; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); } .lvAcctBig b{ font-size:24px; } .lvAcctBig small{ color:var(--dim); } .lvAcctBig em{ grid-column:1 / -1; font-style:normal; font-weight:600; } .lvAcctBig:hover{ border-color:#39bda8; }
+.lvAcctBody{ margin-top:8px; } .lvAcctRow{ display:grid; grid-template-columns:1.4fr 1fr auto; gap:10px; padding:5px 8px; border-bottom:1px solid #627e8125; font-size:12px; align-items:center; } .lvAcctRow.head{ font-weight:600; background:rgba(100,145,160,.08); } .lvAcctRow b{ text-align:right; }
+.lvAcctBody p{ font-size:11px; margin:8px 2px 0; }

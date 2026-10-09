@@ -167,7 +167,7 @@ const Explorer = {
     const source = ownEx.length ? this.rowsWithout(dim.id) : rows;
     for (const t of source){ const k = dim.of(t); (groups[k] = groups[k] || []).push(t); }
     let entries = Object.entries(groups).map(([k, list]) => ({ k, n: list.length, net: list.reduce((a, t) => a + t.pnl, 0), wins: list.filter(t => t.pnl > 0).length }));
-    if (entries.length < 2 && dim.id !== 'sym') return '';
+    if (entries.length < 2 && !(this.ALWAYS_SPLIT || ['sym']).includes(dim.id)) return '';
     if (dim.order) entries.sort((a, b) => dim.order.indexOf(a.k) - dim.order.indexOf(b.k));
     else if (dim.sortByKey) entries.sort((a, b) => b.k.localeCompare(a.k));
     else entries.sort((a, b) => b.net - a.net);
@@ -199,10 +199,11 @@ const Explorer = {
     this.excludes = tmp; let rows; try { rows = this.filtered(); } finally { this.excludes = keep; }
     return rows;
   },
-  clearExcludes(){ this.excludes = {}; lsSet('astra_explorer_excl', {}); this.dirty = true; Bots.render(); },
+  clearExcludes(){ this.excludes = {}; lsSet(this.EXCL_KEY, {}); this.dirty = true; Bots.render(); },
 
   /* ---------- sections: fold, maximise, move, resize — all remembered ---------- */
   SEC_KEY: 'astra_explorer_secs',
+  PATH_KEY: 'astra_explorer_path', EXCL_KEY: 'astra_explorer_excl', PAGE: 'explorer', OPEN_PAGE: 'open',
   secState(){
     const st = lsGet(this.SEC_KEY, null) || { order: [], fold: {}, max: null, h: {} };
     st.h = st.h || {}; st.fold = st.fold || {}; st.order = st.order || [];
@@ -472,20 +473,20 @@ const Explorer = {
   /* what a press on the top section does */
   act(a){
     const i = a.indexOf(':'), kind = i < 0 ? a : a.slice(0, i), arg = i < 0 ? '' : a.slice(i + 1);
-    const drill = (dim, value, label) => { this.path.push({ dim, value, label }); lsSet('astra_explorer_path', this.path); this.dirty = true; Bots.render(); };
+    const drill = (dim, value, label) => { this.path.push({ dim, value, label }); lsSet(this.PATH_KEY, this.path); this.dirty = true; Bots.render(); };
     /* opened from the top section = you want to see them: the list is shown in full */
     if (kind === 'res'){ this.listAll = true; return drill('result', arg, arg === 'won' ? 'Won' : 'Lost'); }
     if (kind === 'today'){ this.listAll = true; return drill('day', this.todayKey(), 'Today'); }
     if (kind === 'trade'){ const t = this.all().find(x => x.bot + '|' + x.entryTime === arg); this._focus = 'list'; return drill('trade', arg, t ? this.tradeName(t) : 'one trade'); }
     if (kind === 'time'){
       const [a0, b0, label] = arg.split('|');
-      this.path.push({ dim: 'time', range: [+a0, +b0], label }); lsSet('astra_explorer_path', this.path);
+      this.path.push({ dim: 'time', range: [+a0, +b0], label }); lsSet(this.PATH_KEY, this.path);
       this._focus = 'list'; this.listAll = true; this.dirty = true; return Bots.render();
     }
     if (kind === 'list'){ this.listAll = true; return this.focus('list'); }
     if (kind === 'hand'){ this.listAll = true; this._focus = 'hand'; return drill('closer', 'you', '✋ You, at market'); }
     if (kind === 'sec') return this.focus(arg);
-    if (kind === 'open'){ if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.openBot('open'); return; }
+    if (kind === 'open'){ if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.openBot(this.OPEN_PAGE); return; }
   },
   /* bring a section into view (unfolded), with a short flash */
   focus(id){
@@ -505,11 +506,15 @@ const Explorer = {
     if (!(t.meta && t.meta.accountFx) && /^[A-Z]{6}$/.test(s) && s.slice(0, 3) === acct && s.slice(3) !== acct) return Math.abs(t.qty || 0);
     try { return typeof BotDash !== 'undefined' && BotDash.notional ? BotDash.notional(t) : Math.abs((t.qty || 0) * (t.entry || 0)); } catch(e){ return 0; }
   },
+  /* hooks for the Live Deep Dive; the paper Deep Dive adds nothing here */
+  rowExtra(t){ return ''; },
+  extraSecs(rows, st){ return []; },
+  risked(t){ return typeof BotDash !== 'undefined' && BotDash.risked ? BotDash.risked(t) : 0; },
   hero(rows, st, open){
     const pfTxt = st.pf === Infinity ? '∞' : st.pf.toFixed(2);
     const inv = rows.reduce((a, t) => a + this.invested(t), 0), avgInv = rows.length ? inv / rows.length : 0;
     const big = rows.reduce((m, t) => { const v = this.invested(t); return !m || v > m.v ? { t, v } : m; }, null);
-    const risked = rows.reduce((a, t) => a + (typeof BotDash !== 'undefined' && BotDash.risked ? BotDash.risked(t) : 0), 0);
+    const risked = rows.reduce((a, t) => a + this.risked(t), 0);
     const ret = inv > 0 ? st.net / inv * 100 : 0;
     return `<div class="exHero">
         <div class="exHeroLeft">
@@ -539,10 +544,15 @@ const Explorer = {
      stays under it too unless you unfreeze it. Remembered per browser. */
   FREEZE_KEY: 'astra_explorer_freeze',
   heroFrozen(){ return lsGet(this.FREEZE_KEY, true) !== false; },
+  /* paper or real money: two Deep Dives on the same engine, one switch between them */
+  tabs(){
+    if (typeof BOT_BY_ID === 'undefined' || !BOT_BY_ID.livedive) return '';
+    const on = id => this.PAGE === id ? ' on' : '';
+    return `<nav class="liveDiveTabs" aria-label="Which trades"><button class="bBtn${on('explorer')}" data-divetab="explorer" title="Every paper trade of every bot">Paper bots</button><button class="bBtn${on('livedive')}" data-divetab="livedive" title="The trades ASTRA made on the real account, read from MetaTrader">◉ Live trading · real account</button></nav>`;
+  },
   dirty: false,
   view(){
     this.dirty = false;
-    if (typeof LiveExplorer !== 'undefined' && LiveExplorer.selected) return LiveExplorer.tabs() + '<div id="liveDive">' + LiveExplorer.view() + '</div>';
     const rows = this.filtered(), st = this.stats(rows), open = this.openNow();
     const crumbs = [`<button class="exCrumb${this.path.length ? '' : ' on'}" data-excrumb="-1">Everything</button>`]
       .concat(this.path.map((f, i) => `<i>›</i><button class="exCrumb${i === this.path.length - 1 ? ' on' : ''}" data-excrumb="${i}">${esc(f.dim === 'trade' ? 'Trade' : f.dim === 'time' ? 'Stretch' : f.range ? (f.dim === 'pnl' ? 'Result' : 'R') : this.dim(f.dim).label)}: ${esc(f.label)}</button>`)).join('');
@@ -561,12 +571,13 @@ const Explorer = {
           <span class="dim2">${this.byHand(t) ? '<b class="exHand" title="You closed this trade yourself at the market price">✋ closed by you' + (t.closedBy && t.closedBy.via ? ' · ' + esc(t.closedBy.via) : '') + '</b>' + this.whatIfBadge(t) : esc(t.reason || '')}${t.touched ? ' · adjusted' : ''}</span>
           <span class="dim2 exRowInv" title="Money this trade put to work (its full position value)">${fmtNum(this.invested(t))} in</span>
           <span class="${t.pnl >= 0 ? 'up' : 'down'} exRowPnl">${this.money(t.pnl)}<small>${Number.isFinite(t.r) ? ' · ' + t.r.toFixed(2) + 'R' : ''}</small></span>
-          <button class="bMini exReplay" data-exreplay="${esc(t.bot)}|${t.entryTime}|${t.exitTime || 0}|${esc(t.sym)}" title="Open this trade in Trade Replay: the candles around it, entry, stop, target and exit, candle by candle">▷ Replay</button></div>`).join('')}</div>` +
+          <button class="bMini exReplay" data-exreplay="${esc(t.bot)}|${t.entryTime}|${t.exitTime || 0}|${esc(t.sym)}" title="Open this trade in Trade Replay: the candles around it, entry, stop, target and exit, candle by candle">▷ Replay</button>${this.rowExtra(t)}</div>`).join('')}</div>` +
         (rows.length > listMax ? `<button class="bMini exMoreBtn" data-exlistmore="1">Show ${Math.min(this.LIST_STEP, rows.length - listMax)} more (${rows.length - listMax} not shown)</button>` : '')
       : rows.length ? `<div class="dim2 exMore">${rows.length} trades. <button class="bMini" data-exact="list">Show them all, newest first</button> — or open a smaller doll (a pair, a day…).</div>` : '';
     const hero = this.hero(rows, st, open);
     const secs = this.ordered([
       { id: 'hero',  html: this.section('hero', 'The picture', 'what this doll holds', hero, 'exHeroSec') },
+      ...this.extraSecs(rows, st),
       { id: 'notes', html: this.section('notes', (this.notesOpen ? '▾ ' : '▸ ') + '📝 ' + this.notesTitle(), this.notesOpen ? 'your notes on these results, by the date you wrote them — each one keeps the figures of that day' : this.lastNoteLine(), this.notesView(rows, st)) },
       { id: 'curve', html: this.section('curve', 'The curve', 'every trade added up, in time order', this.curveSvg(st)) },
       { id: 'pnl',   html: this.section('pnl', 'Result per trade', 'how the wins and losses are spread', this.histogram(rows.map(t => t.pnl), 16, v => fmtNum(v), 'pnl')) },
@@ -581,7 +592,7 @@ const Explorer = {
     this._shownIds = shownSecs.map(x => x.id);
     const offN = this.layoutIds().filter(id => hidden[id]).length;
     const frozen = this.heroFrozen();
-    return `${typeof LiveExplorer !== 'undefined' ? LiveExplorer.tabs() : ''}<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
+    return `${this.tabs()}<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
       <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
         ${(() => { const bid = this.notesBot(); return bid && BOT_BY_ID[bid] ? `<button class="bMini exToBot" data-extobot="${esc(bid)}" title="Go straight to ${esc(this.botName(bid))} — its own page (settings, markets, timeframes, notes). The Back button brings you here again.">⚙ Open ${esc(this.botName(bid))} ↗</button>` : ''; })()}
         <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
@@ -697,28 +708,27 @@ const Explorer = {
     const b = BOT_BY_ID[botId];
     this.path = [{ dim: 'bot', value: botId, label: b ? WorkspaceUI.name(b) : botId }];
     this.excludes = {}; this.listAll = false; this._listN = 0;
-    lsSet('astra_explorer_path', this.path); lsSet('astra_explorer_excl', {});
+    lsSet(this.PATH_KEY, this.path); lsSet(this.EXCL_KEY, {});
     this.dirty = true;
-    WorkspaceUI.openBot('explorer'); WorkspaceUI.expand(true);
+    WorkspaceUI.openBot(this.PAGE); WorkspaceUI.expand(true);
   },
 
   drill(dimId, value){
     const d = this.dim(dimId);
     this.path.push({ dim: dimId, value, label: d.name(value) });
-    lsSet('astra_explorer_path', this.path);
+    lsSet(this.PATH_KEY, this.path);
     this.dirty = true; Bots.render();
   },
   crumb(i){
     this.path = i < 0 ? [] : this.path.slice(0, i + 1);
     this.listAll = false; this._listN = 0;
-    lsSet('astra_explorer_path', this.path);
+    lsSet(this.PATH_KEY, this.path);
     /* "Everything" means everything: the ticks come back too */
-    if (i < 0){ this.excludes = {}; lsSet('astra_explorer_excl', {}); }
+    if (i < 0){ this.excludes = {}; lsSet(this.EXCL_KEY, {}); }
     this.dirty = true; Bots.render();
   },
   bind(host){
-    if (typeof LiveExplorer !== 'undefined') LiveExplorer.bind(host);
-    if (typeof LiveExplorer !== 'undefined' && LiveExplorer.selected) return;
+    host.querySelectorAll('[data-divetab]').forEach(b => b.addEventListener('click', () => { if (b.dataset.divetab !== this.PAGE) WorkspaceUI.openBot(b.dataset.divetab); }));
     host.querySelectorAll('[data-exdrill]').forEach(b => b.addEventListener('click', () => {
       const i = b.dataset.exdrill.indexOf('|');
       this.drill(b.dataset.exdrill.slice(0, i), b.dataset.exdrill.slice(i + 1));
@@ -760,14 +770,14 @@ const Explorer = {
     }));
     host.querySelectorAll('[data-dnopen]').forEach(b => b.addEventListener('click', () => {
       const n = this.notesAll().find(x => x.id === +b.dataset.dnopen); if (!n) return;
-      this.path = n.path.slice(); lsSet('astra_explorer_path', this.path); this.dirty = true; Bots.render();
+      this.path = n.path.slice(); lsSet(this.PATH_KEY, this.path); this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-exlayout]').forEach(b => b.addEventListener('click', () => { this.layoutOpen = !this.layoutOpen; this.dirty = true; Bots.render(); }));
     host.querySelectorAll('[data-exlmv]').forEach(b => b.addEventListener('click', () => { const [id, d] = b.dataset.exlmv.split('|'); this.layoutMove(id, +d); }));
     host.querySelectorAll('[data-exlon]').forEach(c => c.addEventListener('change', () => this.layoutToggle(c.dataset.exlon, c.checked)));
     host.querySelectorAll('[data-exdens]').forEach(s => s.addEventListener('change', () => { const st = this.secState(); st.dens = s.value; this.saveSec(st); this.dirty = true; Bots.render(); }));
     host.querySelectorAll('[data-exlreset]').forEach(b => b.addEventListener('click', () => this.layoutReset()));
-    host.querySelectorAll('[data-exopen]').forEach(b => b.addEventListener('click', () => WorkspaceUI.openBot('open')));
+    host.querySelectorAll('[data-exopen]').forEach(b => b.addEventListener('click', () => WorkspaceUI.openBot(this.OPEN_PAGE)));
     host.querySelectorAll('[data-exlistmore]').forEach(b => b.addEventListener('click', () => { this._listN = (this._listN || this.LIST_STEP) + this.LIST_STEP; this.dirty = true; Bots.render(); }));
     if (this._focus){
       const id = this._focus; this._focus = null;
@@ -782,13 +792,13 @@ const Explorer = {
     host.querySelectorAll('[data-exrange]').forEach(b => b.addEventListener('click', () => {
       const [field, lo, hi, label] = b.dataset.exrange.split('|');
       this.path.push({ dim: field, range: [+lo, +hi], label });
-      lsSet('astra_explorer_path', this.path); this.dirty = true; Bots.render();
+      lsSet(this.PATH_KEY, this.path); this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-extick]').forEach(cb => cb.addEventListener('change', () => {
       const i = cb.dataset.extick.indexOf('|'); const dimId = cb.dataset.extick.slice(0, i), val = cb.dataset.extick.slice(i + 1);
       const list = (this.excludes[dimId] || []).filter(v => v !== val);
       if (!cb.checked) list.push(val);
-      this.excludes[dimId] = list; lsSet('astra_explorer_excl', this.excludes);
+      this.excludes[dimId] = list; lsSet(this.EXCL_KEY, this.excludes);
       this.dirty = true; Bots.render();
     }));
     host.querySelectorAll('[data-exclear]').forEach(b => b.addEventListener('click', () => this.clearExcludes()));
@@ -809,7 +819,7 @@ const Explorer = {
       const [dimId, on] = b.dataset.extickall.split('|');
       if (on === '1') delete this.excludes[dimId];
       else this.excludes[dimId] = ((this._allKeys || {})[dimId] || []).slice();
-      lsSet('astra_explorer_excl', this.excludes);
+      lsSet(this.EXCL_KEY, this.excludes);
       this.dirty = true; Bots.render();
     }));
     /* drag a section's right edge to change its width in grid columns */

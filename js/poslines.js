@@ -14,6 +14,24 @@ const PosLines = {
   drag: null,          // { bot, id, which:'sl'|'tp', price }
   pending: null,       // a dragged level waiting for your Apply / Cancel
   focus: null,         // 'bot:id' opened from a bot page — drawn thicker for a while
+  /* 'bot:id' of the ONE trade you clicked on the chart (or in the panel): only its lines
+     are drawn, with a glow, until you click it again or press "show all". Per instrument. */
+  solo: null, soloSym: null,
+  soloKey(){ const k = typeof Feed !== 'undefined' ? Feed.brokerName(STORE.symbol) : STORE.symbol; return this.soloSym === k ? this.solo : null; },
+  toggleSolo(key){
+    const here = typeof Feed !== 'undefined' ? Feed.brokerName(STORE.symbol) : STORE.symbol;
+    if (!key || this.soloKey() === key){ this.solo = null; this.soloSym = null; }
+    else { this.solo = key; this.soloSym = here; }
+    this._panelSig = ''; this.panel();
+    if (typeof Draw !== 'undefined') Draw.redraw();
+  },
+  /* the trades whose lines are drawn: all of them, or only the one you singled out */
+  shownRows(){
+    const rows = this.rows(), k = this.soloKey();
+    if (!k || rows.length < 2) return rows;
+    const one = rows.filter(r => r.bot + ':' + r.p.id === k);
+    return one.length ? one : rows;
+  },
   timer: null,
   COL: { sl: '#f6465d', tp: '#2ebd85', entry: '#8fa3c8', trail: '#ffd166', real: '#ffb03a' },
 
@@ -100,7 +118,7 @@ const PosLines = {
   PP_KEY: 'astra_pospanel',
   PP_SORTS: [['hand', 'By hand (▲▼ on each row)'], ['newest', 'Newest first'], ['oldest', 'Oldest first'], ['best', 'Best result first'], ['worst', 'Worst result first'], ['bot', 'By bot name']],
   PP_CORNERS: [['bl', 'Bottom left'], ['br', 'Bottom right'], ['tl', 'Top left'], ['tr', 'Top right']],
-  ppCfg(){ const c = lsGet(this.PP_KEY, {}) || {}; return { sort: c.sort || 'newest', order: c.order || [], show: Object.assign({ bot: true, size: true, pnl: true, time: true }, c.show || {}), corner: c.corner || 'bl' }; },
+  ppCfg(){ const c = lsGet(this.PP_KEY, {}) || {}; return { sort: c.sort || 'newest', order: c.order || [], show: Object.assign({ bot: true, size: true, pnl: true, time: true }, c.show || {}), corner: c.corner || 'bl', pos: c.pos && Number.isFinite(c.pos.x) && Number.isFinite(c.pos.y) ? c.pos : undefined }; },
   ppSave(c){ lsSet(this.PP_KEY, c); this._panelSig = ''; this.panel(); },
   ppCfgOpen: false,
   /* when a trade was opened, in your own clock: "today 20:47 · 3h 12m ago" */
@@ -130,6 +148,21 @@ const PosLines = {
     if (f > 0) out.unshift(out.splice(f, 1)[0]);
     return out;
   },
+  /* a placed panel sits on the page, so it has to hide itself whenever the chart is not on screen */
+  ppWatch(on){
+    if (on && !this._ppTimer) this._ppTimer = setInterval(() => {
+      const el = document.getElementById('posPanel'), wrap = document.getElementById('mainWrap');
+      if (!el || el.parentElement !== document.body){ clearInterval(this._ppTimer); this._ppTimer = null; return; }
+      const r = wrap ? wrap.getBoundingClientRect() : null;
+      el.style.display = r && r.width > 0 && r.height > 0 && wrap.offsetParent !== null ? '' : 'none';
+    }, 400);
+    if (!on && this._ppTimer){ clearInterval(this._ppTimer); this._ppTimer = null; const el = document.getElementById('posPanel'); if (el) el.style.display = ''; }
+  },
+  /* keep a dragged panel on the screen */
+  ppClamp(x, y, el){
+    const w = el ? el.offsetWidth : 300;
+    return { x: Math.max(0, Math.min(window.innerWidth - Math.min(w, window.innerWidth), x)), y: Math.max(0, Math.min(window.innerHeight - 30, y)) };
+  },
   ppMove(key, d){
     const c = this.ppCfg(), rows = this.ppSorted(this.rows()).map(r => r.bot + '|' + r.p.id);
     const i = rows.indexOf(key), j = i + d; if (i < 0 || j < 0 || j >= rows.length) return;
@@ -147,7 +180,20 @@ const PosLines = {
       el = document.getElementById('posPanel');
       /* the chart underneath must not pan or start a drawing from a click here */
       ['mousedown', 'pointerdown', 'wheel', 'dblclick'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+      /* grab the title bar and put the panel anywhere on the screen; double-click it: back to its corner */
+      el.addEventListener('mousedown', e => {
+        const head = e.target.closest('.ppHead'); if (!head || e.target.closest('button') || e.button !== 0) return;
+        e.preventDefault();
+        const r0 = el.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+        document.body.classList.add('ppDragging'); this._ppDrag = true;
+        const move = ev => { if (el.parentElement !== document.body) document.body.appendChild(el); const p = this.ppClamp(ev.clientX - dx, ev.clientY - dy, el); el.classList.add('pp-free'); el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; };
+        const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.classList.remove('ppDragging'); this._ppDrag = false;
+          if (el.classList.contains('pp-free')){ const c = this.ppCfg(); c.pos = { x: parseFloat(el.style.left), y: parseFloat(el.style.top) }; lsSet(this.PP_KEY, c); } };
+        window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+      });
+      el.addEventListener('dblclick', e => { if (!e.target.closest('.ppHead') || e.target.closest('button')) return; const c = this.ppCfg(); delete c.pos; this.ppSave(c); });
       el.addEventListener('click', e => {
+        if (e.target.closest('[data-ppall]')) return this.toggleSolo(null);
         const s = e.target.closest('[data-ppcfg],[data-ppmv]');
         if (s){
           if (s.hasAttribute('data-ppcfg')){ this.ppCfgOpen = !this.ppCfgOpen; this._panelSig = ''; return this.panel(); }
@@ -159,35 +205,44 @@ const PosLines = {
         const [bot, id] = (b.dataset.ppclose || b.dataset.ppfocus).split('|');
         const pid = /^T/.test(id) ? id : +id;
         if (b.hasAttribute('data-ppclose')) return this.confirmClose(bot, pid);
+        if (this.rows().length > 1) return this.toggleSolo(bot + ':' + pid);
         this.focus = bot + ':' + pid; if (typeof Draw !== 'undefined') Draw.redraw();
         setTimeout(() => { if (this.focus === bot + ':' + pid){ this.focus = null; if (typeof Draw !== 'undefined') Draw.redraw(); } }, 8000);
       });
       el.addEventListener('change', e => {
         const t = e.target, c = this.ppCfg();
         if (t.dataset.ppsort){ c.sort = t.value; if (c.sort === 'hand' && !c.order.length) c.order = this.ppSorted(this.rows()).map(r => r.bot + '|' + r.p.id); }
-        else if (t.dataset.ppcorner) c.corner = t.value;
+        else if (t.dataset.ppcorner){ c.corner = t.value; delete c.pos; }
         else if (t.dataset.ppshow) c.show[t.dataset.ppshow] = t.checked;
         else return;
         this.ppSave(c);
       });
     }
     const cfg = this.ppCfg();
-    el.className = 'posPanel pp-' + cfg.corner;
+    /* the chart redraws while the panel is being dragged - leave it where the hand is */
+    if (!this._ppDrag){
+    el.className = 'posPanel pp-' + cfg.corner + (cfg.pos ? ' pp-free' : '');
+    /* a panel you placed lives on the page itself (a chart container would shift "fixed" by its own offset) */
+    this.ppWatch(!!cfg.pos);
+    if (cfg.pos){ if (el.parentElement !== document.body) document.body.appendChild(el); const p = this.ppClamp(cfg.pos.x, cfg.pos.y, el); el.style.left = p.x + 'px'; el.style.top = p.y + 'px'; }
+    else { if (el.parentElement !== wrap) wrap.appendChild(el); el.style.left = ''; el.style.top = ''; }
+    }
+    const soloK = rows.length > 1 ? this.soloKey() : null;
     const fmtC = v => (v >= 0 ? '+' : '') + fmtNum(v);
     const sorted = this.ppSorted(rows), hand = cfg.sort === 'hand', S = cfg.show;
     const items = sorted.map((r, i) => {
       const p = r.p, l = this.liveOf(r) || { unreal: 0 };
-      const key = r.bot + '|' + p.id, hot = this.focus === r.bot + ':' + p.id;
+      const key = r.bot + '|' + p.id, hot = this.focus === r.bot + ':' + p.id || soloK === r.bot + ':' + p.id;
       return { key, hot, html: `<div class="ppRow${r.live ? ' real' : ''}${hot ? ' hot' : ''}${hand ? ' hand' : ''}">
         ${hand ? `<span class="ppMv"><button data-ppmv="${esc(key)}#-1" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button><button data-ppmv="${esc(key)}#1" ${i === sorted.length - 1 ? 'disabled' : ''} title="Move down">▼</button></span>` : ''}
-        <button class="ppWho" data-ppfocus="${esc(key)}" title="Highlight this trade on the chart">
+        <button class="ppWho" data-ppfocus="${esc(key)}" title="${rows.length > 1 ? 'Show only this trade on the chart (press again: all of them)' : 'Highlight this trade on the chart'}">
           <b class="${p.dir > 0 ? 'up' : 'down'}">${r.live ? 'REAL ' : ''}${p.dir > 0 ? 'BUY' : 'SELL'}</b>${S.size ? ' ' + esc(p.lots ? p.lots + ' lot' : fmtNum(p.qty)) : ''}${S.bot ? ' · <span>' + esc(r.botName || r.bot) + '</span>' : ''}</button>
         ${S.time ? (w => w ? `<span class="ppWhen" title="Opened ${esc(w.full)} (your computer’s clock)">🕒 ${esc(w.short)} <em>· ${esc(w.ago)}</em></span>` : '<span class="ppWhen"></span>')(this.openedAt(p.entryTime)) : ''}
         ${S.pnl ? `<i class="${l.unreal >= 0 ? 'up' : 'down'}">${fmtC(l.unreal)}</i>` : '<i></i>'}
         <button class="ppClose" data-ppclose="${esc(key)}" title="Close this trade at the market price now — you confirm first">✕ Close at market</button>
       </div>` };
     });
-    const head = `<div class="ppHead"><span>${rows.length} open trade${rows.length > 1 ? 's' : ''} on this chart</span><button data-ppcfg class="${this.ppCfgOpen ? 'on' : ''}" title="Order of the trades, what each row shows, which corner">⚙</button><button data-ppfold title="${this.panelFold ? 'Show' : 'Fold'}">${this.panelFold ? '▸' : '▾'}</button></div>`;
+    const head = `<div class="ppHead" title="Drag me anywhere · double-click: back to the corner"><span>⠿ ${rows.length} open trade${rows.length > 1 ? 's' : ''} on this chart</span>${soloK ? '<button data-ppall class="ppAll" title="Draw the lines of every trade again">◎ showing 1 · show all</button>' : ''}<button data-ppcfg class="${this.ppCfgOpen ? 'on' : ''}" title="Order of the trades, what each row shows, which corner">⚙</button><button data-ppfold title="${this.panelFold ? 'Show' : 'Fold'}">${this.panelFold ? '▸' : '▾'}</button></div>`;
     const opt = (list, cur) => list.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('');
     const settings = this.ppCfgOpen ? `<div class="ppCfg">
         <label>Order <select data-ppsort="1">${opt(this.PP_SORTS, cfg.sort)}</select></label>
@@ -235,7 +290,8 @@ const PosLines = {
 
   closeBtns: [],
   draw(ctx){
-    const rows = this.rows();
+    const rows = this.shownRows(), soloOn = !!this.soloKey() && rows.length === 1 && this.rows().length > 1;
+    this.entryBoxes = [];
     this.closeBtns = [];
     this.sync();
     if (!rows.length || !Chart.priceSeries) return;
@@ -249,7 +305,7 @@ const PosLines = {
       const dragging = live;
       const sl = dragging && dragging.which === 'sl' ? dragging.price : p.sl;
       const tp = dragging && dragging.which === 'tp' ? dragging.price : p.tp;
-      const hot = this.focus === r.bot + ':' + p.id;
+      const hot = this.focus === r.bot + ':' + p.id || soloOn;
       const x0 = this.xOf(p);
       const yE = this.yOf(p.entry), yS = sl > 0 ? this.yOf(sl) : null, yT = tp > 0 ? this.yOf(tp) : null;
       if (yE == null) continue;
@@ -262,7 +318,8 @@ const PosLines = {
          at the candle the trade opened on */
       const line = (y, color, dash, w) => {
         ctx.beginPath(); ctx.setLineDash(dash); ctx.lineWidth = w; ctx.strokeStyle = color;
-        ctx.moveTo(0, y); ctx.lineTo(right, y); ctx.stroke(); ctx.setLineDash([]);
+        if (soloOn){ ctx.shadowColor = color; ctx.shadowBlur = 10; }      /* the trade you picked: a soft glow */
+        ctx.moveTo(0, y); ctx.lineTo(right, y); ctx.stroke(); ctx.setLineDash([]); ctx.shadowBlur = 0;
       };
       line(yE, entryCol, [4, 3], hot || r.live ? 2 : 1);
       if (yS != null) line(yS, this.COL.sl, [], (dragging && dragging.which === 'sl') || hot ? 2.5 : 1.5);
@@ -281,6 +338,7 @@ const PosLines = {
       ctx.strokeStyle = this.COL.sl; ctx.strokeRect(cb.x + .5, cb.y + .5, cb.w - 1, cb.h - 1);
       ctx.fillStyle = '#ffb3bd'; ctx.textBaseline = 'middle'; ctx.fillText('✕ close', cb.x + 6, cb.y + cb.h / 2);
       this.closeBtns.push(cb);
+      this.entryBoxes.push({ x: box.x, y: box.y, w: box.w, h: box.h, key: r.bot + ':' + p.id });
       const tail = which => (this.drag && this.drag.which === which && dragging === this.drag) ? '  ← release, then confirm'
         : (this.pending && dragging === this.pending && this.pending.which === which) ? '  · waiting for your confirmation' : '  ⇕';
       if (yS != null) this.label(ctx, lx, yS, 'SL ' + fmtPrice(sl) + ' · ' + r.botName + ' · ' + money(sl) + tail('sl'), this.COL.sl, yS > yE);
@@ -328,7 +386,7 @@ const PosLines = {
   /* ---------- grabbing a stop or a target ---------- */
   hit(x, y){
     if (!this.on || !Chart.priceSeries) return null;
-    for (const r of this.rows()){
+    for (const r of this.shownRows()){
       const p = r.p;
       for (const which of ['sl', 'tp']){
         const price = p[which];
@@ -339,19 +397,36 @@ const PosLines = {
     }
     return null;
   },
-  hover(x, y){ return this.closeBtnAt(x, y) ? 'pointer' : this.hit(x, y) ? 'ns-resize' : ''; },
+  /* the entry line or the entry label of a trade: a click there singles that trade out */
+  entryAt(x, y){
+    const b = (this.entryBoxes || []).find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+    if (b) return b.key;
+    if (!this.on || !Chart.priceSeries) return null;
+    for (const r of this.shownRows()){ const ly = this.yOf(r.p.entry); if (ly != null && Math.abs(ly - y) <= 4) return r.bot + ':' + r.p.id; }
+    return null;
+  },
+  hover(x, y){ return this.closeBtnAt(x, y) ? 'pointer' : this.hit(x, y) ? 'ns-resize' : this.rows().length > 1 && this.entryAt(x, y) ? 'pointer' : ''; },
 
   /* called from Draw's mousedown; true = we took the event */
   mousedown(e, x, y){
+    /* a press on the panel or the confirm box is theirs, even when a trade's line runs underneath */
+    if (e.target && e.target.closest && e.target.closest('#posPanel, #posConfirm')) return false;
     const cb = this.closeBtnAt(x, y);
     if (cb){ this.confirmClose(cb.bot, cb.id); return true; }
     const h = this.hit(x, y);
-    if (!h) return false;
+    if (!h){
+      const k = this.rows().length > 1 ? this.entryAt(x, y) : null;
+      if (k){ this.toggleSolo(k); return true; }
+      return false;
+    }
     this.drag = Object.assign({}, h);        /* a copy — h keeps the price it started from */
+    const startY = e.clientY; let moved = false;
     document.body.style.cursor = 'ns-resize';
     const canvas = document.getElementById('drawLayer');
     const move = ev => {
       const rr = canvas.getBoundingClientRect();
+      if (!moved && Math.abs(ev.clientY - startY) < 3) return;      /* a click, not a drag (yet) */
+      moved = true;
       const price = Chart.priceSeries.coordinateToPrice(ev.clientY - rr.top);
       if (price != null && price > 0){ this.drag.price = price; Draw.redraw(); }
     };
@@ -360,6 +435,8 @@ const PosLines = {
       window.removeEventListener('mouseup', up, true);
       document.body.style.cursor = '';
       const d = this.drag; this.drag = null;
+      /* a plain click on a stop or target line, with more than one trade here: show only that trade */
+      if (!moved){ if (this.rows().length > 1) this.toggleSolo(h.bot + ':' + h.id); Draw.redraw(); return; }
       if (d && Math.abs(d.price - h.price) > 0) this.confirm(d, h.price);
       Draw.redraw();
     };
