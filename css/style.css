@@ -3312,3 +3312,12 @@ button.ldGate.next{ border-color:rgba(255,209,102,.8) !important; box-shadow:0 0
 .diveSwitch button{ background:transparent; border:0; color:var(--dim); padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; }
 .diveSwitch button + button{ border-left:1px solid #477c8b; } .diveSwitch button:hover{ color:var(--text,#dce6f2); }
 .diveSwitch button.on{ background:rgba(0,229,255,.16); color:var(--accent,#00e5ff); } .diveSwitch button.live.on{ background:rgba(57,189,168,.2); color:#39bda8; }
+/* Auto support & resistance */
+.autoSrBtn.on{ color:#00e5ff !important; border-color:#00e5ff !important; box-shadow:0 0 8px rgba(0,229,255,.55), inset 0 0 6px rgba(0,229,255,.25); text-shadow:0 0 6px rgba(0,229,255,.8); }
+.autoSrPanel{ position:fixed; z-index:200; width:290px; padding:12px 14px; border:1px solid #00e5ff66; border-radius:12px; background:rgba(8,13,28,.97); box-shadow:0 0 18px rgba(0,229,255,.18); display:flex; flex-direction:column; gap:7px; font-size:12px; }
+.autoSrPanel b{ color:#00e5ff; } .autoSrPanel label{ display:flex; align-items:center; gap:7px; justify-content:space-between; } .autoSrPanel label:has(input){ justify-content:flex-start; }
+.autoSrPanel select{ background:var(--bg,#0b1224); color:inherit; border:1px solid #2a3b55; border-radius:6px; padding:3px 5px; } .autoSrPanel p{ margin:4px 0 0; line-height:1.45; }
+.srLook{ display:flex; flex-direction:column; gap:6px; padding:8px 0 4px; border-top:1px solid #2a3b55; margin-top:2px; }
+.srLook input[type=color]{ width:34px; height:20px; padding:0; border:1px solid #2a3b55; border-radius:4px; background:none; cursor:pointer; }
+.srLook input[type=range]{ flex:1; margin:0 6px; } .srLook em{ font-style:normal; color:var(--dim); min-width:34px; text-align:right; }
+.autoSrPanel{ max-height:calc(100vh - 140px); overflow:auto; width:310px; }
