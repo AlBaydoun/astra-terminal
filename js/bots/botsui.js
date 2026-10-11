@@ -181,7 +181,8 @@ Object.assign(Bots, {
     }
 
     if (b.liveDive && host.dataset.bot === b.id && host.querySelector('.exWrap') && !LiveDive.dirty) return;
-    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty) return;
+    /* ...unless a trade has closed since the last drawing: then it is drawn again with it */
+    if (b.explorer && host.dataset.bot === b.id && host.querySelector('.exWrap') && !Explorer.dirty && Explorer._drawnN === Explorer.all().length) return;
     if (b.checker && host.dataset.bot === b.id && host.querySelector('.ckWrap') && !Checker.dirty){ Checker.renderStatus(); return; }   /* the checker redraws on your clicks and after each study */   /* the Deep Dive redraws only on your clicks */
     if (b.analysis && host.dataset.bot === b.id && host.querySelector('#anResults') && !(typeof BotLayout !== 'undefined' && BotLayout._force)){
       TradeAnalysis.refresh();

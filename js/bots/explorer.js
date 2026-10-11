@@ -16,7 +16,7 @@ const Explorer = {
     { id: 'bot',     label: 'Bot',         of: t => t.bot, name: v => (BOT_BY_ID[v] ? WorkspaceUI.name(BOT_BY_ID[v]) : v) },
     { id: 'tf',      label: 'Timeframe',   of: t => t.tf || '?', name: v => v },
     { id: 'side',    label: 'Side',        of: t => t.dir > 0 ? 'buy' : 'sell', name: v => v === 'buy' ? 'Buys' : 'Sells' },
-    { id: 'day',     label: 'Day',         of: t => new Date(t.exitTime || t.entryTime).toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }), name: v => v, sortByKey: true },
+    { id: 'day',     label: 'Day',         of: t => new Date(t.exitTime || t.entryTime).toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }), name: v => v, byTime: true },
     { id: 'hour',    label: 'Hour opened', of: t => String(new Date(t.entryTime).getHours()).padStart(2, '0') + ':00', name: v => v, sortByKey: true },
     { id: 'dow',     label: 'Weekday',     of: t => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(t.entryTime).getDay()], name: v => v },
     { id: 'result',  label: 'Won or lost', of: t => t.pnl > 0 ? 'won' : 'lost', name: v => v === 'won' ? 'Won' : 'Lost', order: ['won', 'lost'] },
@@ -166,9 +166,11 @@ const Explorer = {
     const ownEx = this.excludes[dim.id] || [];
     const source = ownEx.length ? this.rowsWithout(dim.id) : rows;
     for (const t of source){ const k = dim.of(t); (groups[k] = groups[k] || []).push(t); }
-    let entries = Object.entries(groups).map(([k, list]) => ({ k, n: list.length, net: list.reduce((a, t) => a + t.pnl, 0), wins: list.filter(t => t.pnl > 0).length }));
+    let entries = Object.entries(groups).map(([k, list]) => ({ k, n: list.length, net: list.reduce((a, t) => a + t.pnl, 0), wins: list.filter(t => t.pnl > 0).length,
+      at: list.reduce((m, t) => Math.max(m, t.exitTime || t.entryTime || 0), 0) }));
     if (entries.length < 2 && !(this.ALWAYS_SPLIT || ['sym']).includes(dim.id)) return '';
     if (dim.order) entries.sort((a, b) => dim.order.indexOf(a.k) - dim.order.indexOf(b.k));
+    else if (dim.byTime) entries.sort((a, b) => b.at - a.at);          /* a date written as text does not sort as a date - newest day first */
     else if (dim.sortByKey) entries.sort((a, b) => b.k.localeCompare(a.k));
     else entries.sort((a, b) => b.net - a.net);
     const maxAbs = Math.max(1, ...entries.map(e => Math.abs(e.net)));
@@ -508,6 +510,9 @@ const Explorer = {
   },
   /* hooks for the Live Deep Dive; the paper Deep Dive adds nothing here */
   rowExtra(t){ return ''; },
+  preWrap(){ return ''; },
+  /* read every trade again (the bots' records in memory are the live truth) and redraw the whole page */
+  refreshAll(){ this.showAll = {}; this.dirty = true; Bots.render(); toast('Deep Dive read again — ' + this.all().length + ' trades', 'info'); },
   extraSecs(rows, st){ return []; },
   risked(t){ return typeof BotDash !== 'undefined' && BotDash.risked ? BotDash.risked(t) : 0; },
   hero(rows, st, open){
@@ -548,11 +553,11 @@ const Explorer = {
   tabs(){
     if (typeof BOT_BY_ID === 'undefined' || !BOT_BY_ID.livedive) return '';
     const on = id => this.PAGE === id ? ' on' : '';
-    return `<nav class="liveDiveTabs" aria-label="Which trades"><button class="bBtn${on('explorer')}" data-divetab="explorer" title="Every paper trade of every bot">Paper bots</button><button class="bBtn${on('livedive')}" data-divetab="livedive" title="The trades ASTRA made on the real account, read from MetaTrader">◉ Live trading · real account</button></nav>`;
+    return `<nav class="diveSwitch" aria-label="Which trades"><button class="${on('explorer')}" data-divetab="explorer" title="Every paper trade of every bot">📄 Paper bots</button><button class="live${on('livedive')}" data-divetab="livedive" title="The trades ASTRA made on the real account, read from MetaTrader">◉ Live · real account</button></nav>`;
   },
   dirty: false,
   view(){
-    this.dirty = false;
+    this.dirty = false; this._drawnN = this.all().length;
     const rows = this.filtered(), st = this.stats(rows), open = this.openNow();
     const crumbs = [`<button class="exCrumb${this.path.length ? '' : ' on'}" data-excrumb="-1">Everything</button>`]
       .concat(this.path.map((f, i) => `<i>›</i><button class="exCrumb${i === this.path.length - 1 ? ' on' : ''}" data-excrumb="${i}">${esc(f.dim === 'trade' ? 'Trade' : f.dim === 'time' ? 'Stretch' : f.range ? (f.dim === 'pnl' ? 'Result' : 'R') : this.dim(f.dim).label)}: ${esc(f.label)}</button>`)).join('');
@@ -592,9 +597,10 @@ const Explorer = {
     this._shownIds = shownSecs.map(x => x.id);
     const offN = this.layoutIds().filter(id => hidden[id]).length;
     const frozen = this.heroFrozen();
-    return `${this.tabs()}<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
-      <div class="exCrumbs">${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
+    return `${this.preWrap()}<div class="exWrap${maxed ? ' hasMax' : ''}${frozen ? ' exFreezeHero' : ''} dens-${this.secState().dens || 'normal'}">
+      <div class="exCrumbs">${this.tabs()}${crumbs}${this.path.length ? `<button class="bMini" data-excrumb="-1" title="Back to everything">✕ clear</button>` : ''}${exChip}
         ${(() => { const bid = this.notesBot(); return bid && BOT_BY_ID[bid] ? `<button class="bMini exToBot" data-extobot="${esc(bid)}" title="Go straight to ${esc(this.botName(bid))} — its own page (settings, markets, timeframes, notes). The Back button brings you here again.">⚙ Open ${esc(this.botName(bid))} ↗</button>` : ''; })()}
+        <button class="bMini exRefreshBtn" data-exrefresh="1" title="Read every trade again and redraw the whole page">↻ Refresh</button>
         <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
         <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
       ${this.layoutOpen ? this.layoutPanel() : ''}
@@ -728,6 +734,7 @@ const Explorer = {
     this.dirty = true; Bots.render();
   },
   bind(host){
+    host.querySelectorAll('[data-exrefresh]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); this.refreshAll(); }));
     host.querySelectorAll('[data-divetab]').forEach(b => b.addEventListener('click', () => { if (b.dataset.divetab !== this.PAGE) WorkspaceUI.openBot(b.dataset.divetab); }));
     host.querySelectorAll('[data-exdrill]').forEach(b => b.addEventListener('click', () => {
       const i = b.dataset.exdrill.indexOf('|');

@@ -230,7 +230,8 @@ const LiveDive = Object.assign(Object.create(Explorer), {
     return `<div class="lvDiveStatus${warn ? ' warn' : ''}"><span>◉ ${esc(txt)}</span>${d && d.oldBridge ? '<span class="dim2"> · restart START-LIVE-TRADING.bat once so the opening deals (entry time, entry price, opening charges) load too</span>' : ''}<button class="bMini" data-lvdref="1"${this.busy ? ' disabled' : ''}>${this.busy ? 'Reading…' : '↻ Refresh'}</button></div>`;
   },
   paintStatus(){ const el = document.querySelector('#botBody .lvDiveStatus'); if (el) el.outerHTML = this.statusLine(); const n = document.querySelector('#botBody [data-lvdref]'); if (n) n.addEventListener('click', () => this.refresh(true)); },
-  tabs(){ return Explorer.tabs.call(this) + this.statusLine(); },
+  preWrap(){ return this.statusLine(); },
+  refreshAll(){ this.dirty = true; this.refresh(true); toast('Reading the real account from MetaTrader again…', 'info'); },
 
   /* ---------- the account: where it stands now, and where it stood when today began ---------- */
   isToday(ms){ return new Date(ms).toDateString() === new Date().toDateString(); },

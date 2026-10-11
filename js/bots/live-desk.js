@@ -1337,9 +1337,86 @@ const LiveDesk = {
     const S = this.load();
     if (!open.length) return this.card('positions', 'Real open trades', '📋', `<div class="empty">No real position is open${S.on ? ' — the desk is watching' : ''}.</div>`, Live.book && Live.book.syncedAt ? 'read from MetaTrader ' + new Date(Live.book.syncedAt).toLocaleTimeString() : 'not read yet');
     const cards = open.map(r => this.posCard(r)).join('');
-    return this.card('positions', 'Real open trades', '📋', `<div class="ldList">${cards}</div>
+    return this.card('positions', 'Real open trades', '📋', `${this.posTable(open)}<div class="ldList">${cards}</div>
       <div class="ldNote">These are the broker’s own positions. Move a stop or a target and press Apply — the change goes to the broker and holds with this PC off. Trades from a desk bot show what the exit rules will do next.</div>`,
       open.length + ' position' + (open.length === 1 ? '' : 's') + ' on the account · read from MetaTrader');
+  },
+  /* ---------- every real position on one line, like the table on the Live connection page ----------
+     A heading sorts (again: the other way round). Every figure is a door to that trade's own
+     control card below; the stop and the target open its stop / target box, the bot its page. */
+  posSort: { k: 'time', dir: -1 },
+  POS_COLS: [
+    ['sym', 'Instrument'], ['bot', 'Bot'], ['dir', 'Side'], ['lots', 'Lots', 1], ['entry', 'Entry', 1], ['px', 'Now', 1],
+    ['sl', 'Stop', 1], ['tp', 'Target', 1], ['unreal', 'P&L', 1], ['worth', 'Stop / target worth', 1], ['time', 'Opened', 1], ['held', 'Held', 1],
+  ],
+  posVal(r, l, k){
+    const p = r.p, fx = p.meta.accountFx.profit;
+    switch (k){
+      case 'sym': return baseAsset(p.sym).toLowerCase();
+      case 'bot': return String(r.botName || r.bot || '').toLowerCase();
+      case 'dir': return p.dir;
+      case 'lots': return +p.lots || 0;
+      case 'entry': return p.entry;
+      case 'px': return l.px;
+      case 'sl': return p.sl > 0 ? p.sl : null;
+      case 'tp': return p.tp > 0 ? p.tp : null;
+      case 'unreal': return l.unreal;
+      case 'worth': return p.sl > 0 ? (p.sl - p.entry) * p.dir * p.qty * fx : null;
+      case 'time': return p.entryTime || 0;
+      case 'held': return -(p.entryTime || 0);
+    }
+    return 0;
+  },
+  posTable(open){
+    const { k, dir } = this.posSort;
+    const lv = new Map(open.map(r => [r, this.liveOf(r)]));
+    const rows = open.slice().sort((a, b) => {
+      const x = this.posVal(a, lv.get(a), k), y = this.posVal(b, lv.get(b), k);
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;     /* blanks always sink */
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir;
+    });
+    const money = v => v == null ? '—' : (v >= 0 ? '+' : '') + fmtNum(v);
+    const head = this.POS_COLS.map(([c, label, num]) => `<th class="${num ? 'num ' : ''}sortable${k === c ? ' sorted' : ''}" data-ldpsort="${c}" title="Sort by ${esc(label)}">${esc(label)}${k === c ? (dir < 0 ? ' ▼' : ' ▲') : ''}</th>`).join('');
+    let sum = 0;
+    const body = rows.map(r => {
+      const p = r.p, raw = r.raw, l = lv.get(r), fx = p.meta.accountFx.profit, t = raw.ticket;
+      sum += l.unreal;
+      const atSl = p.sl > 0 ? (p.sl - p.entry) * p.dir * p.qty * fx : null, atTp = p.tp > 0 ? (p.tp - p.entry) * p.dir * p.qty * fx : null;
+      const w = typeof PosLines !== 'undefined' && PosLines.openedAt ? PosLines.openedAt(p.entryTime) : null;
+      const go = (html, tip, focus, cls) => `<a class="ldTblGo${cls ? ' ' + cls : ''}" data-ldpgo="${t}"${focus ? ` data-ldpfocus="${focus}"` : ''} role="button" tabindex="0" title="${esc(tip)}">${html}</a>`;
+      const card = 'Go to this trade’s controls';
+      return `<tr class="${l.unreal >= 0 ? 'up' : 'down'}" data-ldprow="${t}">
+        <td>${go('<b>' + esc(baseAsset(p.sym)) + '</b> <span class="dim2">#' + t + '</span>', card)}</td>
+        <td>${BOT_BY_ID[r.bot] ? `<a class="ldTblGo" data-ldpbot="${esc(r.bot)}" role="button" tabindex="0" title="Open ${esc(r.botName)}’s own page">${esc(r.botName)}</a>` : go(esc(r.botName || '—'), card)}</td>
+        <td class="${p.dir > 0 ? 'up' : 'down'}">${go('<b>' + (p.dir > 0 ? 'BUY' : 'SELL') + '</b>', card)}</td>
+        <td class="num">${go(esc(String(p.lots)), card)}</td>
+        <td class="num">${go(esc(fmtPrice(p.entry)), card)}</td>
+        <td class="num">${go(esc(fmtPrice(l.px)) + (l.stale ? ' ⚠' : ''), card)}</td>
+        <td class="num">${go(p.sl > 0 ? esc(fmtPrice(p.sl)) : 'none', 'Change the stop of this trade', 'sl', 'down')}</td>
+        <td class="num">${go(p.tp > 0 ? esc(fmtPrice(p.tp)) : 'none', 'Change the target of this trade', 'tp', 'up')}</td>
+        <td class="num ${l.unreal >= 0 ? 'up' : 'down'}">${go('<b>' + money(l.unreal) + '</b>', card)}</td>
+        <td class="num">${go('<span class="down">' + money(atSl) + '</span> / <span class="up">' + (atTp == null ? 'no target' : money(atTp)) + '</span>', card)}</td>
+        <td class="num"${w ? ` title="${esc(w.full)}"` : ''}>${go(esc(w ? w.short : '—'), card)}</td>
+        <td class="num">${go(esc(l.held || '—'), card)}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="dashScroll short ldPosTbl"><table class="dashTable">
+      <thead><tr>${head}</tr></thead><tbody>${body}</tbody>
+      <tfoot><tr class="dashTotal"><td colspan="8">${rows.length} real position${rows.length === 1 ? '' : 's'} open</td><td class="num ${sum >= 0 ? 'up' : 'down'}"><b>${money(sum)}</b></td><td colspan="3"></td></tr></tfoot></table></div>
+      <div class="dim2 ldPosTblHint">Click a heading to sort · click any figure to go to that trade’s controls · the stop or target opens its box</div>`;
+  },
+  /* take the eye to one trade's control card: unfold the section, scroll, flash, and put the cursor in the box asked for */
+  goToPos(ticket, focus){
+    const S = this.load(); S.ui = S.ui || {}; S.ui.folded = S.ui.folded || {};
+    if (S.ui.folded.positions){ S.ui.folded.positions = false; this.save(); this.refreshPositions(); }
+    const fold = document.querySelector('#ldRealHost')?.closest('.blFoldable.blFolded');
+    if (fold){ const bar = fold.querySelector('.blFoldBar'); if (bar) bar.click(); }
+    const card = document.querySelector('#ldRealHost [data-ldpos="' + CSS.escape(String(ticket)) + '"]');
+    if (!card) return toast('That position is no longer open', 'info');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('otFlash'); void card.offsetWidth; card.classList.add('otFlash');
+    setTimeout(() => card.classList.remove('otFlash'), 2400);
+    if (focus){ const box = card.querySelector('[data-ld' + focus + '="' + CSS.escape(String(ticket)) + '"]'); if (box) setTimeout(() => { box.focus(); box.select && box.select(); }, 350); }
   },
   posCard(r){
     const p = r.p, raw = r.raw, l = this.liveOf(r);
@@ -1579,6 +1656,15 @@ const LiveDesk = {
     this.load().ui.order = o; this.save(); this.rerender();
   },
   bindPositions(host){
+    host.querySelectorAll('[data-ldpsort]').forEach(th => th.addEventListener('click', () => {
+      const k = th.dataset.ldpsort;
+      this.posSort = this.posSort.k === k ? { k, dir: -this.posSort.dir } : { k, dir: ['sym', 'bot'].includes(k) ? 1 : -1 };
+      const tbl = host.querySelector('.ldPosTbl');
+      if (tbl){ const box = document.createElement('div'); box.innerHTML = this.posTable(this.chartRows()); host.querySelector('.ldPosTblHint')?.remove(); tbl.replaceWith(...box.childNodes); this.bindPositions(host); }
+    }));
+    host.querySelectorAll('[data-ldpgo]').forEach(a => { const go = e => { e.preventDefault(); this.goToPos(a.dataset.ldpgo, a.dataset.ldpfocus); };
+      a.addEventListener('click', go); a.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') go(e); }); });
+    host.querySelectorAll('[data-ldpbot]').forEach(a => a.addEventListener('click', () => { if (typeof WorkspaceUI !== 'undefined') WorkspaceUI.openBot(a.dataset.ldpbot); }));
     host.querySelectorAll('[data-ldapply]').forEach(el => el.addEventListener('click', async () => {
       const t = el.dataset.ldapply;
       const sl = parseFloat((host.querySelector('[data-ldsl="' + t + '"]') || {}).value);
