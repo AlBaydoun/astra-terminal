@@ -3321,3 +3321,5 @@ button.ldGate.next{ border-color:rgba(255,209,102,.8) !important; box-shadow:0 0
 .srLook input[type=color]{ width:34px; height:20px; padding:0; border:1px solid #2a3b55; border-radius:4px; background:none; cursor:pointer; }
 .srLook input[type=range]{ flex:1; margin:0 6px; } .srLook em{ font-style:normal; color:var(--dim); min-width:34px; text-align:right; }
 .autoSrPanel{ max-height:calc(100vh - 140px); overflow:auto; width:310px; }
+.asPanel{ width:340px; } .asPanel input[type=number]{ width:72px; background:var(--bg,#0b1224); color:inherit; border:1px solid #2a3b55; border-radius:6px; padding:2px 5px; }
+.asPanel .asWide{ flex-wrap:wrap; } .asPanel .asWide input{ width:100%; background:var(--bg,#0b1224); color:inherit; border:1px solid #2a3b55; border-radius:6px; padding:3px 6px; margin-top:3px; }

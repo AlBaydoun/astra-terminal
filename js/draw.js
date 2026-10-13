@@ -295,7 +295,9 @@ const Draw = {
     ctx.clearRect(0, 0, this.cssW, this.cssH);
     if (!Chart.priceSeries) return;
     this.drawVP(ctx);
-    if (typeof AutoSR !== 'undefined') AutoSR.draw(ctx);      /* automatic support & resistance, under everything else */
+    if (typeof AutoSR !== 'undefined') AutoSR.draw(ctx);
+    if (typeof AutoStruct !== 'undefined') AutoStruct.draw(ctx);
+    if (typeof ChartPatterns !== 'undefined') ChartPatterns.draw(ctx);   /* trend, pattern, zones, events */  /* sloped lines, channel, Fibonacci, pivots */      /* automatic support & resistance, under everything else */
     if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
     this._pinHit = null; this._unpinHits = [];
     for (const it of this.items) this.drawItem(ctx, it, false);
