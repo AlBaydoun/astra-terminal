@@ -108,7 +108,7 @@ const Chart = {
 
   init(){
     this.main = LightweightCharts.createChart(document.getElementById('mainChart'), this.chartOpts());
-    this.main.timeScale().subscribeVisibleLogicalRangeChange(r => { this.syncFrom('main', r); Draw.redraw(); });
+    this.main.timeScale().subscribeVisibleLogicalRangeChange(r => { this.syncFrom('main', r); Draw.redraw(); if (r && r.from < 25) this.loadOlder(); });
     this.main.subscribeCrosshairMove(p => { this.onCross(p); Draw.onMove(p); });
     this.main.subscribeClick(p => {
       if (this.replay.selecting){ this.replayBeginAt(p); return; }
@@ -910,13 +910,58 @@ const Chart = {
       return;
     }
     spin.classList.remove('show');
+    /* a fresh chart briefly inherits the old view (maybe at the far left) before it jumps to the
+       newest candles - no history may be fetched for that moment, only when YOU scroll */
+    this._noOlder = true;
     this.renderAll();
     const n = this.raw.length;
     try { this.main.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 160), to: n + 8 }); } catch(e){}
+    setTimeout(() => { this._noOlder = false; }, 400);
     this.resub();
     Draw.loadFor(STORE.symbol);
     this.loadCompares();
     BUS.emit('symbol', STORE.symbol);
+  },
+
+  /* ---------- older history, loaded as you scroll left ----------
+     The chart opens with the newest 1000 candles. Reaching the left edge fetches the
+     1000 before them, again and again, until the broker has no more (or MAX_BARS).
+     Bridge: candles from a start date to now, the part we already have is dropped.
+     Binance: the 1000 candles before the oldest one. Everything else (the public
+     data service, 1s/30s candles) has no deeper history - said once, then quiet. */
+  MAX_BARS: 50000,
+  async loadOlder(){
+    if (this._older || this._noOlder || (this.replay && this.replay.active) || !this.raw.length) return;
+    const sym = STORE.symbol, tf = STORE.tf, key = sym + '|' + tf;
+    if (this._olderDone === key) return;
+    const route = typeof Feed !== 'undefined' ? Feed.route(sym) : { kind: 'binance', addr: sym };
+    const stop = msg => { this._olderDone = key; if (msg) toast(msg, 'info'); };
+    if (CFG.SUB_MINUTE.includes(tf) || !['bridge', 'binance'].includes(route.kind)) return stop('');
+    if (this.raw.length >= this.MAX_BARS) return stop('History limit reached: ' + this.raw.length.toLocaleString() + ' candles are loaded on this chart.');
+    this._older = true;
+    const legend = document.getElementById('legend');
+    try {
+      const first = this.raw[0], n = this.raw.length;
+      let older;
+      if (route.kind === 'binance') older = await API.binanceKlines(route.addr, tf, 1000, first.rawTime * 1000 - 1);
+      else {
+        /* seconds per candle as this market really trades (nights and weekends included) */
+        const per = (this.raw[n - 1].rawTime - first.rawTime) / Math.max(1, n - 1);
+        older = await Feed.klines(sym, tf, 60000, { from: Math.floor(first.rawTime - 1000 * per) });
+      }
+      if (sym !== STORE.symbol || tf !== STORE.tf || !this.raw.length) return;
+      older = (older || []).filter(c => c.rawTime < this.raw[0].rawTime);
+      if (!older.length) return stop('That is all the history the broker has for ' + baseAsset(sym) + ' on ' + tf + '.');
+      const k = older.length, ts = this.main.timeScale(), range = ts.getVisibleLogicalRange();
+      this.raw = older.concat(this.raw);
+      this.renderAll();
+      /* the view stays exactly where you were looking - the new candles sit to its left */
+      if (range) try { ts.setVisibleLogicalRange({ from: range.from + k, to: range.to + k }); } catch(e){}
+      if (legend && typeof toast === 'function' && !this._olderToasted){ this._olderToasted = true; toast('Loading older candles as you scroll back…', 'info'); }
+      BUS.emit('history', { sym, tf, added: k, total: this.raw.length });
+    } catch(e){
+      stop('Could not load older candles: ' + e.message);
+    } finally { this._older = false; }
   },
 
   resub(){
@@ -981,7 +1026,9 @@ const Chart = {
     try { fresh = await API.klines(sym, tf); }
     catch(e){ return; }
     if (sym !== STORE.symbol || tf !== STORE.tf || !fresh.length) return;
-    this.raw = fresh;
+    /* the refresh brings the newest candles only - older history you scrolled into stays */
+    const f0 = fresh[0].time, keep = this.raw.filter(c => c.time < f0);
+    this.raw = keep.concat(fresh);
     this.priceSeries.setData(this.priceData());
     this.renderIndicators();
     this.renderPatternMarkers();

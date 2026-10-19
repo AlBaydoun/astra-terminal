@@ -449,6 +449,25 @@ const BotGuide = {
       use: ['Max Assurance is the same idea with stronger engines, a veto, the 1h gate and conviction sizing.'],
       honest: 'Agreement between weak engines is still weak; it is the quality of the voters that matters.' },
 
+    stRegime: { icon: '⚡', art: 'ladder', tagline: 'Bidirectional trend-continuation paper bot powered by SuperTrend(10, 3) + EMA(200), restricted to Gold & Silver and Forex Majors on 4h.',
+      tags: ['Both BUY & SELL', '4h', 'Gold & Silver + Forex', 'Paper active'],
+      steps: [
+        ['🧭', 'Macro Regime (EMA 200)', 'Price must sit above EMA(200) for a BUY and below EMA(200) for a SELL. Counter-trend SuperTrend flips are ignored so the bot never fights a macro move.'],
+        ['⚡', 'SuperTrend(10, 3) Flip', 'Waits for a closed 4h candle where SuperTrend(10, 3) flips from bearish (−1) to bullish (+1) for a BUY, or bullish (+1) to bearish (−1) for a SELL.'],
+        ['📐', 'Levels & Time Limit', 'Stop sits at the SuperTrend line ± 0.10 ATR; target sits at 2.0R; positions close after 24 bars if neither level is reached.'],
+        ['🚫', 'No Late Chasing', 'If the forming candle has already moved more than 0.35 ATR from its open, the entry is skipped rather than chased.'],
+      ],
+      settings: [
+        ['ST ATR / ST Mult', 'SuperTrend ATR period (10) and multiplier (3.0).', 'Controls how wide the trailing volatility band sits from price.'],
+        ['EMA', 'Macro trend filter period (200).', 'Separates bullish and bearish macro regimes so both BUY and SELL trade with structure.'],
+        ['Target R', 'Reward-to-risk target multiple (2.0R).', 'Tested across 24 broker instruments at 2.0R with a 24-bar time limit.'],
+      ],
+      use: [
+        'Runs automatically on paper money across Gold & Silver (XAUUSD, XAGUSD) and Forex Majors on 4h.',
+        'Click "⚡ SuperTrend B/S" in the top chart toolbar to see the exact same signals, stops, and targets drawn directly on the candles.',
+      ],
+      honest: 'Backtested across 24 broker instruments: Gold & Silver 4h earned PF 2.15 (62.1% win rate, +22.2R net; BUY PF 2.75, SELL PF 1.41) and Forex Majors 4h earned PF 1.21 (48.6% win rate, +27.3R net; BUY PF 1.11, SELL PF 1.38). Indices, Crypto, and Energy on 15m/1h were net negative and are switched off by default.' },
+
     confluence: { icon: '🧭', art: 'pullback', tagline: 'One fixed 15-minute rule, run as a paper experiment. Nothing tunable, on purpose.',
       tags: ['Fixed rule', '15m', 'Paper experiment'],
       steps: [['✅', 'Five checks', 'Trend (EMA20 over EMA100 and rising), an EMA20 pullback reclaimed on the close, ADX14 ≥ 25, RSI in its momentum zone, tick activity above its 20-bar average.'], ['🕰️', 'Session', 'Only 11:00–17:45 broker time.'], ['📐', 'Levels', 'Stop 2 ATR, target 4 ATR. One trade per pair per day.']],

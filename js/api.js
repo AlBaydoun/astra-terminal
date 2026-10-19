@@ -32,11 +32,11 @@ const API = {
     return this.binanceKlines(symbol, interval, limit);
   },
 
-  async binanceKlines(symbol, interval, limit){
+  async binanceKlines(symbol, interval, limit, endTimeMs){
     /* Binance has no 30-second candles — build them from 1-second ones */
     if (interval === '30s') return this.subMinute(symbol, 30, limit || 200);
     if (interval === '1s') return this.subMinute(symbol, 1, limit || 1800);
-    const raw = await this.fetchJSON(`/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit || CFG.KLINE_LIMIT}`);
+    const raw = await this.fetchJSON(`/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit || CFG.KLINE_LIMIT}` + (endTimeMs ? '&endTime=' + Math.floor(endTimeMs) : ''));
     return raw.map(k => ({
       rawTime: k[0] / 1000,
       time: k[0] / 1000 + TZ_OFF,

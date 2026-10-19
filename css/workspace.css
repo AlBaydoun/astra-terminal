@@ -22,7 +22,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 #sidebar, #lefttools, #bottomPanel { background:var(--panel); }
 #chartLabelBar, .sideHead, #botTabs, #sideTabs { background:var(--ws-raised); border-bottom:1px solid var(--border); }
 #chartLabelBar { padding:10px 12px; }
-#sideTabs { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); padding:4px; }
+#sideTabs { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); padding:4px; }
 #sideTabs button { display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 2px; font-size:10px; letter-spacing:.3px; border-radius:5px; }
 #sideTabs button .wsIcon { width:15px; height:15px; }
 #sideTabs button.active { background:var(--field); color:var(--accent); }
@@ -633,3 +633,7 @@ body.rowResizing, body.rowResizing *{ cursor:ns-resize !important; user-select:n
 .exSec .exSecBody.fixed{ overflow:hidden; }
 .exSec .exSecBody.fixed.scroll{ overflow:auto; }
 .exSec .exSecBody.fixed.overflowing{ overflow:auto; }
+/* seven side tabs (HEAT joined on 15 Oct 2026): the window buttons get a slim row of their own
+   above the tabs, so they never sit on top of AI / NOTES */
+#sideTabs .sideCtl{ position:static; transform:none; grid-column:1 / -1; grid-row:1; justify-self:end; margin:-2px 0 2px; }
+#sideTabs .sideCtl button{ padding:1px 5px; line-height:1; }

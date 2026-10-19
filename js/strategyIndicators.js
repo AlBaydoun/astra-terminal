@@ -116,7 +116,7 @@ const StratInd = {
      would have acted on, and the stop and target of its latest call drawn as
      lines from that candle to now. Same scoring code, same cache — a marker is
      never something the bot itself would not have taken. */
-  SIGNAL_BOTS: ['triple', 'conviction'],
+  SIGNAL_BOTS: ['triple', 'conviction', 'stRegime'],
   signalRows(botId, cfg){
     const bot = BOT_BY_ID[botId];
     if (!bot || typeof Chart === 'undefined') return [];

@@ -297,7 +297,11 @@ const Draw = {
     this.drawVP(ctx);
     if (typeof AutoSR !== 'undefined') AutoSR.draw(ctx);
     if (typeof AutoStruct !== 'undefined') AutoStruct.draw(ctx);
-    if (typeof ChartPatterns !== 'undefined') ChartPatterns.draw(ctx);   /* trend, pattern, zones, events */  /* sloped lines, channel, Fibonacci, pivots */      /* automatic support & resistance, under everything else */
+    if (typeof ChartPatterns !== 'undefined') ChartPatterns.draw(ctx);
+    if (typeof Forecast !== 'undefined') Forecast.draw(ctx);
+    if (typeof ProvenCandles !== 'undefined') ProvenCandles.draw(ctx);   /* candle signals that survived the backtest */
+    if (typeof StRegime !== 'undefined') StRegime.draw(ctx);             /* SuperTrend + EMA 200 regime BUY / SELL signals */
+    /* the tested next-move call */   /* trend, pattern, zones, events */  /* sloped lines, channel, Fibonacci, pivots */      /* automatic support & resistance, under everything else */
     if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
     this._pinHit = null; this._unpinHits = [];
     for (const it of this.items) this.drawItem(ctx, it, false);

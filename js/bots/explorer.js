@@ -168,6 +168,13 @@ const Explorer = {
     for (const t of source){ const k = dim.of(t); (groups[k] = groups[k] || []).push(t); }
     let entries = Object.entries(groups).map(([k, list]) => ({ k, n: list.length, net: list.reduce((a, t) => a + t.pnl, 0), wins: list.filter(t => t.pnl > 0).length,
       at: list.reduce((m, t) => Math.max(m, t.exitTime || t.entryTime || 0), 0) }));
+    /* a bot with open trades but nothing finished yet (a brand-new one, like the ★ Proven bots)
+       is listed too, so it can be opened from day one — it adds 0 to every total */
+    if (dim.id === 'bot' && this === Explorer){
+      const have = new Set(entries.map(e => e.k)), openBy = {};
+      for (const t of this.openNow()) if (t.bot && !have.has(t.bot)) openBy[t.bot] = (openBy[t.bot] || 0) + 1;
+      for (const [k, n] of Object.entries(openBy)) entries.push({ k, n: 0, net: 0, wins: 0, at: 0, openOnly: n });
+    }
     if (entries.length < 2 && !(this.ALWAYS_SPLIT || ['sym']).includes(dim.id)) return '';
     if (dim.order) entries.sort((a, b) => dim.order.indexOf(a.k) - dim.order.indexOf(b.k));
     else if (dim.byTime) entries.sort((a, b) => b.at - a.at);          /* a date written as text does not sort as a date - newest day first */
@@ -183,7 +190,7 @@ const Explorer = {
         <span class="exBarName">${esc(dim.name(e.k))}</span>
         <span class="exBarTrack"><i class="${e.net >= 0 ? 'up' : 'down'}" style="width:${Math.abs(e.net) / maxAbs * 100}%"></i></span>
         <span class="exBarNum ${e.net >= 0 ? 'up' : 'down'}">${this.money(e.net)}</span>
-        <span class="exBarMeta">${e.n} · ${Math.round(e.wins / e.n * 100)}%</span></button></div>`;
+        <span class="exBarMeta">${e.openOnly ? 'no finished trade yet · ' + e.openOnly + ' open' : e.n + ' · ' + Math.round(e.wins / e.n * 100) + '%'}</span></button></div>`;
     const onN = entries.filter(e => !ex.includes(e.k)).length;
     this._allKeys = this._allKeys || {}; this._allKeys[dim.id] = entries.map(e => e.k);
     const tools = `<div class="exTickBar"><span class="dim2">${onN} of ${entries.length} ticked</span>
@@ -604,7 +611,7 @@ const Explorer = {
         <button class="bMini exFreezeBtn${frozen ? ' on' : ''}" data-exfreeze="1" title="${frozen ? 'The picture stays at the top while you scroll — press to let it scroll away' : 'Keep the picture at the top while you scroll'}">${frozen ? '📌 Picture frozen' : '📌 Freeze picture'}</button>
         <button class="bMini blBtn exLayoutBtn${this.layoutOpen ? ' on' : ''}" data-exlayout="1" title="Put the sections of the Deep Dive in your own order and switch sections off or on">⚙ Layout${offN ? ' · ' + offN + ' off' : ''}</button></div>
       ${this.layoutOpen ? this.layoutPanel() : ''}
-      ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : exN ? `<div class="botNote warn exNoneTicked">Nothing is ticked yet — tick the days, bots or pairs you want to see in the cards below, or press <button class="bMini" data-exclear="1">tick all</button>.</div><div class="exSecs">${shownSecs.filter(x => x.id.startsWith('split:')).map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>`}
+      ${rows.length ? `<div class="exSecs">${shownSecs.map(x => x.html).join('')}</div>` : exN ? `<div class="botNote warn exNoneTicked">Nothing is ticked yet — tick the days, bots or pairs you want to see in the cards below, or press <button class="bMini" data-exclear="1">tick all</button>.</div><div class="exSecs">${shownSecs.filter(x => x.id.startsWith('split:')).map(x => x.html).join('')}</div>` : `<div class="empty exEmpty">No closed trades here yet.${open.length ? ' <b>' + open.length + ' still open</b> — the Deep Dive counts a trade once it has closed. <button class="bMini" data-exopen="1">See it in Open Trades</button>' : ''}${this.path.length ? ' Try a wider doll.' : ''}</div>${open.length && open.length <= 12 ? `<div class="exOpenOnly">${open.map(t => `<div><b class="${t.dir > 0 ? 'up' : 'down'}">${t.dir > 0 ? 'BUY' : 'SELL'}</b> ${WorkspaceUI.pair(t.sym)} <span class="dim2">${esc(t.tf || '')} · ${esc(this.botName(t.bot))}${t.model ? ' · ' + esc(t.model) : ''}</span><br><small>opened ${new Date(t.entryTime).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} at ${fmtPrice(t.entry)} · stop ${t.sl ? fmtPrice(t.sl) : '—'} · target ${t.tp ? fmtPrice(t.tp) : '—'}</small></div>`).join('')}</div>` : ''}`}
       ${this.path.length || exN ? `<div class="exHomeDock"><button class="exHomeBtn" data-excrumb="-1" title="Back to Everything: all bots, all days, every tick back on — start a new path from the top">⌂ Everything</button></div>` : ''}
     </div>`;
   },

@@ -331,6 +331,8 @@
       <div id="sideTabs">
         <button data-tab="watch" class="active">WATCH</button>
         <button data-tab="book">DEPTH</button>
+        <button data-tab="ind" title="Indicators — the same list as the Indicators button, kept open beside the chart">IND</button>
+        <button data-tab="heat" title="Time heatmap of the open chart: yesterday, the day before, your own hours, sessions — compared with what is usual">HEAT</button>
         <button data-tab="alerts">ALERTS</button>
         <button data-tab="portfolio">PAPER</button>
         <button data-tab="ai">AI</button>
@@ -351,6 +353,17 @@
           <div id="bookBids"></div>
           <div class="tapeTitle">RECENT TRADES</div>
           <div id="tapeBody"></div>
+        </div>
+
+        <div id="tab-ind" class="sidePanel">
+          <div class="sideHead"><span>INDICATORS</span></div>
+          <div id="indSideHost"></div>
+        </div>
+
+        <div id="tab-heat" class="sidePanel">
+          <div class="sideHead"><span>TIME HEATMAP</span><button id="thCfg" title="Your window, days in the map, colours">⚙</button><button id="thReload" title="Read the candles again">↻</button></div>
+          <div id="thCfgBox" hidden></div>
+          <div id="thBody"><div class="empty">Open this tab to read the open chart hour by hour.</div></div>
         </div>
 
         <div id="tab-alerts" class="sidePanel">
@@ -663,8 +676,17 @@
 <script src="js/confluence-indicator.js"></script>
 <script src="js/poslines.js"></script>
 <script src="js/autosr.js"></script>
+<script src="js/research/structure-stats.js"></script>
 <script src="js/autostruct.js"></script>
 <script src="js/chartpatterns.js"></script>
+<script src="js/research/forecasts.js"></script>
+<script src="js/forecast.js"></script>
+<script src="js/research/candle-edges.js"></script>
+<script src="js/provencandles.js"></script>
+<script src="js/bots/proven-bots.js"></script>
+<script src="js/stregime.js"></script>
+<script src="js/timeheat.js"></script>
+<script src="js/indside.js"></script>
 <script src="js/windows.js"></script>
 <script src="js/account.js"></script>
 <script src="js/popout.js"></script>

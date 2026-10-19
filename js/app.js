@@ -358,9 +358,27 @@ const App = {
       setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
     };
     this.setPanelMax = setPanelMax;
+    /* the chart gets about two thirds of the height, the screener the strip below it */
+    const screenerTarget = () => Math.round(Math.max(220, Math.min(340, window.innerHeight * 0.3)));
+    const screenerLayoutOn = () => {
+      const bp = document.getElementById('bottomPanel');
+      return document.getElementById('bot-screener')?.classList.contains('active') && !bp.classList.contains('collapsed') && !bp.classList.contains('panelMax') &&
+        document.documentElement.dataset.chartmax !== '1' && Math.abs(bp.getBoundingClientRect().height - screenerTarget()) < 24;
+    };
+    const screenerLayout = () => {
+      const bp = document.getElementById('bottomPanel');
+      if (bp.classList.contains('panelMax')) setPanelMax(false);
+      bp.classList.remove('collapsed');
+      bp.style.height = screenerTarget() + 'px';
+      if (document.documentElement.dataset.chartmax === '1' && typeof App.setMax === 'function') App.setMax(false);
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+    };
     document.querySelectorAll('#botTabs button[data-tab]').forEach(b =>
       b.addEventListener('click', () => {
         const bp = document.getElementById('bottomPanel');
+        /* the Screener opens as "big chart, screener underneath" — Al's wish (15 Oct 2026).
+           Pressing it again keeps the old cycle: folded → full size → back to this layout. */
+        if (b.dataset.tab === 'screener' && !screenerLayoutOn() && !(b.classList.contains('active') && bp.classList.contains('collapsed'))){ screenerLayout(); if (b.classList.contains('active')) return; }
         if (b.classList.contains('active')){
           const collapsed = bp.classList.contains('collapsed');
           const maxed = bp.classList.contains('panelMax') ||

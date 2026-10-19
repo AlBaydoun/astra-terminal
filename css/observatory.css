@@ -13,3 +13,9 @@ html.light .obsDialog,body.light .obsDialog,[data-theme=light] .obsDialog{--obs-
 
 .trAfter{margin:0 0 14px;padding:12px 14px;border:1px solid #316870;border-radius:12px;background:linear-gradient(120deg,#122938,#142039)}.trAfter h3{margin:0 0 6px;font-size:14px}.trAfter p{margin:4px 0;font-size:12.5px;line-height:1.5}.trAfterJump{margin:2px 4px 2px 0;padding:4px 9px!important;font-size:11px!important;border-color:#5be8cf!important;color:#5be8cf!important}
 .rmTools{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}.rmTools button.active{border-color:#5be8cf;background:#1d3a44;color:#5be8cf}.rmOut{font-size:11.5px;color:#5be8cf;font-variant-numeric:tabular-nums}.rmCanvas{position:absolute;left:0;top:0;pointer-events:none;z-index:3}#trChart.rmArmed{cursor:crosshair}
+/* open market glows green, closed market glows red around its card (a card with no known schedule stays neutral) */
+.mcCard{transition:box-shadow .4s,border-color .4s}
+.mcCard.mcOpen{border-color:#2fd47a;box-shadow:0 0 0 1px #2fd47a66,0 0 18px #2fd47a55,inset 0 0 22px #2fd47a14;animation:mcGlowOpen 3.2s ease-in-out infinite}
+.mcCard.mcClosed{border-color:#ff4d5e;box-shadow:0 0 0 1px #ff4d5e99,0 0 26px #ff4d5e77,0 0 6px #ff4d5e66,inset 0 0 28px #ff4d5e22}
+.mcCard.mcOpen .mcState{color:#2fd47a;font-weight:600}.mcCard.mcClosed .mcState{color:#ff7c88;font-weight:600}
+@keyframes mcGlowOpen{0%,100%{box-shadow:0 0 0 1px #2fd47a66,0 0 14px #2fd47a44,inset 0 0 22px #2fd47a14}50%{box-shadow:0 0 0 1px #2fd47a99,0 0 26px #2fd47a77,inset 0 0 26px #2fd47a1f}}

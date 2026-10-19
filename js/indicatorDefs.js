@@ -90,6 +90,32 @@ const INDS = [
     },
   },
   {
+    id: 'st_regime', label: 'SuperTrend Regime · BUY / SELL (Gold & Forex 4h)', kind: 'price', cat: 'trend',
+    note: 'SuperTrend(10, 3) filtered by the 200-EMA regime: signals ▲ BUY when a pullback ends and SuperTrend flips bullish above the 200-EMA, and ▼ SELL when a bounce ends and SuperTrend flips bearish below the 200-EMA. Best market fit (2-year backtest, 24 broker instruments, after spread): ★ Gold & Silver (XAUUSD, XAGUSD) on 4h — 66 trades, 62.1% win rate, PF 2.15 (Buy PF 2.75 · Sell PF 1.41, both halves PF 1.92 / 2.56, 2× spread PF 2.09), and 1h (287 trades, PF 1.19, Buy PF 1.20 · Sell PF 1.17). Secondary fit: ✓ Forex Majors on 4h — 288 trades, 48.6% win rate, PF 1.21 (Buy PF 1.11 · Sell PF 1.38, 6/8 pairs positive). Weak fit on Stock Indices, Oil, and Crypto.',
+    def: { on: false, len: 10, mult: 3, ema: 200, rr: 2, maxBars: 24, target: 'main' },
+    params: [
+      { k: 'len', kind: 'num', min: 2, max: 100, label: 'SuperTrend ATR period' },
+      { k: 'mult', kind: 'num', min: 0.5, max: 10, step: 0.5, label: 'SuperTrend ATR multiplier' },
+      { k: 'ema', kind: 'num', min: 0, max: 500, step: 10, label: 'Regime EMA (0 = off)' },
+      { k: 'rr', kind: 'num', min: 0.5, max: 6, step: 0.5, label: 'Target (× risk)' },
+      { k: 'maxBars', kind: 'num', min: 4, max: 96, step: 1, label: 'Time limit (candles)' },
+    ],
+    parts: [
+      { key: 'u', label: 'Rising (Buy regime)', color: '#00e676' },
+      { key: 'd', label: 'Falling (Sell regime)', color: '#ff1744' },
+      { key: 'e', label: 'Regime EMA 200', color: '#ffd166' },
+    ],
+    build(ctx, c){
+      const s = IND.supertrend(ctx.v, c.len || 10, c.mult || 3);
+      const out = [{ key: 'u', width: 2, data: ctx.line(s.up) }, { key: 'd', width: 2, data: ctx.line(s.down) }];
+      if ((c.ema ?? 200) > 0){
+        const e = IND.ema(ctx.closes, c.ema || 200);
+        out.push({ key: 'e', width: 2, lineStyle: 2, data: ctx.line(e) });
+      }
+      return out;
+    },
+  },
+  {
     id: 'psar', label: 'Parabolic SAR', kind: 'price',
     def: { on: false, step: 0.02, max: 0.2, target: 'main' },
     params: [{ k: 'step', kind: 'num', min: 0.001, max: 0.2, step: 0.001 }, { k: 'max', kind: 'num', min: 0.05, max: 1, step: 0.05 }],
@@ -508,7 +534,7 @@ INDS.push({
    listed here is an ASTRA extra by definition, so a new indicator can never
    vanish from the dialog by being unclassified. */
 const IND_CATS = {
-  trend: ['ema1', 'ema2', 'ema3', 'bb', 'env', 'psar', 'ichi', 'sdev', 'adx', 'adxc',
+  trend: ['ema1', 'ema2', 'ema3', 'bb', 'env', 'st', 'st_regime', 'psar', 'ichi', 'sdev', 'adx', 'adxc',
           'ama', 'dema', 'tema', 'frama', 'vidya'],
   oscillators: ['atr', 'bearpower', 'bullpower', 'chaikin', 'cci', 'dem', 'force', 'macd', 'macd_mt5',
                 'mom', 'osma', 'rsi', 'rvi', 'stoch', 'trix', 'wpr'],

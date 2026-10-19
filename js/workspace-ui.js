@@ -277,7 +277,7 @@ const WorkspaceUI = {
       }
       if (e.target.closest('[data-ws-settings]')) document.getElementById('marketSettingsBtn').click();
     });
-    const sideIcons = {watch:'layers',book:'positions',alerts:'bell',portfolio:'report',ai:'bot',notes:'news'};
+    const sideIcons = {watch:'layers',book:'positions',ind:'chart',heat:'target',alerts:'bell',portfolio:'report',ai:'bot',notes:'news'};
     document.querySelectorAll('#sideTabs [data-tab]').forEach(b => b.insertAdjacentHTML('afterbegin', this.icon(sideIcons[b.dataset.tab])));
   },
   equity(L){

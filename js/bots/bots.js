@@ -190,6 +190,18 @@ const BOTS = [
     signal: (w, cfg, ledger, higher) => STRAT.conviction(w, cfg, ledger, higher),
   },
   {
+    id: 'stRegime', name: '★ SuperTrend Regime · 4h (Buy & Sell)',
+    blurb: 'Bidirectional trend-continuation bot built on the SuperTrend(10, 3) + EMA(200) regime engine. Fires BUY when SuperTrend flips bullish above EMA(200) and SELL when SuperTrend flips bearish below EMA(200) on a closed 4h candle, with stop at the SuperTrend line ± 0.10 ATR, a 2.0R target, and a 24-bar time limit. Restricted by default to the two markets where both BUY and SELL were proven profitable across 2 years of broker history: Gold & Silver (PF 2.15, 62.1% win rate, +22.2R net; BUY PF 2.75, SELL PF 1.41) and Forex Majors (PF 1.21, 48.6% win rate, +27.3R net; BUY PF 1.11, SELL PF 1.38). Runs actively in paper money.',
+    defaults: { tf: '4h', tfAuto: false, minScore: 70, maxOpen: 4, paused: false,
+                stPeriod: 10, stMult: 3.0, emaPeriod: 200, useEma: true,
+                rr: 2.0, stopPad: 0.10, timeLimitBars: 24,
+                marketMode: 'manual',
+                groups: ['gold', 'forex'],
+                preferred: ['XAUUSD.m', 'XAGUSD.m', 'USDCHF.m', 'USDJPY.m', 'EURUSD.m', 'EURJPY.m', 'USDCAD.m', 'AUDUSD.m'] },
+    warmup: 220, sessionGuard: true, rankAll: true, stRegimeBot: true,
+    signal: (w, cfg) => STRAT.stRegime(w, cfg),
+  },
+  {
     id: 'patPro', name: 'Pattern Pro (all patterns)',
     blurb: 'Trades the same detector the chart draws with, so every marker you see is something it can act on. Patterns are weighted by MEASURED edge rather than reputation: hammer and morning star score highest, engulfing barely registers, and Three Soldiers is refused outright because following it lost money across 154 occurrences.',
     defaults: { tf: '15m', tfAuto: true, minScore: 55, maxOpen: 3,
@@ -297,6 +309,9 @@ const Bots = {
          by itself. A setting saved under the old default is lifted once. */
       if (b.id === 'conviction' && this.cfgs[b.id].paused && !lsGet('astra_conviction_auto_v1', false)){
         this.cfgs[b.id].paused = false; lsSet('astra_botcfg_' + b.id, this.cfgs[b.id]); lsSet('astra_conviction_auto_v1', true);
+      }
+      if (b.id === 'stRegime' && !lsGet('astra_stregime_auto_v1', false)){
+        this.cfgs[b.id].paused = false; lsSet('astra_botcfg_' + b.id, this.cfgs[b.id]); lsSet('astra_stregime_auto_v1', true);
       }
     }
     for (const b of BOTS) this._cfgSeen[b.id] = localStorage.getItem('astra_botcfg_' + b.id);

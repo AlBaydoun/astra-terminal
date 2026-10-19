@@ -440,6 +440,7 @@ Object.assign(Bots, {
       <label class="bc">Max open <input type="number" data-cfg="maxOpen" value="${cfg.maxOpen}" min="0" max="10"></label>
       <label class="bc"><input type="checkbox" data-cfg="paused" ${cfg.paused ? 'checked' : ''}> Pause</label>
       ${b.conviction ? this.convictionCtl(cfg) : ''}
+      ${b.stRegimeBot ? this.stRegimeCtl(cfg) : ''}
       <button class="bBtn" data-act="run">Run now</button>
       <button class="bBtn" data-act="bt">Backtest</button>
       <button class="bBtn danger" data-act="reset">Reset</button>
@@ -457,6 +458,16 @@ Object.assign(Bots, {
       <label class="bc" title="Risk per trade at the minimum vote count">Base risk % <input type="number" data-cfg="risk.riskPct" value="${base}" min="0.1" max="5" step="0.1"></label>
       <label class="bc" title="The most this bot may ever risk on one trade, whatever the votes say">Risk ceiling % <input type="number" data-cfg="risk.maxRiskPct" value="${cap}" min="0.1" max="10" step="0.1"></label>
       <span class="bcNote">at ${cfg.minVotes != null ? cfg.minVotes : 3} votes it risks ${base}%, each extra vote adds half again, never above ${cap}%</span>`;
+  },
+
+  stRegimeCtl(cfg){
+    return `
+      <label class="bc" title="SuperTrend ATR lookback period">ST ATR <input type="number" data-cfg="stPeriod" value="${cfg.stPeriod != null ? cfg.stPeriod : 10}" min="5" max="30" step="1"></label>
+      <label class="bc" title="SuperTrend ATR multiplier">ST Mult <input type="number" data-cfg="stMult" value="${cfg.stMult != null ? cfg.stMult : 3.0}" min="1" max="6" step="0.25"></label>
+      <label class="bc" title="Macro regime EMA period">EMA <input type="number" data-cfg="emaPeriod" value="${cfg.emaPeriod != null ? cfg.emaPeriod : 200}" min="50" max="400" step="10"></label>
+      <label class="bc" title="Reward-to-risk target multiple">Target R <input type="number" data-cfg="rr" value="${cfg.rr != null ? cfg.rr : 2.0}" min="1" max="5" step="0.25"></label>
+      <label class="bc" title="Only take BUY above EMA and SELL below EMA"><input type="checkbox" data-cfg="useEma" ${cfg.useEma !== false ? 'checked' : ''}> EMA regime filter</label>
+      <span class="bcNote">Best Fit: Gold & Silver 4h (PF 2.15) · Forex Majors 4h (PF 1.21) · Both BUY & SELL active</span>`;
   },
 
   /* one chip per instrument: click to allow or forbid, with its real record */

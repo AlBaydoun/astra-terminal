@@ -101,3 +101,45 @@ RESEARCH_CANDIDATES.push({
       reasons: ['Broke yesterday’s high ' + fmtPrice(pdh) + ', came back and held', 'Close above the 50-EMA', 'Research run 1: PF 1.82 vs 1.20 for random gold buys'] };
   },
 });
+
+RESEARCH_CANDIDATES.push({
+  id: 'rsx_st_regime', name: 'SuperTrend Regime · 4h (Buy & Sell)', found: '2026-10-20',
+  tf: '4h', markets: ['gold', 'forex'], instruments: ['XAUUSD.m', 'XAGUSD.m', 'EURUSD.m', 'USDJPY.m', 'USDCHF.m', 'EURJPY.m', 'USDCAD.m', 'AUDUSD.m'], direction: 'buy and sell',
+  summary: 'Buys when SuperTrend(10, 3) flips from falling to rising above the 200-EMA (end of a pullback in an uptrend), and sells when SuperTrend(10, 3) flips from rising to falling below the 200-EMA (end of a bounce in a downtrend).',
+  rules: 'On a closed 4h candle: compute SuperTrend(10, 3) and the 200-EMA. ▲ BUY when SuperTrend was falling on the prior candle and flips to rising on this candle with the close above the 200-EMA. ▼ SELL when SuperTrend was rising on the prior candle and flips to falling on this candle with the close below the 200-EMA. Enter at the next open. Stop at the SuperTrend line (clamped to 0.5–2.5× ATR14), target 2× the stop distance (2R), out after 24 candles (4 days).',
+  why: 'For SuperTrend to flip against the 200-EMA and then flip back in alignment with it, the market must first complete a meaningful counter-trend pullback (or bear-market rally) and then break the ratcheted volatility band back in the direction of the dominant trend. On Gold & Silver 4h this produced 66 trades with a 62.1% win rate and PF 2.15 (vs 1.26 random), paying in both halves (1.92 / 2.56), on both metals (XAUUSD PF 2.53, XAGUSD PF 1.81), on both BUY (PF 2.75) and SELL (PF 1.41), and under double spread (PF 2.09). On Forex Majors 4h it produced 288 trades with PF 1.21 (Buy PF 1.11, Sell PF 1.38, 6 of 8 pairs positive).',
+  risks: 'Built for sustained multi-day macro waves (Metals 4h/1h and Forex 4h). Do not run on Stock Indices (mean-reverting on 4h, PF 0.95), Oil (PF 0.94), Crypto (PF 1.03), or 15m charts where spread and chop whipsaw trend-flip stops.',
+  evidence: {
+    period: '09.12.2024 – 14.10.2026 (4h)', trades: 66, winRate: 62.1, pf: 2.15, netR: 22.2, maxDdPct: 5.9,
+    random: { pf: 1.26, netR: 7.6 },
+    halves: { first: { pf: 1.92 }, second: { pf: 2.56 } },
+    perMarket: [
+      { name: 'XAUUSD (gold 4h)', trades: 35, winRate: 63, pf: 2.53, netR: 14.0 },
+      { name: 'XAGUSD (silver 4h)', trades: 31, winRate: 61, pf: 1.81, netR: 8.2 },
+      { name: 'Forex Majors (8 pairs, 4h)', trades: 288, winRate: 49, pf: 1.21, netR: 27.3 },
+      { name: 'Gold & Silver (1h)', trades: 287, winRate: 45, pf: 1.19, netR: 25.3 },
+    ],
+  },
+  warmup: 220, maxOpen: 2, timeLimitBars: 24,
+  signal(w, cfg){
+    const c = RSX.closed(w); const i = c.length - 1;
+    if (i < 210) return { dir: 0, failed: ['warming up (needs 200-EMA)'] };
+    const close = c.map(x => x.close), A = IND.atr(c, 14)[i], e200 = IND.ema(close, 200)[i];
+    const st = IND.supertrend(c, 10, 3), b = c[i];
+    if (!A || !e200 || (st.up[i - 1] == null && st.down[i - 1] == null)) return { dir: 0, failed: ['indicators warming up'] };
+    const flipUp = st.up[i] != null && st.down[i - 1] != null;
+    const flipDn = st.down[i] != null && st.up[i - 1] != null;
+    if (flipUp && b.close > e200){
+      const sd = Math.max(0.5 * A, Math.min(2.5 * A, b.close - st.up[i]));
+      return { dir: 1, score: 85, entry: b.close, sl: b.close - sd, tp: b.close + 2 * sd, model: 'SuperTrend Regime BUY',
+        reasons: ['SuperTrend(10,3) flipped bullish after pullback', 'Close above 200-EMA (' + fmtPrice(e200) + ')', 'Metals 4h PF 2.15 (Buy PF 2.75) · Forex 4h PF 1.21'] };
+    }
+    if (flipDn && b.close < e200){
+      const sd = Math.max(0.5 * A, Math.min(2.5 * A, st.down[i] - b.close));
+      return { dir: -1, score: 82, entry: b.close, sl: b.close + sd, tp: b.close - 2 * sd, model: 'SuperTrend Regime SELL',
+        reasons: ['SuperTrend(10,3) flipped bearish after bounce', 'Close below 200-EMA (' + fmtPrice(e200) + ')', 'Metals 4h PF 2.15 (Sell PF 1.41) · Forex 4h PF 1.21 (Sell PF 1.38)'] };
+    }
+    return { dir: 0, failed: ['waiting for SuperTrend(10,3) flip in the direction of the 200-EMA'] };
+  },
+});
+

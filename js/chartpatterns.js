@@ -120,8 +120,15 @@ const ChartPatterns = {
   result(){
     const raw = (typeof Chart !== 'undefined' && Chart.raw) || [];
     if (raw.length < 60) return null;
-    const C = this.cfg(), key = [STORE.symbol, STORE.tf, raw.length, raw[raw.length - 2].time, C.look, C.wing, C.zoneAtr, C.flatAtr].join('|');
-    if (!this._cache || this._cache.key !== key) this._cache = { key, res: this.analyse(raw) };
+    /* follow the chart: read the candles that END at the right edge of what is on screen.
+       At the live edge that is the newest closed candle (as before); scrolled back, the
+       patterns are those of that moment, built only from candles up to it. */
+    let end = raw.length - 2;                                   /* the last CLOSED candle */
+    try { const r = Chart.main.timeScale().getVisibleLogicalRange(); if (r && r.to < end) end = Math.max(59, Math.floor(r.to)); } catch(e){}
+    this.endIdx = end; this.atLive = end >= raw.length - 2;
+    const view = this.atLive ? raw : raw.slice(0, end + 2);     /* analyse() drops the last one as "still forming" */
+    const C = this.cfg(), key = [STORE.symbol, STORE.tf, raw.length, raw[raw.length - 2].time, end, C.look, C.wing, C.zoneAtr, C.flatAtr].join('|');
+    if (!this._cache || this._cache.key !== key) this._cache = { key, res: this.analyse(view) };
     return this._cache.res;
   },
 
@@ -215,6 +222,8 @@ const ChartPatterns = {
       const lines = [[C.showTrend ? R.trend : '', R.trend === 'Uptrend' ? '#00e676' : R.trend === 'Downtrend' ? '#ff5252' : '#ffd740'], [R.pattern || '', '#e8eaf6'], [R.continuation || '', '#40c4ff']].filter(l => l[0]);
       ctx.font = '700 13px ' + (getComputedStyle(document.body).getPropertyValue('--font-sans') || 'sans-serif');
       let y = 74; const x = 12;
+      if (!this.atLive){ const t0 = (Chart.raw[this.endIdx] || {}).time;
+        if (t0) lines.unshift(['⏪ as of ' + new Date((t0 - TZ_OFF) * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' — scroll right for live', '#9fb0c8']); }
       for (const [t, col] of lines){ const tw = ctx.measureText(t).width + 18; ctx.fillStyle = 'rgba(6,10,22,.82)'; this.pill(ctx, x, y - 11, tw, 22, 6); ctx.fill();
         ctx.strokeStyle = this.rgba(col, 0.7); ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = col; ctx.textBaseline = 'middle'; ctx.fillText(t, x + 9, y + 0.5); y += 26; ctx.font = '600 12px ' + (getComputedStyle(document.body).getPropertyValue('--font-sans') || 'sans-serif'); }
     }
