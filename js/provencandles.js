@@ -227,7 +227,7 @@ const ProvenCandles = {
       }
       body += `<div class="fcBtns"><button class="bMini" data-pcfold="1">${this._open ? 'Less ▴' : 'All rules & evidence ▾'}</button></div>`;
     }
-    if (body !== this._sig){ el.innerHTML = body; this._sig = body; }
+    if (body !== this._sig || !el.innerHTML){ el.innerHTML = body; this._sig = body; }
   },
 
   /* ---------- button + settings ---------- */

@@ -276,7 +276,7 @@ const AutoStruct = {
         Fibonacci levels are <b>not</b> special: a 55% or 70% pullback holds just as often as the "Fibonacci" ones next to it — the odds follow the DEPTH, not the number. Pivot points held 65% vs 65% for made-up levels; 3-touch trendlines 66% vs 65%. That is why every level here shows its measured odds instead.</div>`;
     }
     body += `<div class="fcBtns"><button class="bMini" data-stfold="1">${this._more ? 'Less ▴' : 'Details &amp; evidence ▾'}</button></div>`;
-    if (body !== this._sig){ el.innerHTML = body; this._sig = body; }
+    if (body !== this._sig || !el.innerHTML){ el.innerHTML = body; this._sig = body; }
   },
   groupName(g){ return ({ indices: 'stock indices', forex: 'forex', gold: 'gold & silver', energy: 'oil', crypto: 'crypto', ALL: 'all markets' })[g] || g; },
 

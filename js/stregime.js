@@ -381,7 +381,7 @@ const StRegime = {
       const last = R.sigs[R.sigs.length - 1];
       const live = last && last.res === 'open' ? last : null;
       body += `<div class="pcStats">${live ? `<b class="${live.dir > 0 ? 'up' : 'down'}">${live.dir > 0 ? '▲ BUY' : '▼ SELL'} active</b> · entry ${fmtPrice(live.entry)} · SL ${fmtPrice(live.stop)} · TP ${fmtPrice(live.tp)}` : 'Waiting for next SuperTrend flip · Best fit: Gold & Silver 4h (PF 2.15)'}</div>`;
-      if (body !== this._sig){ el.innerHTML = body; this._sig = body; }
+      if (body !== this._sig || !el.innerHTML){ el.innerHTML = body; this._sig = body; }
       return;
     }
 

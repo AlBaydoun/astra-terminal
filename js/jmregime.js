@@ -210,7 +210,7 @@ const JMRegime = {
   draw(ctx){
     const C = this.cfg();
     if (!C.on){ const el = document.getElementById('jmRegCard'); if (el) el.remove(); return; }
-    const raw = (typeof Chart !== 'undefined' && Chart.raw) || [];
+    const raw = typeof Chart === 'undefined' ? [] : (Chart.view ? Chart.view() : (Chart.raw || []));   /* during bar replay, only the replay's candles */
     const last = raw.length ? (raw[raw.length - 1].rawTime || raw[raw.length - 1].time) : 0;
     const sig = (typeof STORE !== 'undefined' ? STORE.symbol + '|' + STORE.tf : '') + '|' + last + '|' + raw.length + '|' + JSON.stringify(C);
     if (sig === this._sig && document.getElementById('jmRegCard')) return;   /* nothing changed */

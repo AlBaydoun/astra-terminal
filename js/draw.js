@@ -302,6 +302,7 @@ const Draw = {
     if (typeof ProvenCandles !== 'undefined') ProvenCandles.draw(ctx);   /* candle signals that survived the backtest */
     if (typeof StRegime !== 'undefined') StRegime.draw(ctx);             /* SuperTrend + EMA 200 regime BUY / SELL signals */
     if (typeof JMRegime !== 'undefined') JMRegime.draw(ctx);             /* ✦ Regime — six readings of the market's condition */
+    if (typeof JMSignals !== 'undefined') JMSignals.draw(ctx);           /* ✦ Signals — BUY / SELL and the expected move */
     /* the tested next-move call */   /* trend, pattern, zones, events */  /* sloped lines, channel, Fibonacci, pivots */      /* automatic support & resistance, under everything else */
     if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
     this._pinHit = null; this._unpinHits = [];

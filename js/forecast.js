@@ -167,7 +167,7 @@ const Forecast = {
         <div class="fcBtns"><button class="bMini" data-fcbt="1">Backtest here</button><button class="bMini" data-fcfold="1">${this._fold ? 'More ▾' : 'Less ▴'}</button></div>`;
     }
     const sig = body + (this._fold ? 1 : 0);
-    if (sig !== this._sig){ el.innerHTML = body; this._sig = sig; }
+    if (sig !== this._sig || !el.innerHTML){ el.innerHTML = body; this._sig = sig; }   /* a card rebuilt after off-and-on starts empty */
   },
 
   /* re-run the call on this instrument's own long history, and say plainly what it shows */
