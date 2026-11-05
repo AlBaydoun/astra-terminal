@@ -233,12 +233,14 @@
           <button type="button" id="marketClockBtn" class="obsLaunch" aria-haspopup="dialog" aria-controls="marketObservatory" aria-expanded="false"><svg class="wsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span>MARKET CLOCK</span></button>
           <button type="button" id="tradeReviewBtn" class="obsLaunch" aria-haspopup="dialog" aria-controls="tradeReview" aria-expanded="false"><svg class="wsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10a9 9 0 1 1 1 7M3 4v6h6"/><path d="m10 8 6 4-6 4Z"/></svg><span>TRADE REPLAY</span></button>
           <button data-tab="bots">BOTS</button>
+          <button data-tab="justmarkets" title="Your JustMarkets account: every instrument it offers, which bots trade it on paper, and what is ready for the Live Desk">JUSTMARKETS</button>
           <button id="botCollapse" title="Collapse / expand">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
         </div>
         <div class="botBody">
           <div id="bot-news" class="botPanel"></div>
+          <div id="bot-justmarkets" class="botPanel"></div>
           <div id="bot-screener" class="botPanel active">
             <div class="scrHead">
               <input id="scrSearch" type="text" placeholder="Filter pairs… e.g. SOL" spellcheck="false">
@@ -702,5 +704,6 @@
 <script src="js/pricerail.js"></script>
 <script src="js/nav-back.js"></script>
 <script src="js/app.js"></script>
+<script src="js/jmportal.js"></script>
 </body>
 </html>
