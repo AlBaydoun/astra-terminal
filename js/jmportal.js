@@ -455,6 +455,169 @@ const JMPortal = {
     return html;
   },
 
+  /* ================= evidence =================
+
+     "Can I rely on this bot?" is not a feeling, and it is not the P&L number.
+     ASTRA already states the standard in BotReports.READY — 40 finished trades,
+     profit factor 1.30, drawdown under 15%, winning on two instruments, a
+     backtest that agrees, a measured Brain edge. This tab lays that standard out
+     per bot so the answer is readable, and adds the one thing it does not carry:
+     whether a record could simply be luck.
+
+     The statistic is a bootstrap on the bot's own closed R-multiples. Resample
+     the trades with replacement a few thousand times, take the mean each time,
+     and look at the spread. Two numbers come out: a 95% interval for the true
+     average R, and the share of resamples that land at or below zero — a plain
+     reading of "this record is consistent with having no edge at all".
+
+     What it ASSUMES, and the assumption is not free: that the trades are
+     independent and identically distributed. Overlapping positions, one market
+     regime, and several bots crowding the same instrument all break it, and
+     every break makes the number look better than the truth. So it is a filter
+     for discarding bots, not a licence for promoting one. A bot that fails it
+     is not worth real money; a bot that passes it has merely not been ruled out.
+
+     No forecast is produced here, and nothing on this tab changes a setting. */
+
+  SEED: 2166136261,
+  /* a seeded generator, so the same ledger always gives the same number and the
+     figure does not twitch on every render */
+  rng(seed){
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  },
+
+  hashId(s){
+    let h = this.SEED;
+    for (let i = 0; i < String(s).length; i++){ h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  },
+
+  BOOT: 2000,
+  MIN_N: 20,          /* below this a bootstrap says nothing worth printing */
+
+  /* the evidence in a bot's own closed trades */
+  rStats(id, ledger){
+    const r = (ledger && ledger.closed || []).map(t => t.r).filter(x => typeof x === 'number' && isFinite(x));
+    const n = r.length;
+    if (!n) return { n: 0 };
+    const mean = r.reduce((a, x) => a + x, 0) / n;
+    const sd = n > 1 ? Math.sqrt(r.reduce((a, x) => a + (x - mean) * (x - mean), 0) / (n - 1)) : 0;
+    const out = { n, mean, sd };
+    if (n < this.MIN_N){ out.thin = true; return out; }
+
+    const rand = this.rng(this.hashId(id) ^ n);
+    const means = new Array(this.BOOT);
+    for (let b = 0; b < this.BOOT; b++){
+      let s = 0;
+      for (let i = 0; i < n; i++) s += r[(rand() * n) | 0];
+      means[b] = s / n;
+    }
+    means.sort((a, b) => a - b);
+    out.lo = means[Math.floor(this.BOOT * 0.025)];
+    out.hi = means[Math.floor(this.BOOT * 0.975)];
+    out.pZero = means.filter(m => m <= 0).length / this.BOOT;
+    /* trades needed for a mean this size to clear zero at 95%, if it holds up */
+    if (mean > 0 && sd > 0) out.needed = Math.ceil(Math.pow(1.96 * sd / mean, 2));
+    return out;
+  },
+
+  evidenceRows(){
+    let rows = [];
+    try { if (typeof BotReports !== 'undefined' && BotReports.rows) rows = BotReports.rows() || []; } catch(e){}
+    return rows.filter(r => !r.manual).map(r => {
+      let led = null;
+      try { led = Bots.ledger(r.id) || BotEngine.load(r.id); } catch(e){}
+      return { r, st: this.rStats(r.id, led) };
+    });
+  },
+
+  verdictOf(r, st){
+    if (!r.trades) return ['no evidence', 'It has not finished a trade. There is nothing to judge.'];
+    if (st.thin || st.n < this.MIN_N)
+      return ['too few trades', 'Only ' + st.n + ' finished trades. Under ' + this.MIN_N + ' the spread is wider than anything it could tell you.'];
+    if (st.pZero > 0.3)
+      return ['indistinguishable from luck', Math.round(st.pZero * 100) + '% of resamples of its own trades come out at or below zero.'];
+    if (r.ready >= 4 && st.pZero <= 0.05)
+      return ['evidence, not proof', 'Clears ' + r.ready + ' of 6 conditions and its record is hard to get by chance. Still only paper, and the test assumes trades are independent.'];
+    if (r.ready >= 4)
+      return ['meets the bar, weak statistics', 'Clears ' + r.ready + ' of 6, but ' + Math.round(st.pZero * 100) + '% of resamples reach zero.'];
+    return ['not ready', 'Clears ' + r.ready + ' of 6 conditions.'];
+  },
+
+  evidenceView(){
+    const rows = this.evidenceRows();
+    if (!rows.length) return '<p style="opacity:.7;font-size:13px">No bot records to read yet.</p>';
+
+    const ranked = rows.slice().sort((a, b) => {
+      const ar = a.r.ready || 0, br = b.r.ready || 0;
+      if (ar !== br) return br - ar;
+      return (a.st.pZero == null ? 1 : a.st.pZero) - (b.st.pZero == null ? 1 : b.st.pZero);
+    });
+
+    const clear = ranked.filter(x => x.r.ready >= 4).length;
+    const solid = ranked.filter(x => x.r.ready >= 4 && x.st.pZero != null && x.st.pZero <= 0.05).length;
+    const enough = ranked.filter(x => x.st.n >= this.MIN_N).length;
+
+    const tile = (label, value, note) =>
+      '<div style="background:rgba(127,127,127,.08);border-radius:8px;padding:10px 12px;min-width:130px">' +
+      '<div style="font-size:11px;opacity:.65;margin-bottom:3px">' + this.esc(label) + '</div>' +
+      '<div style="font-size:19px;font-weight:500">' + this.esc(value) + '</div>' +
+      '<div style="font-size:11px;opacity:.55;margin-top:2px">' + this.esc(note) + '</div></div>';
+
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin:0 0 14px">' +
+      tile('Bots', ranked.length, 'with a record to read') +
+      tile('Enough trades', enough, 'at least ' + this.MIN_N + ' finished') +
+      tile('Meet the bar', clear, '4 of 6 conditions or better') +
+      tile('And hard to get by chance', solid, 'bootstrap at or under 5%') +
+      '</div>';
+
+    const th = s => '<th style="text-align:left;padding:6px 10px;font-size:11px;opacity:.65;font-weight:400;white-space:nowrap">' + s + '</th>';
+    const td = (s, extra) => '<td style="padding:6px 10px;font-size:12px;white-space:nowrap;' + (extra || '') + '">' + s + '</td>';
+
+    html += '<div style="overflow:auto;max-height:46vh"><table style="width:100%;border-collapse:collapse">' +
+      '<thead><tr>' + th('Bot') + th('Conditions met') + th('Trades') + th('Average R') +
+      th('95% interval') + th('Could be luck') + th('Trades needed') + th('Verdict') + '</tr></thead><tbody>';
+
+    for (const x of ranked){
+      const r = x.r, st = x.st;
+      const [v, why] = this.verdictOf(r, st);
+      const dots = r.checks ? r.checks.map(c =>
+        '<span title="' + this.esc(c.label + ' — ' + c.got) + '" style="color:' +
+        (c.ok ? 'var(--up,#26a66b)' : 'rgba(127,127,127,.45)') + '">' + (c.ok ? '●' : '○') + '</span>').join(' ') : '';
+      const luck = st.pZero == null ? '—' : Math.round(st.pZero * 100) + '%';
+      const luckCol = st.pZero == null ? 'opacity:.45'
+        : st.pZero <= 0.05 ? 'color:var(--up,#26a66b)'
+        : st.pZero > 0.3 ? 'color:var(--down,#e3534f)' : '';
+      html += '<tr style="border-top:1px solid rgba(127,127,127,.16)">' +
+        td('<strong>' + this.esc(r.name) + '</strong>') +
+        td(dots + ' <span style="opacity:.6">' + (r.ready || 0) + '/6</span>') +
+        td(st.n || '—', st.n >= this.MIN_N ? '' : 'opacity:.55') +
+        td(st.n ? this.n(st.mean, 3) : '—', st.n ? (st.mean > 0 ? 'color:var(--up,#26a66b)' : 'color:var(--down,#e3534f)') : 'opacity:.45') +
+        td(st.lo != null ? this.n(st.lo, 2) + ' to ' + this.n(st.hi, 2) : '—', st.lo != null ? 'opacity:.8' : 'opacity:.45') +
+        td(luck, luckCol) +
+        td(st.needed != null ? (st.needed > st.n ? '~' + st.needed : 'enough') : '—', 'opacity:.75') +
+        td('<span title="' + this.esc(why) + '">' + this.esc(v) + '</span>', 'opacity:.85;white-space:normal') +
+        '</tr>';
+    }
+    html += '</tbody></table></div>';
+
+    html += '<div style="background:rgba(127,127,127,.08);border-radius:8px;padding:11px 14px;margin:12px 0 0;font-size:12px;line-height:1.65">' +
+      '<strong>How to read the luck column.</strong> Each bot&rsquo;s finished trades are resampled with replacement ' +
+      this.BOOT + ' times; the column is the share of those resamples whose average R lands at or below zero. ' +
+      'High means its record is comfortably reachable by a bot with no edge at all. Low does not prove an edge: ' +
+      'the test assumes trades are independent and alike, and overlapping positions, a single market regime and ' +
+      'several bots crowding one instrument all break that &mdash; each break flatters the number. ' +
+      'Use it to throw bots out, not to promote one. The dots are ASTRA&rsquo;s own six readiness conditions; hover for each.' +
+      '</div>';
+    return html;
+  },
+
   /* ---------- rendering ---------- */
 
   esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); },
@@ -502,7 +665,8 @@ const JMPortal = {
     const b = (id, label) => '<button type="button" data-jmtab="' + id + '" class="bMini"' +
       (S.tab === id ? ' style="outline:1px solid currentColor"' : '') + '>' + this.esc(label) + '</button>';
     return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">' +
-      b('universe', 'Instruments') + b('bots', 'Bots & readiness') + b('coverage', 'Coverage') +
+      b('universe', 'Instruments') + b('bots', 'Bots & readiness') +
+      b('evidence', 'Can I rely on it') + b('coverage', 'Coverage') +
       '<span style="flex:1"></span>' +
       (S.tab === 'universe'
         ? '<label style="font-size:12px;opacity:.8;display:flex;gap:5px;align-items:center">' +
@@ -594,6 +758,7 @@ const JMPortal = {
     const S = this.state();
     const body = S.tab === 'bots' ? this.botTable()
       : S.tab === 'coverage' ? this.coverageView()
+      : S.tab === 'evidence' ? this.evidenceView()
       : this.universeTable();
     return '<div style="padding:12px 14px">' + this.head() + this.tabs() + body + this.footer() + '</div>';
   },
