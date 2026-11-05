@@ -11,6 +11,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const getNews = require('./news.cjs').createService();
+const getResearch = require('./research.cjs').createService();
 
 const ROOT = path.join(__dirname, '..');
 const PORT = process.env.PORT || 8642;
@@ -278,6 +279,10 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/api/news'){
       if(req.method!=='GET')return sendJSON(res,{error:'method_not_allowed'},405,0);
       return sendJSON(res,await getNews(),200,0);
+    }
+    if (url.pathname === '/api/research'){
+      if(req.method!=='GET')return sendJSON(res,{error:'method_not_allowed'},405,0);
+      return sendJSON(res,await getResearch(url.searchParams.get('ticker')),200,0);
     }
     if (url.pathname.startsWith('/api/market/')) return await handleMarket(req, res, url);
     if (url.pathname.startsWith('/api/sync/')) return await handleSync(req, res, url);
