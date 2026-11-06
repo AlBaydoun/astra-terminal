@@ -211,3 +211,45 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('jmMarkBtn').addEventListener('click', () => JMMarks.toggle());
   document.getElementById('jmMarkCfg').addEventListener('click', () => JMMarks.panel());
 });
+
+/* ---------- the Signal Labels paper bot ----------
+   Trades the same labels the button draws, on closed candles only. Each trade
+   records its label, so the Deep Dive shows which ones made or lost money, and the
+   bot's allowed-signals list can switch any of them off. Paper unless you arm it on
+   the Live Desk, like every other bot. */
+const JMLabelBot = {
+  STOP: 1.5, TARGET: 2.5, BARS: 24, WINDOW: 600,
+  /* when one candle carries several labels, the rarer signal speaks */
+  RANK: { td13: 4, choch: 3, div: 2, td9: 1, bos: 0 },
+  MODEL: { td9: 'TD9 setup', td13: 'TD13 countdown', div: 'RSI divergence', choch: 'CHoCH', bos: 'BOS' },
+  signal(w){
+    const c = w.slice(-JMLabelBot.WINDOW - 1, -1), i = c.length - 1;      /* the forming candle is not read */
+    if (c.length < 260) return { dir: 0, failed: ['Warming up: needs 260 closed candles'] };
+    const here = JMMarks.analyse(c).filter(x => x.i === i);
+    if (!here.length) return { dir: 0, failed: ['No label on the last closed candle'] };
+    if (here.some(x => x.dir !== here[0].dir)) return { dir: 0, failed: ['Labels on this candle disagree: ' + here.map(x => x.text).join(', ')] };
+    const best = here.slice().sort((a, b) => JMLabelBot.RANK[b.key] - JMLabelBot.RANK[a.key])[0];
+    const atr = IND.atr(c, 14)[i];
+    if (!(atr > 0)) return { dir: 0, failed: ['ATR not ready'] };
+    const px = c[i].close, d = best.dir, model = JMLabelBot.MODEL[best.key];
+    return { dir: d, score: 60, entry: px, sl: px - d * JMLabelBot.STOP * atr, tp: px + d * JMLabelBot.TARGET * atr, model,
+      reasons: [here.map(x => x.text).join(' + ') + (d > 0 ? ' (buy)' : ' (sell)')] };
+  },
+  install(){
+    if (typeof BOTS === 'undefined' || typeof BOT_BY_ID === 'undefined' || BOT_BY_ID.jm_labels) return;
+    const how = 'Trades every ✦ Signal Labels label: TD9, TD13, RSI divergence, CHoCH and BOS. It enters after the label\u2019s candle closes.';
+    const honest = 'Measured before release, these labels showed no reliable edge, and most lost to random entries. Treat this as an experiment. Use the Deep Dive to see which labels earn, and switch off the rest in its allowed signals.';
+    const bot = { id: 'jm_labels', name: 'Signal Labels', research: true,
+      blurb: how + ' Stop ' + this.STOP + '\u00d7 ATR, target ' + this.TARGET + '\u00d7 ATR, out after ' + this.BARS + ' candles. ' + honest,
+      defaults: { tf: '1h', tfAuto: false, minScore: 0, maxOpen: 3, groups: ['crypto', 'forex', 'gold', 'indices', 'energy'], timeLimitBars: this.BARS },
+      warmup: 270,
+      guide: { icon: '\u2726', tagline: 'Trades the labels from the \u2726 Signal Labels button.', tags: ['labels', 'TD Sequential', 'paper'], steps: [
+          ['\ud83d\udcd0', 'The rule', how + ' If labels on one candle disagree, it stays out.'],
+          ['\ud83c\udfaf', 'Stop and target', 'Stop ' + this.STOP + '\u00d7 ATR, target ' + this.TARGET + '\u00d7 ATR, and out after ' + this.BARS + ' candles if neither is reached.'],
+          ['\ud83d\udd2c', 'See what works', 'Each trade records its label. Open What triggered the trades in the Deep Dive to compare them.']],
+        settings: [], use: ['It starts on 1-hour charts and stays off shares, which close overnight.'], honest },
+      signal: w => JMLabelBot.signal(w) };
+    BOTS.push(bot); BOT_BY_ID[bot.id] = bot;
+  },
+};
+JMLabelBot.install();
