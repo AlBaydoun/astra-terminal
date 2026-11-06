@@ -222,11 +222,13 @@ const Chart = {
     const patternCount=markers.length;
     if (typeof ConfluenceOverlay !== 'undefined') markers.push(...ConfluenceOverlay.markers(v));
     if (typeof StratInd !== 'undefined' && StratInd.markers) markers.push(...StratInd.markers(v));
+    const jmMarks = typeof JMMarks !== 'undefined' ? JMMarks.markers(v) : [];
+    markers.push(...jmMarks);
     markers.sort((a,b)=>a.time-b.time);
     /* the whole set, not a tail slice — this line was the real limit */
     try { this.priceSeries.setMarkers(markers); } catch(e){}
     this._markerCount = markers.length;
-    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:patternCount,confluence:markers.length-patternCount});
+    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:patternCount,confluence:markers.length-patternCount-jmMarks.length});
   },
 
   /* compose a PNG of the chart (panes + drawings) and download it */
