@@ -44,6 +44,7 @@ const JMRange = {
       tf: new Set(r.tf), dow: new Set(r.dow) };
   },
   pass(page, t){
+    if (page._rangeOff) return true;
     return this.passC(this.compiled(page), t);
   },
   passC(C, t){
@@ -99,6 +100,7 @@ const JMRange = {
         <span class="jmSummary"></span><span class="jmCount"></span>
         <button type="button" class="bMini" data-rgclear="1">Clear</button>
       </div>
+      <div class="jmHidden" hidden></div>
       <div class="jmBody">
         <div class="jmGroup jmPeriod"><h4>Period</h4>
           ${this.sliderHtml('period', 'Period')}
@@ -192,6 +194,7 @@ const JMRange = {
     el.querySelectorAll('[data-rgdow]').forEach(b => { const x = r.dow.includes(+b.dataset.rgdow); b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     el.querySelectorAll('[data-rgbasis]').forEach(b => { const x = r.basis === b.dataset.rgbasis; b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     this.syncSliders(page, el, r);
+    this.hiddenNote(page, el, r);
     const tfs = [...new Set(all.map(t => t.tf || '?'))];
     tfs.sort((x, y) => { const p = this.TF_ORDER.indexOf(x), q = this.TF_ORDER.indexOf(y); return (p < 0 ? 99 : p) - (q < 0 ? 99 : q) || x.localeCompare(y); });
     el.querySelector('.jmTfs').innerHTML = tfs.length ? tfs.map(v => { const x = r.tf.includes(v), n = all.filter(t => (t.tf || '?') === v).length;
@@ -296,6 +299,24 @@ const JMRange = {
       setP(P, w, e.key === 'Home' ? D.lo : e.key === 'End' ? D.hi : P[w] + by);
       const r = this.withPoints(id, base, D, P, w); el._draft = r; this.paint(sl, id, D, this.points(id, r, D)); this.preview(page, el, r);
       clearTimeout(el._kt); el._kt = setTimeout(() => { el._draft = null; this.apply(page, r); }, 450); });
+  },
+
+  /* A saved range can hide everything in the doll you open, and the page then
+     looks empty for no visible reason. Say so plainly, with the way out. */
+  hiddenNote(page, el, r){
+    const box = el.querySelector('.jmHidden');
+    let shown = 0, base = 0;
+    if (this.active(r)){
+      try { shown = page.filtered().length; page._rangeOff = true; base = page.filtered().length; } catch(e){} finally { page._rangeOff = false; }
+    }
+    const hid = base - shown;
+    if (!hid){ box.hidden = true; el.classList.remove('hiding'); return; }
+    const bot = (page.path || []).find(f => f.dim === 'bot'), where = bot ? ' for ' + bot.label : ' here';
+    box.hidden = false; el.classList.add('hiding'); el.classList.toggle('hidingAll', !shown);
+    box.innerHTML = `<span>${!shown ? 'The time range is hiding <b>all ' + base.toLocaleString() + '</b> trades' + esc(where) : 'The time range is hiding <b>' + hid.toLocaleString() + ' of ' + base.toLocaleString() + '</b> trades' + esc(where)}: ${esc(this.summary(r))}.</span>
+      <button type="button" class="bMini" data-rgclear="1">Clear range</button>${this.folded(page) ? '<button type="button" class="bMini" data-rgfold="1">Show range</button>' : ''}`;
+    const empty = el.parentElement && el.parentElement.querySelector('.exEmpty');
+    if (empty && !shown) empty.textContent = 'No trades inside the time range above. ' + base.toLocaleString() + ' trades here fall outside it. Clear the range to see them.';
   },
 
   /* ---------- typing and clicking ---------- */
@@ -422,6 +443,9 @@ const JMRange = {
       .jmSeg2 button.on{ background:color-mix(in srgb, var(--jmA) 18%, transparent); color:var(--jmA); font-weight:600; }
       .jmRange :is(button,input):focus-visible{ outline:2px solid var(--jmA); outline-offset:1px; } .jmRange .jmSeg:focus-visible{ outline:0; }
       .jmNone{ color:var(--dim); }
+      .jmHidden{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; border-top:1px solid var(--border); background:rgba(255,183,77,.1); color:#ffcc80; }
+      .jmHidden[hidden]{ display:none; } .jmHidden span{ flex:1; min-width:200px; } .jmHidden b{ color:#ffb74d; }
+      .jmRange.hidingAll{ border-color:#ffb74d; }
       .jmPicker{ position:absolute; width:0; height:0; padding:0; border:0; opacity:0; pointer-events:none; }
       @media (max-width:1250px){ .jmBody{ grid-template-columns:1fr 1fr; } .jmGroup:nth-child(3){ border-left:0; } .jmGroup:nth-child(n+3){ border-top:1px solid var(--border); } }
       @media (max-width:700px){ .jmBody{ grid-template-columns:1fr; } .jmGroup{ border-left:0; border-top:1px solid var(--border); } .jmGroup:first-child{ border-top:0; } .jmSummary{ display:none; } .jmCount{ margin-left:auto; } }

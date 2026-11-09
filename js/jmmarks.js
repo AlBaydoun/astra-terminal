@@ -23,6 +23,17 @@
      A close through the last confirmed swing. With the trend it is a BOS (break of
      structure); against the trend it is a CHoCH (change of character).
 
+   TREND FLIPS (added 9 Nov 2026), three of the most used buy/sell label tools:
+     UT Bot      an ATR trailing stop (ATR 10, key value 1); a close crossing it is
+                 the label, as in the open-source UT Bot Alerts script.
+     Chandelier  Chuck LeBeau's exit: 22-candle high minus 3 ATR(22) for longs,
+                 22-candle low plus 3 ATR for shorts, ratcheting; a flip of side
+                 is the label. LeBeau meant it as an exit, and sources warn it is
+                 prone to false entries.
+     Squeeze     John Carter's TTM Squeeze as LazyBear coded it: Bollinger Bands
+                 (20, 2) inside Keltner Channels (20, 1.5) for at least 3 candles,
+                 then released; the momentum slope picks the side.
+
    A swing needs 5 candles on each side, so divergence and structure labels appear
    on the candle that CONFIRMS them, 5 or more candles after the turn. That is when
    they could really have been seen, and it means they never repaint. The forming
@@ -32,10 +43,10 @@
    the open chart, after spread. Read only: this file has no order path. */
 const JMMarks = {
   KEY: 'astra_marks',
-  DEF: { on: false, card: true, td9: true, td13: true, div: true, structure: true, onlyStrong: false },
+  DEF: { on: false, card: true, td9: true, td13: true, div: true, structure: true, ut: true, ce: true, sqz: true, onlyStrong: false },
   H: 12, WING: 5,
-  STYLE: { td: '#f0b90b', div: '#b388ff', st: '#00e5ff' },
-  NAMES: { td9: 'TD9 setup', td13: 'TD13 countdown', div: 'RSI divergence', bos: 'BOS', choch: 'CHoCH' },
+  STYLE: { td: '#f0b90b', div: '#b388ff', st: '#00e5ff', ut: '#ff9100', ce: '#76ff03', sqz: '#ff4081' },
+  NAMES: { td9: 'TD9 setup', td13: 'TD13 countdown', div: 'RSI divergence', bos: 'BOS', choch: 'CHoCH', ut: 'UT Bot', ce: 'Chandelier Exit', sqz: 'Squeeze release' },
 
   cfg(){ return Object.assign({}, this.DEF, lsGet(this.KEY, {}) || {}); },
   save(c){ lsSet(this.KEY, c); this._cardSig = ''; this.syncBtn(); this.refresh(); },
@@ -124,8 +135,59 @@ const JMMarks = {
     return out;
   },
 
+  /* ---------- trend flips ---------- */
+  /* UT Bot Alerts: the ATR trailing stop of the open-source script, key value 1, ATR 10 */
+  utBot(c, key, n){
+    const out = [], atr = IND.atr(c, n), close = c.map(x => x.close);
+    let stop = null;
+    for (let i = 1; i < c.length; i++){
+      if (!(atr[i] > 0)){ continue; }
+      const src = close[i], prev = stop == null ? src : stop, loss = key * atr[i], p1 = close[i - 1];
+      const next = src > prev && p1 > prev ? Math.max(prev, src - loss) : src < prev && p1 < prev ? Math.min(prev, src + loss) : src > prev ? src - loss : src + loss;
+      if (stop != null){
+        if (src > next && p1 <= prev) out.push({ i, dir: 1, key: 'ut', strong: true, text: 'UT Buy', color: this.STYLE.ut });
+        else if (src < next && p1 >= prev) out.push({ i, dir: -1, key: 'ut', strong: true, text: 'UT Sell', color: this.STYLE.ut });
+      }
+      stop = next;
+    }
+    return out;
+  },
+  /* Chandelier Exit (LeBeau): the side flips when price closes beyond the other side's stop */
+  chandelier(c, n, mult){
+    const out = [], atr = IND.atr(c, n);
+    let longS = null, shortS = null, dir = 0;
+    for (let i = n; i < c.length; i++){
+      if (!(atr[i] > 0)) continue;
+      let hi = -Infinity, lo = Infinity;
+      for (let k = i - n + 1; k <= i; k++){ hi = Math.max(hi, c[k].high); lo = Math.min(lo, c[k].low); }
+      let L = hi - mult * atr[i], S = lo + mult * atr[i];
+      if (longS != null && c[i - 1].close > longS) L = Math.max(L, longS);
+      if (shortS != null && c[i - 1].close < shortS) S = Math.min(S, shortS);
+      const was = dir;
+      if (shortS != null && c[i].close > shortS) dir = 1;
+      else if (longS != null && c[i].close < longS) dir = -1;
+      if (was && dir !== was) out.push({ i, dir, key: 'ce', strong: true, text: dir > 0 ? 'CE Buy' : 'CE Sell', color: this.STYLE.ce });
+      longS = L; shortS = S;
+    }
+    return out;
+  },
+  /* TTM Squeeze as LazyBear coded it: released after at least 3 compressed candles */
+  squeezeRelease(c){
+    const out = [], q = JMIND.squeeze(c, 20, 2, 1.5);
+    let on = 0;
+    for (let i = 0; i < c.length; i++){
+      if (q.on[i] === 1){ on++; continue; }
+      if (q.on[i] === 0 && on >= 3 && q.mom[i] != null && q.mom[i] !== 0){
+        const d = q.mom[i] > 0 ? 1 : -1;
+        out.push({ i, dir: d, key: 'sqz', strong: true, text: d > 0 ? 'Squeeze ▲' : 'Squeeze ▼', color: this.STYLE.sqz });
+      }
+      on = 0;
+    }
+    return out;
+  },
+
   /* every label on closed candles; a pure function, so the chart and the measurement agree */
-  analyse(c){ return this.td(c).concat(this.swings(c)).sort((a, b) => a.i - b.i); },
+  analyse(c){ return this.td(c).concat(this.swings(c), this.utBot(c, 1, 10), this.chandelier(c, 22, 3), this.squeezeRelease(c)).sort((a, b) => a.i - b.i); },
 
   /* what price did H candles after each label, in ATR, against any candle in the same direction */
   score(c, list, costPct){
@@ -157,6 +219,9 @@ const JMMarks = {
     if (x.key === 'td9') return C.td9 && (!C.onlyStrong || x.strong);
     if (x.key === 'td13') return C.td13;
     if (x.key === 'div') return C.div;
+    if (x.key === 'ut') return C.ut;
+    if (x.key === 'ce') return C.ce;
+    if (x.key === 'sqz') return C.sqz;
     return C.structure && (!C.onlyStrong || x.strong);
   },
   /* called by the chart with the candle markers */
@@ -182,7 +247,7 @@ const JMMarks = {
       ['mousedown', 'pointerdown', 'wheel', 'dblclick'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
     }
     const f = v => (v >= 0 ? '+' : '') + v.toFixed(2);
-    const rows = ['td9', 'td13', 'div', 'choch', 'bos'].map(k => { const r = R.rows[k];
+    const rows = ['td9', 'td13', 'div', 'choch', 'bos', 'ut', 'ce', 'sqz'].map(k => { const r = R.rows[k];
       if (!r) return `<tr><td>${this.NAMES[k]}</td><td colspan="4" style="opacity:.55">none finished</td></tr>`;
       const avg = r.s / r.n, b = r.b / r.n;
       return `<tr><td>${this.NAMES[k]}</td><td style="text-align:right">${r.n}</td><td style="text-align:right">${Math.round(r.w / r.n * 100)}%</td><td style="text-align:right;color:${avg > b ? '#2ebd85' : '#f6465d'}">${f(avg)}</td><td style="text-align:right;opacity:.7">${f(b)}</td></tr>`; }).join('');
@@ -198,7 +263,7 @@ const JMMarks = {
     let el = document.getElementById('jmMarkPanel'); if (el){ el.remove(); return; }
     const c = this.cfg(), chk = (k, t) => '<label><input type="checkbox" data-mk="' + k + '"' + (c[k] ? ' checked' : '') + '> ' + t + '</label>';
     document.body.insertAdjacentHTML('beforeend', '<div id="jmMarkPanel" class="autoSrPanel asPanel"><b>Signal labels</b><div class="srLook"><b>What to show</b>' +
-      chk('td9', 'TD9 setups') + chk('td13', 'TD13 countdowns') + chk('div', 'RSI divergences') + chk('structure', 'BOS and CHoCH') + chk('onlyStrong', 'Fewer labels: only TD9★ and CHoCH') + chk('card', 'The results card') + '</div></div>');
+      chk('td9', 'TD9 setups') + chk('td13', 'TD13 countdowns') + chk('div', 'RSI divergences') + chk('structure', 'BOS and CHoCH') + chk('ut', 'UT Bot') + chk('ce', 'Chandelier Exit') + chk('sqz', 'Squeeze releases') + chk('onlyStrong', 'Fewer labels: only TD9★ and CHoCH') + chk('card', 'The results card') + '</div></div>');
     el = document.getElementById('jmMarkPanel');
     el.addEventListener('change', e => { const k = e.target.dataset.mk; if (!k) return; const v = this.cfg(); v[k] = e.target.checked; v.on = true; this.save(v); });
     setTimeout(() => document.addEventListener('mousedown', function off(e){ if (!e.target.closest('#jmMarkPanel, #jmMarkCfg')){ document.getElementById('jmMarkPanel')?.remove(); document.removeEventListener('mousedown', off); } }), 0);
@@ -207,7 +272,7 @@ const JMMarks = {
 document.addEventListener('DOMContentLoaded', () => {
   const after = document.getElementById('jmChkCfg') || document.getElementById('jmSigCfg') || document.getElementById('fcCfg');
   if (!after || document.getElementById('jmMarkBtn')) return;
-  after.insertAdjacentHTML('afterend', '<button id="jmMarkBtn" class="bMini autoSrBtn' + (JMMarks.cfg().on ? ' on' : '') + '" title="Named signals on the candles: TD Sequential 9 and 13, RSI divergence, BOS and CHoCH">✦ Signal Labels</button><button id="jmMarkCfg" class="bMini" title="Signal Labels settings">⚙</button>');
+  after.insertAdjacentHTML('afterend', '<button id="jmMarkBtn" class="bMini autoSrBtn' + (JMMarks.cfg().on ? ' on' : '') + '" title="Named signals on the candles: TD Sequential 9 and 13, RSI divergence, BOS and CHoCH, UT Bot, Chandelier Exit and Squeeze releases">✦ Signal Labels</button><button id="jmMarkCfg" class="bMini" title="Signal Labels settings">⚙</button>');
   document.getElementById('jmMarkBtn').addEventListener('click', () => JMMarks.toggle());
   document.getElementById('jmMarkCfg').addEventListener('click', () => JMMarks.panel());
 });
@@ -220,12 +285,14 @@ document.addEventListener('DOMContentLoaded', () => {
 const JMLabelBot = {
   STOP: 1.5, TARGET: 2.5, BARS: 24, WINDOW: 600,
   /* when one candle carries several labels, the rarer signal speaks */
-  RANK: { td13: 4, choch: 3, div: 2, td9: 1, bos: 0 },
-  MODEL: { td9: 'TD9 setup', td13: 'TD13 countdown', div: 'RSI divergence', choch: 'CHoCH', bos: 'BOS' },
-  signal(w){
+  RANK: { td13: 4, choch: 3, div: 2, td9: 1, bos: 0, sqz: 3, ce: 2, ut: 1 },
+  MODEL: { td9: 'TD9 setup', td13: 'TD13 countdown', div: 'RSI divergence', choch: 'CHoCH', bos: 'BOS', ut: 'UT Bot', ce: 'Chandelier Exit', sqz: 'Squeeze release' },
+  KEYS: ['td9', 'td13', 'div', 'choch', 'bos'],
+  signal(w, keys){
+    keys = keys || JMLabelBot.KEYS;
     const c = w.slice(-JMLabelBot.WINDOW - 1, -1), i = c.length - 1;      /* the forming candle is not read */
     if (c.length < 260) return { dir: 0, failed: ['Warming up: needs 260 closed candles'] };
-    const here = JMMarks.analyse(c).filter(x => x.i === i);
+    const here = JMMarks.analyse(c).filter(x => x.i === i && keys.includes(x.key));
     if (!here.length) return { dir: 0, failed: ['No label on the last closed candle'] };
     if (here.some(x => x.dir !== here[0].dir)) return { dir: 0, failed: ['Labels on this candle disagree: ' + here.map(x => x.text).join(', ')] };
     const best = here.slice().sort((a, b) => JMLabelBot.RANK[b.key] - JMLabelBot.RANK[a.key])[0];
@@ -249,6 +316,25 @@ const JMLabelBot = {
           ['\ud83d\udd2c', 'See what works', 'Each trade records its label. Open What triggered the trades in the Deep Dive to compare them.']],
         settings: [], use: ['It starts on 1-hour charts and stays off shares, which close overnight.'], honest },
       signal: w => JMLabelBot.signal(w) };
+    BOTS.push(bot); BOT_BY_ID[bot.id] = bot;
+    this.installTrend();
+  },
+  /* the same trade plan on the trend-flip labels only */
+  installTrend(){
+    if (BOT_BY_ID.jm_trendlabels) return;
+    const keys = ['ut', 'ce', 'sqz'];
+    const how = 'Trades the UT Bot, Chandelier Exit and Squeeze release labels from ✦ Signal Labels, after the label’s candle closes.';
+    const honest = 'Measured before release, these labels showed no reliable edge over random entries. Treat this as an experiment on paper, and use the Deep Dive to see which label earns.';
+    const bot = { id: 'jm_trendlabels', name: 'Trend Labels', research: true,
+      blurb: how + ' Stop ' + this.STOP + '\u00d7 ATR, target ' + this.TARGET + '\u00d7 ATR, out after ' + this.BARS + ' candles. ' + honest,
+      defaults: { tf: '1h', tfAuto: false, minScore: 0, maxOpen: 3, groups: ['crypto', 'forex', 'gold', 'indices', 'energy'], timeLimitBars: this.BARS },
+      warmup: 270,
+      guide: { icon: '\u2726', tagline: 'Trades the UT Bot, Chandelier Exit and Squeeze labels.', tags: ['labels', 'trend flips', 'paper'], steps: [
+          ['\ud83d\udcd0', 'The rule', how + ' If labels on one candle disagree, it stays out.'],
+          ['\ud83c\udfaf', 'Stop and target', 'Stop ' + this.STOP + '\u00d7 ATR, target ' + this.TARGET + '\u00d7 ATR, and out after ' + this.BARS + ' candles if neither is reached.'],
+          ['\ud83d\udd2c', 'See what works', 'Each trade records its label. Open What triggered the trades in the Deep Dive to compare them.']],
+        settings: [], use: ['It starts on 1-hour charts and stays off shares, which close overnight.'], honest },
+      signal: w => JMLabelBot.signal(w, keys) };
     BOTS.push(bot); BOT_BY_ID[bot.id] = bot;
   },
 };
