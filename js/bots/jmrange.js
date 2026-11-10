@@ -16,9 +16,13 @@
    change the value. The panel survives the page redrawing, so a half-typed field
    and the cursor stay where they were. Times are this PC's local time.
 
+   Signals: the same filter as ⚑ Filter labels on the chart, over what opened
+   each trade (TD9, CE Buy, Hammer …). Untick names, All or None, "only" for one,
+   or search. Remembered per page; a new signal shows by default.
+
    Read only: it changes what is shown and nothing about any bot or trade. */
 const JMRange = {
-  DEF: { from: '', to: '', hFrom: '', hTo: '', tf: [], dow: [], basis: 'exit' },
+  DEF: { from: '', to: '', hFrom: '', hTo: '', tf: [], dow: [], sig: [], basis: 'exit' },
   DAYS: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   TF_ORDER: ['1s', '30s', '1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'],
   PRESETS: [['today', 'Today'], ['yesterday', 'Yesterday'], ['7', '7 days'], ['30', '30 days'], ['month', 'This month']],
@@ -29,7 +33,8 @@ const JMRange = {
   get(page){ return Object.assign({}, this.DEF, lsGet(this.key(page), {}) || {}); },
   set(page, r){ lsSet(this.key(page), r); page._rangeC = null; },
   folded(page){ return !!lsGet(this.key(page) + '_fold', false); },
-  active(r){ return !!(r.from || r.to || r.hFrom || r.hTo || r.tf.length || r.dow.length); },
+  active(r){ return !!(r.from || r.to || r.hFrom || r.hTo || r.tf.length || r.dow.length || (r.sig && r.sig.length)); },
+  trig(t){ try { return Explorer.triggerOf(t); } catch(e){ return 'Not recorded'; } },
   mins(s){ const m = /^(\d\d):(\d\d)$/.exec(s || ''); return m ? +m[1] * 60 + +m[2] : null; },
   p2(n){ return String(n).padStart(2, '0'); },
 
@@ -41,14 +46,15 @@ const JMRange = {
     const a = r.from ? new Date(r.from).getTime() : null, b = r.to ? new Date(r.to).getTime() + 59999 : null;
     const hasH = !!(r.hFrom || r.hTo);
     return { r, on: this.active(r), a, b, hasH, h1: hasH ? (this.mins(r.hFrom) ?? 0) : 0, h2: hasH ? (this.mins(r.hTo) ?? 1439) : 1439,
-      tf: new Set(r.tf), dow: new Set(r.dow) };
+      tf: new Set(r.tf), dow: new Set(r.dow), sig: new Set(r.sig || []) };
   },
   pass(page, t){
     if (page._rangeOff) return true;
-    return this.passC(this.compiled(page), t);
+    return this.passC(this.compiled(page), t, page._sigOff);
   },
-  passC(C, t){
+  passC(C, t, skipSig){
     if (!C.on) return true;
+    if (!skipSig && C.sig.size && C.sig.has(this.trig(t))) return false;
     const ms = C.r.basis === 'entry' ? (t.entryTime || t.exitTime) : (t.exitTime || t.entryTime);
     if (C.a != null && !(ms >= C.a)) return false;
     if (C.b != null && !(ms <= C.b)) return false;
@@ -117,6 +123,10 @@ const JMRange = {
           <div class="jmChips"><button type="button" class="jmLink" data-rgweek="work">Mon to Fri</button><button type="button" class="jmLink" data-rgweek="all">Every day</button></div>
         </div>
         <div class="jmGroup"><h4>Timeframes</h4><div class="jmChips jmTfs"></div></div>
+        <div class="jmGroup jmSigs"><div class="jmSigHead"><h4>Signals that opened the trades</h4><span class="jmSigCount"></span>
+            <input type="search" class="jmSigQ" placeholder="Find a signal, e.g. TD9" autocomplete="off" aria-label="Find a signal">
+            <button type="button" class="jmLink" data-rgsig="all">All</button><button type="button" class="jmLink" data-rgsig="none">None</button></div>
+          <div class="jmSigList"></div></div>
       </div>
       <input type="date" class="jmPicker" tabindex="-1" aria-hidden="true">`;
     this.bindEvents(page, el);
@@ -172,6 +182,7 @@ const JMRange = {
     if (r.hFrom || r.hTo) out.push((r.hFrom || '00:00') + '–' + (r.hTo || '23:59') + ' daily');
     if (r.dow.length) out.push(r.dow.slice().sort().map(i => this.DAYS[i]).join(' '));
     if (r.tf.length) out.push(r.tf.map(v => v === '?' ? 'not recorded' : v).join(' '));
+    if (r.sig && r.sig.length) out.push(r.sig.length + ' signal' + (r.sig.length > 1 ? 's' : '') + ' hidden');
     if (r.basis === 'entry' && out.length) out.push('by opening time');
     return out.join('  ·  ') || 'All trades';
   },
@@ -194,6 +205,7 @@ const JMRange = {
     el.querySelectorAll('[data-rgdow]').forEach(b => { const x = r.dow.includes(+b.dataset.rgdow); b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     el.querySelectorAll('[data-rgbasis]').forEach(b => { const x = r.basis === b.dataset.rgbasis; b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     this.syncSliders(page, el, r);
+    this.sigList(page, el, r);
     this.hiddenNote(page, el, r);
     const tfs = [...new Set(all.map(t => t.tf || '?'))];
     tfs.sort((x, y) => { const p = this.TF_ORDER.indexOf(x), q = this.TF_ORDER.indexOf(y); return (p < 0 ? 99 : p) - (q < 0 ? 99 : q) || x.localeCompare(y); });
@@ -301,6 +313,20 @@ const JMRange = {
       clearTimeout(el._kt); el._kt = setTimeout(() => { el._draft = null; this.apply(page, r); }, 450); });
   },
 
+  /* the signals in the open view (time range and ticks applied, the signal filter not) */
+  sigList(page, el, r){
+    let rows = [];
+    try { page._sigOff = true; rows = page.filtered(); } catch(e){} finally { page._sigOff = false; }
+    const n = {}; for (const t of rows){ const k = this.trig(t); n[k] = (n[k] || 0) + 1; }
+    const hid = new Set(r.sig || []), names = [...new Set(Object.keys(n).concat([...hid]))].sort((a, b) => (n[b] || 0) - (n[a] || 0) || a.localeCompare(b));
+    el._sigNames = names;
+    const q = el.querySelector('.jmSigQ').value.trim().toLowerCase(), shown = names.filter(x => !q || x.toLowerCase().includes(q));
+    el.querySelector('.jmSigCount').textContent = names.length ? (names.length - names.filter(x => hid.has(x)).length) + ' of ' + names.length + ' shown' : '';
+    el.querySelector('.jmSigList').innerHTML = shown.length ? shown.map(x => `<label class="jmSigItem${n[x] ? '' : ' zero'}"><input type="checkbox" data-rgsigname="${esc(x)}"${hid.has(x) ? '' : ' checked'}>
+        <span title="${esc(x)}">${esc(x)}</span><small>${n[x] || 0}</small><button type="button" class="jmSigOnly" data-rgsigonly="${esc(x)}" title="Show only ${esc(x)}">only</button></label>`).join('')
+      : `<span class="jmNone">${names.length ? 'No signal matches.' : 'No trades here.'}</span>`;
+  },
+
   /* A saved range can hide everything in the doll you open, and the page then
      looks empty for no visible reason. Say so plainly, with the way out. */
   hiddenNote(page, el, r){
@@ -313,10 +339,10 @@ const JMRange = {
     if (!hid){ box.hidden = true; el.classList.remove('hiding'); return; }
     const bot = (page.path || []).find(f => f.dim === 'bot'), where = bot ? ' for ' + bot.label : ' here';
     box.hidden = false; el.classList.add('hiding'); el.classList.toggle('hidingAll', !shown);
-    box.innerHTML = `<span>${!shown ? 'The time range is hiding <b>all ' + base.toLocaleString() + '</b> trades' + esc(where) : 'The time range is hiding <b>' + hid.toLocaleString() + ' of ' + base.toLocaleString() + '</b> trades' + esc(where)}: ${esc(this.summary(r))}.</span>
+    box.innerHTML = `<span>${!shown ? 'Your filters are hiding <b>all ' + base.toLocaleString() + '</b> trades' + esc(where) : 'Your filters are hiding <b>' + hid.toLocaleString() + ' of ' + base.toLocaleString() + '</b> trades' + esc(where)}: ${esc(this.summary(r))}.</span>
       <button type="button" class="bMini" data-rgclear="1">Clear range</button>${this.folded(page) ? '<button type="button" class="bMini" data-rgfold="1">Show range</button>' : ''}`;
     const empty = el.parentElement && el.parentElement.querySelector('.exEmpty');
-    if (empty && !shown) empty.textContent = 'No trades inside the time range above. ' + base.toLocaleString() + ' trades here fall outside it. Clear the range to see them.';
+    if (empty && !shown) empty.textContent = 'No trades pass the filters above. ' + base.toLocaleString() + ' trades here are filtered out. Clear the filters to see them.';
   },
 
   /* ---------- typing and clicking ---------- */
@@ -361,13 +387,19 @@ const JMRange = {
       else if (b.dataset.rgweek) r.dow = b.dataset.rgweek === 'work' ? [0, 1, 2, 3, 4] : [];
       else if (b.dataset.rgtf != null) r.tf = toggle(r.tf, b.dataset.rgtf);
       else if (b.dataset.rgbasis) r.basis = b.dataset.rgbasis;
-      else if (b.dataset.rgclear){ Object.assign(r, this.DEF, { basis: r.basis, tf: [], dow: [] }); ['from', 'to', 'hFrom', 'hTo'].forEach(k => this.fill(el, k, '')); }
+      else if (b.dataset.rgsig === 'all') r.sig = [];
+      else if (b.dataset.rgsig === 'none') r.sig = (el._sigNames || []).slice();
+      else if (b.dataset.rgsigonly != null) r.sig = (el._sigNames || []).filter(n => n !== b.dataset.rgsigonly);
+      else if (b.dataset.rgclear){ Object.assign(r, this.DEF, { basis: r.basis, tf: [], dow: [], sig: [] }); ['from', 'to', 'hFrom', 'hTo'].forEach(k => this.fill(el, k, '')); }
       else return;
       for (const k of ['from', 'to']) if (b.dataset.rgpreset) this.fill(el, k, r[k]);
       this.apply(page, r);
       /* timeframe chips are redrawn, so keyboard focus returns to the same one */
       if (b.dataset.rgtf != null) el.querySelector(`[data-rgtf="${CSS.escape(b.dataset.rgtf)}"]`)?.focus();
     });
+    el.querySelector('.jmSigList').addEventListener('change', e => { const n = e.target.dataset.rgsigname; if (n == null) return;
+      const r = this.get(page), h = new Set(r.sig || []); if (e.target.checked) h.delete(n); else h.add(n); r.sig = [...h]; this.apply(page, r); });
+    el.querySelector('.jmSigQ').addEventListener('input', () => this.sigList(page, el, this.get(page)));
     el.querySelector('.jmPicker').addEventListener('change', e => {
       const pk = e.target, m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(pk.value), box = el.querySelector(`[data-field="${pk.dataset.key}"]`); if (!m) return;
       box.querySelector('[data-part="y"]').value = m[1]; box.querySelector('[data-part="m"]').value = m[2]; box.querySelector('[data-part="d"]').value = m[3];
@@ -443,6 +475,16 @@ const JMRange = {
       .jmSeg2 button.on{ background:color-mix(in srgb, var(--jmA) 18%, transparent); color:var(--jmA); font-weight:600; }
       .jmRange :is(button,input):focus-visible{ outline:2px solid var(--jmA); outline-offset:1px; } .jmRange .jmSeg:focus-visible{ outline:0; }
       .jmNone{ color:var(--dim); }
+      .jmSigs{ grid-column:1 / -1; border-left:0; border-top:1px solid var(--border); }
+      .jmSigHead{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; } .jmSigHead h4{ margin:0; }
+      .jmSigCount{ color:var(--dim); font-size:11px; flex:1; }
+      .jmSigQ{ width:200px; max-width:100%; padding:3px 7px; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:6px; font:inherit; }
+      .jmSigList{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:2px 10px; max-height:150px; overflow:auto; }
+      .jmSigItem{ display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:5px; cursor:pointer; }
+      .jmSigItem:hover{ background:rgba(127,127,127,.1); } .jmSigItem span{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .jmSigItem small{ color:var(--dim); font-variant-numeric:tabular-nums; } .jmSigItem.zero span{ opacity:.55; }
+      .jmSigOnly{ display:none; background:none; border:1px solid var(--border); border-radius:4px; color:var(--dim); font:inherit; font-size:10px; padding:0 4px; cursor:pointer; }
+      .jmSigItem:hover .jmSigOnly, .jmSigOnly:focus-visible{ display:inline-block; }
       .jmHidden{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; border-top:1px solid var(--border); background:rgba(255,183,77,.1); color:#ffcc80; }
       .jmHidden[hidden]{ display:none; } .jmHidden span{ flex:1; min-width:200px; } .jmHidden b{ color:#ffb74d; }
       .jmRange.hidingAll{ border-color:#ffb74d; }
