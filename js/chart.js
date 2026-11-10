@@ -224,11 +224,18 @@ const Chart = {
     if (typeof StratInd !== 'undefined' && StratInd.markers) markers.push(...StratInd.markers(v));
     const jmMarks = typeof JMMarks !== 'undefined' ? JMMarks.markers(v) : [];
     markers.push(...jmMarks);
+    /* the label filter (⚑ Filter labels) decides which names are drawn */
+    let patShown = patternCount, otherShown = markers.length - patternCount - jmMarks.length;
+    if (typeof JMLabelFilter !== 'undefined'){
+      const kept = JMLabelFilter.apply([['Candlestick patterns', markers.slice(0, patternCount)], ['Other labels', markers.slice(patternCount, markers.length - jmMarks.length)], ['Signal Labels', jmMarks]]);
+      markers.length = 0; markers.push(...kept);
+      patShown = JMLabelFilter.shownBy['Candlestick patterns'] || 0; otherShown = JMLabelFilter.shownBy['Other labels'] || 0;
+    }
     markers.sort((a,b)=>a.time-b.time);
     /* the whole set, not a tail slice — this line was the real limit */
     try { this.priceSeries.setMarkers(markers); } catch(e){}
     this._markerCount = markers.length;
-    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:patternCount,confluence:markers.length-patternCount-jmMarks.length});
+    if (typeof ConfluenceOverlay !== 'undefined') ConfluenceOverlay.syncPicker({patterns:patShown,confluence:otherShown});
   },
 
   /* compose a PNG of the chart (panes + drawings) and download it */
