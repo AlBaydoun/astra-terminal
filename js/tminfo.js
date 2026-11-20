@@ -45,7 +45,7 @@ const Info = {
     const T = { dash: ['Dashboard', 'Every bot at a glance. Click anything to go deeper.', 'dash'], deep: ['Deep Dive', 'Every closed trade, sliced. Click any bar: every other chart follows.', 'deep'], live: ['Live', 'Your real account, read from MetaTrader. This view only shows; the switches stay on the Classic live desk.', 'live'],
       livedive: ['Live Dive', 'Every real trade MetaTrader recorded in the last year, sliced. Click any bar: every other chart follows.', 'livedive'] }[kind];
     if (kind === 'livedive') this.f.src = 'live'; else if (kind === 'deep' && this._last === 'livedive') this.f.src = 'paper'; this._last = kind;
-    host.innerHTML = '<div class="tmiWrap"><div class="tmiHead"><div><h1>' + T[0] + '</h1><p>' + T[1] + '</p></div><div class="tmiSeg"><button class="on" type="button">Infographic</button><button type="button" data-i="classic:' + T[2] + '">' + (kind === 'live' ? 'Classic live desk' : 'Classic page') + '</button></div></div><div id="tmiBody"><div class="tmiEmpty">Reading your trades…</div></div></div>';
+    host.innerHTML = '<div class="tmiWrap"><div class="tmiHead"><div><h1>' + T[0] + '</h1><p>' + T[1] + '</p></div><div class="tmiSeg"><button class="on" type="button">Infographic</button>' + (kind === 'deep' || kind === 'livedive' ? '<button type="button" data-i="visual:1" title="Classic’s own page and every function of it, redrawn, with the wizard on top">Visual</button>' : '') + '<button type="button" data-i="classic:' + T[2] + '">' + (kind === 'live' ? 'Classic live desk' : 'Classic page') + '</button></div></div><div id="tmiBody"><div class="tmiEmpty">Reading your trades…</div></div></div>';
     host.onclick = e => this.click(e);
     host.onmousemove = e => { const c = e.target.closest('.tmiTilt'); if (this._tilt && this._tilt !== c){ this._tilt.style.transform = ''; } this._tilt = c; if (!c) return; const r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5; c.style.transform = 'perspective(900px) rotateX(' + (-y * 7).toFixed(2) + 'deg) rotateY(' + (x * 9).toFixed(2) + 'deg) translateZ(6px)'; };
     host.onmouseleave = () => { if (this._tilt){ this._tilt.style.transform = ''; this._tilt = null; } };
@@ -55,6 +55,7 @@ const Info = {
   click(e){
     const b = e.target.closest('[data-i]'); if (!b) return; const i = b.dataset.i.indexOf(':'), k = b.dataset.i.slice(0, i), v = b.dataset.i.slice(i + 1);
     if (k === 'classic'){ if (typeof Face !== 'undefined') Face.view(Face.room, 'classic'); }
+    else if (k === 'visual'){ Face.view(Face.room, 'visual'); }
     else if (k === 'room'){ Face.go(v); }
     else if (k === 'drill'){ const o = JSON.parse(v); this.f = Object.assign({ src: 'paper', period: 'all', bot: '', sym: '', tf: '', dir: '', reason: '', dow: '', hour: '', day: '' }, o); if (this.kind === 'deep'){ this._sig = ''; this.paint(); } else { Face.view('deep', 'info'); } }
     else if (k === 'f'){ const j = v.indexOf('='), key = v.slice(0, j), val = v.slice(j + 1); this.f[key] = this.f[key] === val && key !== 'src' && key !== 'period' ? '' : val; if (key === 'src') Object.assign(this.f, { bot: '', sym: '', tf: '', reason: '' }); this._sig = ''; this.paint(); }
