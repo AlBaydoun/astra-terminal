@@ -37,7 +37,7 @@ const Face = window.Face = {
     { id: 'chart', label: 'Chart', kind: 'chart', tip: 'The chart, full size' },
     { id: 'deep', label: 'Deep Dive', kind: 'bot', bot: 'explorer', info: 'deep', tip: 'Deep Dive: every trade, sliced. Click any bar.' },
     { id: 'live', label: 'Live', kind: 'bot', bot: 'liveManual', info: 'live', tip: 'Your real account at a glance; the live desk is one click away' },
-    { id: 'livedive', label: 'Live Dive', kind: 'bot', bot: 'livedive', tip: 'Live Deep Dive: real trades, sliced' },
+    { id: 'livedive', label: 'Live Dive', kind: 'bot', bot: 'livedive', info: 'livedive', tip: 'Live Deep Dive: real trades, sliced' },
     { id: 'dash', label: 'Dashboard', kind: 'bot', bot: 'dash', info: 'dash', tip: 'Every bot at a glance' },
     { id: 'autopsy', label: 'Autopsy', kind: 'native', tip: 'Why each trade won or lost: trend, agreement, shock' },
     { sep: true },
@@ -72,7 +72,7 @@ const Face = window.Face = {
       '<button type="button" id="tmClassic" title="Back to the Classic look. Nothing else changes.">Classic</button>';
     document.body.appendChild(dock);
     dock.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.room) this.go(b.dataset.room); else if (b.id === 'tmMore') this.palette(true); else if (b.id === 'tmClassic') this.set(false); });
-    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div><div id="tmInfo" hidden></div>'; document.body.appendChild(stage);
+    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div><div id="tmInfo" hidden></div><div id="tmFail" hidden></div>'; document.body.appendChild(stage);
     /* on a Classic page that also has an infographic view: the way back to it */
     const vs = document.createElement('button'); vs.id = 'tmViewSwitch'; vs.type = 'button'; vs.hidden = true; vs.textContent = '◧ Infographic view'; vs.title = 'Back to the infographic view of this page'; vs.onclick = () => this.view(this.room, 'info'); document.body.appendChild(vs);
     const pal = document.createElement('div'); pal.id = 'tmPal'; pal.hidden = true; pal.innerHTML = '<div class="tmPalBox" role="dialog" aria-label="Find anything"><input id="tmPalIn" type="text" placeholder="Find a page, a bot, a button or an instrument…" autocomplete="off" spellcheck="false"><div id="tmPalList"></div><p>↑ ↓ to move · Enter to open · Esc to close</p></div>'; document.body.appendChild(pal);
@@ -86,13 +86,14 @@ const Face = window.Face = {
     this.bTools = mk('tmToolsBtn', 'Tools', ICON.tools, 'Alerts, replay, compare, markets, saved workspaces'); this.bView = mk('tmViewBtn', 'View', ICON.view, 'Windows, maximise, screenshot, light or dark, full screen');
     bar.insertBefore(this.bCandles, ind); ind.after(this.bLayers, this.bTools); bar.appendChild(this.bView);
     this.bCandles.onclick = () => this.pop('candles', this.bCandles); this.bTools.onclick = () => this.pop('tools', this.bTools); this.bView.onclick = () => this.pop('view', this.bView);
+    ind.addEventListener('click', e => { if (this.on() && !this._indPass){ e.preventDefault(); e.stopImmediatePropagation(); this.closePops(); this.indOpen(true); } }, true);
     this.bLayers.onclick = () => { H.dataset.tmlayers = H.dataset.tmlayers === '1' ? '' : '1'; this.bLayers.classList.toggle('on', H.dataset.tmlayers === '1'); this.layersSync(); };
     for (const id of ['tmPopCandles', 'tmPopTools', 'tmPopView']){ const p = document.createElement('div'); p.id = id; p.className = 'tmPop'; p.hidden = true; document.body.appendChild(p); }
     document.addEventListener('mousedown', e => { if (!e.target.closest('.tmPop, #tmCandleBtn, #tmToolsBtn, #tmViewBtn, #winMenu, .modal')) this.closePops(); });
     document.addEventListener('keydown', e => {
       if (!this.on()) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k'){ e.preventDefault(); e.stopPropagation(); this.palette($('tmPal').hidden); }
-      else if (e.key === 'Escape'){ if (!$('tmPal').hidden){ this.palette(false); e.stopPropagation(); } else this.closePops(); }
+      else if (e.key === 'Escape'){ if (!$('tmPal').hidden){ this.palette(false); e.stopPropagation(); } else if ($('tmInd') && !$('tmInd').hidden){ this.indOpen(false); e.stopPropagation(); } else this.closePops(); }
     }, true);
     window.addEventListener('resize', () => this.measure());
     document.addEventListener('candlestyle', () => this.candleLabel());
@@ -114,8 +115,11 @@ const Face = window.Face = {
     if (strip){ this.moved.push({ el: strip, parent: strip.parentNode, next: strip.nextSibling }); document.body.appendChild(strip);
       if (!$('tmLayersHead')){ const h = document.createElement('div'); h.id = 'tmLayersHead'; strip.prepend(h); h.addEventListener('click', e => this.layersClick(e)); }
       if (!this._obs){ this._obs = new MutationObserver(() => { clearTimeout(this._lt); this._lt = setTimeout(() => this.layersSync(), 120); }); this._obs.observe(strip, { subtree: true, attributes: true, attributeFilter: ['class'] }); } }
-    this.candleLabel(); this.layersSync();
+    this.candleLabel(); this.layersSync(); this.sideNames();
   },
+  SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Time heatmap', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
+  sideNames(){ const st = $('sideTabs'); if (!st) return; const set = () => { st.querySelectorAll('[data-tab]').forEach(b => { b.dataset.tml = this.SIDE[b.dataset.tab] || (b.textContent || '').trim(); }); const a = st.querySelector('[data-tab].active'); st.dataset.tml = a ? a.dataset.tml : ''; };
+    set(); if (!this._sideObs){ this._sideObs = new MutationObserver(set); this._sideObs.observe(st, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true }); } },
   restore(){ for (const m of this.moved.reverse()){ try { if (m.label === undefined) delete m.el.dataset.tml; else m.el.dataset.tml = m.label; m.parent.insertBefore(m.el, m.next && m.next.parentNode === m.parent ? m.next : null); } catch(e){} } this.moved = []; },
 
   /* ---------- rooms ---------- */
@@ -137,9 +141,15 @@ const Face = window.Face = {
     else if ((r.kind === 'tab' || r.kind === 'bot') && !info){ H.dataset.tmroom = 'panel'; stage.hidden = true; $('tmViewSwitch').hidden = !r.info; this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
       if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
+      $('tmFail').hidden = true;
       if (info){ frame.hidden = true; nat.hidden = true; inf.hidden = false; Info.open(inf, r.info); }
       else if (r.kind === 'frame'){ nat.hidden = true; inf.hidden = true; frame.hidden = false; const want = 'timurila/index.html?embed=1#' + r.hash;
-        if (!frame.dataset.loaded){ frame.src = want; frame.dataset.loaded = '1'; } else try { frame.contentWindow.location.hash = '#' + r.hash; } catch(e){ frame.src = want; } }
+        const fail = $('tmFail'); fail.hidden = true;
+        /* did Timurila really arrive? If the data service is not answering, say so and offer to try again, rather than a blank room */
+        const alive = () => { try { return !!frame.contentDocument.querySelector('.app'); } catch(e){ return false; } };
+        const check = () => { if (this.room !== r.id || frame.hidden) return; if (alive()) return; frame.hidden = true; frame.dataset.loaded = ''; fail.hidden = false; fail.innerHTML = '<div><b>This room could not be loaded</b><p>The page that serves ASTRA’s files is not answering, so Timurila’s ' + esc(r.label) + ' room did not arrive. The chart and your bots are not affected.</p><button type="button" id="tmRetry">Try again</button></div>'; $('tmRetry').onclick = () => this.go(r.id); };
+        if (!frame.dataset.loaded || !alive()){ frame.onload = () => setTimeout(check, 300); frame.src = frame.dataset.loaded ? 'timurila/index.html?embed=1&r=' + Date.now() + '#' + r.hash : want; frame.dataset.loaded = '1'; clearTimeout(this._ft); this._ft = setTimeout(check, 7000); }
+        else try { frame.contentWindow.location.hash = '#' + r.hash; } catch(e){ frame.src = want; } }
       else { frame.hidden = true; inf.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => { if (Autopsy.want){ const w = Autopsy.want; Autopsy.want = null; Autopsy.filter = { src: 'all', bot: '', out: 'all' }; Autopsy.select(w); } else Autopsy.paint(); }); } } }
   },
   panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
@@ -204,6 +214,77 @@ const Face = window.Face = {
     if ((s !== 'clean') !== c.on) Studio.overlay.toggle(); this.layersSync();
   },
 
+  /* ---------- the Indicators gallery: every indicator as a small live example ---------- */
+  FAM: [['all', 'All'], ['on', 'On the chart'], ['trend', 'Trend'], ['osc', 'Oscillators'], ['vol', 'Volume'], ['bw', 'Bill Williams'], ['pro', 'Advanced'], ['other', 'More']],
+  famOf(d){ const id = d.id; if (/^pro_|^jm/.test(id)) return 'pro'; if (['alli', 'frac', 'ao', 'ac', 'gator', 'bwmfi'].includes(id)) return 'bw'; if (['vol', 'mfi', 'obv', 'ad', 'force'].includes(id)) return 'vol';
+    if (['ema1', 'ema2', 'ema3', 'bb', 'env', 'kelt', 'donch', 'vwap', 'st', 'st_regime', 'psar', 'ichi', 'piv', 'ama', 'dema', 'tema', 'frama', 'vidya', 'srl'].includes(id)) return 'trend';
+    if (['rsi', 'stoch', 'macd', 'cci', 'wpr', 'mom', 'dem', 'atr', 'sdev', 'adx', 'adxc'].includes(id)) return 'osc'; return d.kind === 'osc' ? 'osc' : 'other'; },
+  indOpen(open){
+    let p = $('tmInd');
+    if (!p){ p = document.createElement('div'); p.id = 'tmInd'; p.hidden = true;
+      p.innerHTML = '<div class="tmIndBox" role="dialog" aria-label="Indicators"><div class="tmIndHead"><b>Indicators</b><input id="tmIndQ" type="text" placeholder="Search: RSI, bands, volume…" autocomplete="off" spellcheck="false"><span class="tmIndFams" id="tmIndFams"></span><i></i><button type="button" data-ix="full" title="Classic’s full list: inputs, colours, windows">All settings…</button><button type="button" data-ix="close" title="Close">✕</button></div>' +
+        '<div class="tmIndBody"><div class="tmIndGrid" id="tmIndGrid"></div><aside class="tmIndPrev"><canvas id="tmIndBig"></canvas><h3 id="tmIndName">Hover an indicator</h3><p id="tmIndNote">Each tile is the indicator drawn on the chart you have open. Hover one to see it larger; click to put it on the chart or take it off.</p><div class="tmIndAct"><button type="button" class="pri" data-ix="toggle" hidden></button><button type="button" data-ix="props" hidden>Inputs and colours…</button></div></aside></div></div>';
+      document.body.appendChild(p);
+      p.addEventListener('mousedown', e => { if (e.target === p) this.indOpen(false); });
+      p.addEventListener('click', e => { const t = e.target.closest('[data-ind]'), x = e.target.closest('[data-ix]'), f = e.target.closest('[data-fam]');
+        if (t) this.indToggle(t.dataset.ind); else if (f){ this._indFam = f.dataset.fam; this.indFill(); }
+        else if (x){ const k = x.dataset.ix; if (k === 'close') this.indOpen(false); else if (k === 'toggle' && this._indSel) this.indToggle(this._indSel);
+          else if (k === 'full' || k === 'props'){ const def = k === 'props' && this._indSel ? INDS.find(d => d.id === this._indSel) : null; this.indOpen(false); this._indPass = true; $('indBtn').click(); this._indPass = false;
+            if (def) setTimeout(() => { const q = $('indSearch'); if (q){ q.value = def.label; q.dispatchEvent(new Event('input', { bubbles: true })); } }, 80); } } });
+      const over = e => { const t = e.target.closest && e.target.closest('[data-ind]'); if (t) this.indHover(t.dataset.ind); };
+      p.addEventListener('mouseover', over); p.addEventListener('focusin', over); $('tmIndQ').addEventListener('input', () => this.indFill());
+    }
+    p.hidden = !open; if (!open) return; this._indFam = this._indFam || 'all'; $('tmIndQ').value = ''; this.indFill(); setTimeout(() => $('tmIndQ').focus(), 30);
+  },
+  indFill(){
+    const q = $('tmIndQ').value.trim().toLowerCase(), fam = this._indFam, S = Chart.settings || {}, isOn = d => !!(S[d.id] && S[d.id].on);
+    $('tmIndFams').innerHTML = this.FAM.map(f => '<button type="button" data-fam="' + f[0] + '" class="' + (f[0] === fam ? 'on' : '') + '">' + f[1] + (f[0] === 'on' ? ' ' + INDS.filter(isOn).length : '') + '</button>').join('');
+    const list = INDS.filter(d => (fam === 'all' || (fam === 'on' ? isOn(d) : this.famOf(d) === fam)) && (!q || (d.label + ' ' + d.id + ' ' + (d.note || '')).toLowerCase().includes(q)));
+    /* its own short name first (rsi, macd), then a match in the name, then a match only in the description */
+    if (q){ const rank = d => d.id === q ? 0 : d.label.toLowerCase().includes(q) ? 1 : d.id.toLowerCase().includes(q) ? 2 : 3; list.sort((x, y) => rank(x) - rank(y)); }
+    $('tmIndGrid').innerHTML = list.length ? list.map(d => '<button type="button" class="tmIndTile' + (isOn(d) ? ' on' : '') + '" data-ind="' + d.id + '"><canvas></canvas><span>' + esc(d.label) + '</span><em>on the chart</em></button>').join('') : '<div class="tmNote">No indicator matches.</div>';
+    /* draw the examples a few at a time, so the list appears at once */
+    const cvs = [...$('tmIndGrid').querySelectorAll('.tmIndTile')]; let i = 0; const run = () => { if ($('tmInd').hidden) return; for (let k = 0; k < 6 && i < cvs.length; k++, i++){ const def = INDS.find(d => d.id === cvs[i].dataset.ind); try { this.indDraw(cvs[i].querySelector('canvas'), def, false); } catch(e){} } if (i < cvs.length) setTimeout(run, 0); }; run();
+    if (list.length && !list.some(d => d.id === this._indSel)) this.indHover(list[0].id);
+  },
+  indHover(id){ const def = INDS.find(d => d.id === id); if (!def) return; this._indSel = id; const on = !!(Chart.settings[id] && Chart.settings[id].on);
+    $('tmIndName').textContent = def.label; const note = def.note || (def.kind === 'osc' ? 'Drawn in its own window under the price.' : 'Drawn on the price itself.'); $('tmIndNote').textContent = note.length > 360 ? note.slice(0, 357) + '…' : note;
+    const t = $('tmInd').querySelector('[data-ix="toggle"]'); t.hidden = false; t.textContent = on ? 'Take it off the chart' : 'Put it on the chart'; t.classList.toggle('off', on); $('tmInd').querySelector('[data-ix="props"]').hidden = false;
+    $('tmIndGrid').querySelectorAll('.tmIndTile').forEach(x => x.classList.toggle('sel', x.dataset.ind === id)); try { this.indDraw($('tmIndBig'), def, true); } catch(e){} },
+  indToggle(id){ const c = Chart.settings[id]; if (!c) return; c.on = !c.on; try { lsSet('astra_ind', Chart.settings); Chart.renderAll(); } catch(e){ console.warn('indicator', e); }
+    const t = $('tmIndGrid').querySelector('[data-ind="' + id + '"]'); if (t) t.classList.toggle('on', c.on); this.indHover(id);
+    const f = $('tmIndFams').querySelector('[data-fam="on"]'); if (f) f.textContent = 'On the chart ' + INDS.filter(d => Chart.settings[d.id] && Chart.settings[d.id].on).length; },
+  /* the indicator's own code, run on the candles of the open chart */
+  indData(def){ const v = Chart.view(), n = v.length; if (n < 60) return null; const key = STORE.symbol + '|' + STORE.tf + '|' + n; if (this._indKey !== key){ this._indKey = key; this._indC = {}; }
+    if (this._indC[def.id] !== undefined) return this._indC[def.id];
+    const win = v.slice(-340), cfg = Object.assign({}, def.def, Chart.settings[def.id] || {}), ctx = { v: win, closes: win.map(c => c.close), line: arr => Chart.lineData(arr, win), srcOf: c => IND.src(win, (c && c.src) || 'close') }; let specs = null;
+    try { specs = def.build(ctx, cfg) || []; } catch(e){ specs = null; }
+    return (this._indC[def.id] = specs && specs.length ? { win, specs, cfg } : null); },
+  indDraw(cv, def, big){
+    const D = this.indData(def), dpr = window.devicePixelRatio || 1, W = cv.clientWidth || 176, Hh = cv.clientHeight || 84; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, Hh);
+    if (!D){ c.fillStyle = '#5C6F92'; c.font = '11px Inter, sans-serif'; c.fillText('needs more candles for an example', 8, Hh / 2); return; }
+    const N = big ? 120 : 64, win = D.win, a = Math.max(0, win.length - N), n = win.length - a, idx = new Map(); for (let i = a; i < win.length; i++) idx.set(win[i].time, i - a);
+    const X = k => 4 + (k + 0.5) * (W - 8) / n, bw = Math.max(1, (W - 8) / n * 0.62), osc = def.kind === 'osc', split = osc ? 0.48 : 1, pH = Hh * split, onPrice = s => !osc && !s.scale && s.type !== 'hist';
+    let lo = Infinity, hi = -Infinity; for (let i = a; i < win.length; i++){ lo = Math.min(lo, win[i].low); hi = Math.max(hi, win[i].high); } const sp = hi - lo || 1;
+    for (const s of D.specs) if (onPrice(s)) for (const p of s.data || []) if (idx.has(p.time) && p.value != null && p.value > lo - sp * 0.4 && p.value < hi + sp * 0.4){ lo = Math.min(lo, p.value); hi = Math.max(hi, p.value); }
+    const Yp = p => 4 + (hi - p) / (hi - lo || 1) * (pH - 8), al = osc ? 0.55 : 0.4;
+    for (let i = a; i < win.length; i++){ const b = win[i], x = X(i - a), up = b.close >= b.open; c.strokeStyle = c.fillStyle = up ? 'rgba(61,220,151,' + al + ')' : 'rgba(255,107,122,' + al + ')'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, Yp(b.high)); c.lineTo(x, Yp(b.low)); c.stroke(); c.fillRect(x - bw / 2, Math.min(Yp(b.open), Yp(b.close)), bw, Math.max(1, Math.abs(Yp(b.open) - Yp(b.close)))); }
+    const col = s => (D.cfg.colors && D.cfg.colors[s.key]) || s.color || ((def.parts || []).find(p => p.key === s.key) || {}).color || '#4FD8F7';
+    const spec = (s, Y, base) => { const color = col(s);
+      if (s.type === 'hist'){ for (const p of s.data || []){ const k = idx.get(p.time); if (k == null || p.value == null || !isFinite(p.value)) continue; c.fillStyle = p.color || color; const y = Y(p.value); c.fillRect(X(k) - bw / 2, Math.min(y, base), bw, Math.max(1, Math.abs(base - y))); } return; }
+      c.strokeStyle = color; c.fillStyle = color; c.lineWidth = big ? 1.9 : 1.3; c.lineJoin = 'round';
+      if (s.dots){ for (const p of s.data || []){ const k = idx.get(p.time); if (k == null || p.value == null) continue; c.beginPath(); c.arc(X(k), Y(p.value), big ? 2.2 : 1.3, 0, 6.3); c.fill(); } return; }
+      c.beginPath(); let prev = -2; for (const p of s.data || []){ const k = idx.get(p.time); if (k == null || p.value == null || !isFinite(p.value)) continue; if (k === prev + 1) c.lineTo(X(k), Y(p.value)); else c.moveTo(X(k), Y(p.value)); prev = k; } c.stroke(); };
+    const sep = D.specs.filter(s => !onPrice(s));
+    if (sep.length){ let l2 = Infinity, h2 = -Infinity; for (const s of sep) for (const p of s.data || []) if (idx.has(p.time) && p.value != null && isFinite(p.value)){ l2 = Math.min(l2, p.value); h2 = Math.max(h2, p.value); }
+      if (def.fixed && def.range){ l2 = def.range[0]; h2 = def.range[1]; } if (sep.some(s => s.type === 'hist')){ l2 = Math.min(l2, 0); h2 = Math.max(h2, 0); } if (!(h2 > l2)){ h2 = l2 + 1; }
+      const y0 = osc ? pH + 6 : Hh * 0.74, y1 = Hh - 4, Y2 = v => y1 - (v - l2) / (h2 - l2) * (y1 - y0);
+      if (osc){ c.strokeStyle = 'rgba(126,156,224,.2)'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, pH + 1.5); c.lineTo(W, pH + 1.5); c.stroke(); c.setLineDash([3, 4]);
+        for (const lv of String(D.cfg.levels || '').split(',').map(Number).filter(x => isFinite(x) && x > l2 && x < h2)){ const y = Math.round(Y2(lv)) + 0.5; c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); } c.setLineDash([]); }
+      for (const s of sep) spec(s, Y2, Y2(Math.max(l2, Math.min(h2, 0)))); }
+    for (const s of D.specs) if (onPrice(s)) spec(s, Yp, 0);
+  },
+
   /* ---------- the palette: every page, panel, button and instrument ---------- */
   items(){
     const out = [], txt = el => (el.textContent || '').replace(/\s+/g, ' ').trim();
@@ -248,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof Shortcuts !== 'undefined' && Shortcuts.tab && !Shortcuts._tmWrapped){ Shortcuts._tmWrapped = true; const ot = Shortcuts.tab.bind(Shortcuts); Shortcuts.tab = function(name){ if (Face.on()) return Face.panel(name); return ot.apply(null, arguments); }; }
   } catch(e){ console.warn('Face: could not follow Classic navigation', e); }
   /* a way in from the Classic look: one button beside the theme switch */
-  const theme = $('themeBtn'); if (theme && !$('tmFaceBtn')){ const b = document.createElement('button'); b.className = 'tbtn'; b.id = 'tmFaceBtn'; b.type = 'button'; b.title = 'Switch to the Timurila look (F12 in the desktop app): a dock, one Layers panel, and every function still here. Click “Classic” in the dock, or press F12 again, to come back.'; b.innerHTML = '✦ Timurila'; theme.before(b); b.onclick = () => Face.set(true); }
+  const theme = $('themeBtn'); if (theme && !$('tmFaceBtn')){ const b = document.createElement('button'); b.className = 'tbtn'; b.id = 'tmFaceBtn'; b.type = 'button'; b.title = 'Switch to the Timurila look (F12 in the desktop app): a dock, one Layers panel, and every function still here. Click “Classic” in the dock, or press F12 again, to come back.'; b.innerHTML = '<i></i>New look'; const brand = $('brand'); if (brand) brand.after(b); else theme.before(b); b.onclick = () => Face.set(true); }
   if (Face.on()){ Face.build(); /* wait for Classic to finish adding its own buttons before moving them */ setTimeout(() => { Face.arrange(); Face.measure(); Face.go(localStorage.getItem('astra_face_room') || 'chart', true); Face.badges(); }, 900); }
 });
 })();
