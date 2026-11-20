@@ -8,7 +8,7 @@ class TChart {
     this.box = box; this.cv = document.createElement('canvas'); this.cv.style.touchAction = 'none'; box.appendChild(this.cv);
     this.ctx = this.cv.getContext('2d');
     this.raw = []; this.sym = ''; this.tf = '1h'; this.step = 11; this.off = 0; this.FUT = 26;
-    this.layers = { zones: true, channel: true, events: true, ma: true, signals: false, range: false, classic: false };
+    this.layers = { zones: true, channel: true, events: true, ma: true, signals: false, range: false, fvg: false, ob: false, bos: false, sweep: false, div: false, classic: false };
     this.mouse = null; this.R = null; this.S = null; this.t0 = 0; this.last = 0; this.onHover = null; this.active = true;
     this.padR = 68; this.padT = 8; this.padB = 24;
     new ResizeObserver(() => this.resize()).observe(box);
@@ -25,7 +25,7 @@ class TChart {
     cv.addEventListener('dblclick', () => { this.off = 0; this.step = 11; this.draw(); });
     this.resize();
     const loop = now => { requestAnimationFrame(loop);
-      if (!this.active || document.hidden || !this.raw.length) return;
+      if (!this.active || T.hidden() || !this.raw.length) return;
       const intro = now - this.t0 < 900, glow = T.motion() && ((this.layers.zones && this.S) || (this.layers.classic && this.R));
       if ((intro || glow) && now - this.last > (intro ? 16 : 50)) this.draw(now); };
     requestAnimationFrame(loop);
@@ -113,7 +113,7 @@ class TChart {
       lines.forEach(([t, col], k2) => { ctx.font = (k2 ? '600 12px ' : '700 13px ') + sans; const tw = ctx.measureText(t).width + 18; ctx.fillStyle = 'rgba(6,10,22,.82)'; ChartPatterns.pill(ctx, 12, yy - 11, tw, 22, 6); ctx.fill();
         ctx.strokeStyle = ChartPatterns.rgba(col, 0.7); ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = col; ctx.fillText(t, 21, yy + 0.5); yy += 26; }); }
     /* over the candles: the Studio's channel, moving average, events, signal labels and usual range */
-    if (S) Studio.paint(ctx, S, view({ channel: LY.channel, ma: LY.ma, events: LY.events, signals: LY.signals, range: LY.range }));
+    if (S) Studio.paint(ctx, S, view({ channel: LY.channel, ma: LY.ma, events: LY.events, signals: LY.signals, range: LY.range, fvg: LY.fvg, ob: LY.ob, bos: LY.bos, sweep: LY.sweep, div: LY.div }));
     /* last price line */
     const lc = c[n - 1].close;
     ctx.setLineDash([2, 5]); ctx.strokeStyle = 'rgba(79,216,247,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, Math.round(Y(lc)) + 0.5); ctx.lineTo(pw, Math.round(Y(lc)) + 0.5); ctx.stroke(); ctx.setLineDash([]);

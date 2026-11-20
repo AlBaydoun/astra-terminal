@@ -144,6 +144,12 @@ function openPanel(panel){
     'typeof Popout !== "undefined" && Popout.open(' + JSON.stringify(panel) + ')').catch(() => {});
 }
 
+/* the look of the main window. Both looks are the same page, so switching never stops a running bot. */
+function runInMain(code){
+  if (!mainWin) return;
+  mainWin.webContents.executeJavaScript(code).catch(() => {});
+}
+
 /* move the focused window to the next monitor — the one thing a multi-monitor
    desk needs constantly and Windows makes fiddly */
 function moveToNextDisplay(){
@@ -187,6 +193,14 @@ function buildMenu(){
         { label: 'Close every extra window', click: () => {
             for (const w of Array.from(extraWins)) { try { w.close(); } catch(e){} } } },
       ]) },
+    { label: 'Face', submenu: [
+      { label: 'Switch between Classic and Timurila', accelerator: 'F9', click: () => runInMain('typeof Face !== "undefined" && Face.toggle()') },
+      { label: 'Classic look', click: () => runInMain('typeof Face !== "undefined" && Face.set(false)') },
+      { label: 'Timurila look', click: () => runInMain('typeof Face !== "undefined" && Face.set(true)') },
+      { type: 'separator' },
+      { label: 'Find anything…', accelerator: 'CmdOrCtrl+K', click: () => runInMain('typeof Face !== "undefined" && (Face.on() || Face.set(true), Face.palette(true))') },
+      { label: 'Open Timurila in its own window', click: () => runInMain('window.open("timurila/index.html", "timurila", "width=1500,height=950")') },
+    ] },
     { label: 'View', submenu: [
       { role: 'zoomIn', accelerator: 'CmdOrCtrl+=' }, { role: 'zoomOut' }, { role: 'resetZoom' },
       { type: 'separator' },

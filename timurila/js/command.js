@@ -31,7 +31,7 @@ const Command = {
       </div>`;
     this.map = new MarketMap(document.getElementById('cmMap'), document.getElementById('cmTip'), {
       quote: sym => T.quotes[sym], group: sym => T.groupOf(sym), groupName: g => T.groupName(g), base: sym => T.base(sym), motion: () => T.motion(),
-      proven: sym => T.strategies().some(x => x.stage === 'proven' && x.match && x.match(sym)), selected: () => Markets.sym, active: () => App.room === 'command',
+      proven: sym => T.strategies().some(x => x.stage === 'proven' && x.match && x.match(sym)), selected: () => Markets.sym, active: () => App.room === 'command' && !T.hidden(),
       onPick: sym => { Markets.open(sym); location.hash = '#markets'; } });
     document.getElementById('cmAuto').addEventListener('click', e => { const b = e.target.closest('button:not([disabled])'); if (!b) return;
       if (b.dataset.lv === '1'){ T.save('advisor', !T.load('advisor', false)); this.renderAuto(); this.renderAdvisor(); } else if (b.dataset.lv !== '0') location.hash = '#fleet'; });

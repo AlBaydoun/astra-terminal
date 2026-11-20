@@ -8,6 +8,9 @@ const T = {
   online: false, health: null, symbols: [], quotes: {}, positions: [], deals: [],
   listeners: {},
   on(ev, fn){ (this.listeners[ev] = this.listeners[ev] || []).push(fn); },
+  /* true while nobody can see this page: a hidden tab, or — when Classic shows Timurila inside its own
+     window — a room that is not the one on screen. Nothing is polled while hidden. */
+  hidden(){ try { if (document.hidden) return true; const f = window.frameElement; return !!(f && f.offsetParent === null); } catch(e){ return document.hidden; } },
   emit(ev, a){ (this.listeners[ev] || []).forEach(fn => { try { fn(a); } catch(e){ console.error(e); } }); },
 
   /* One request to the bridge at a time. Classic talks to the same bridge and treats a single slow
@@ -94,9 +97,9 @@ const T = {
   },
   start(){
     this.pollHealth();
-    setInterval(() => { if (!document.hidden) this.pollHealth(); }, 10000);
-    setInterval(() => { if (!document.hidden) this.pollQuotes(); }, 45000);
-    setInterval(() => { if (!document.hidden) this.pollAccount(); }, 30000);
+    setInterval(() => { if (!this.hidden()) this.pollHealth(); }, 10000);
+    setInterval(() => { if (!this.hidden()) this.pollQuotes(); }, 45000);
+    setInterval(() => { if (!this.hidden()) this.pollAccount(); }, 30000);
   },
 
   /* ---- saved choices ---- */
@@ -104,6 +107,9 @@ const T = {
   save(k, v){ try { localStorage.setItem('timurila_' + k, JSON.stringify(v)); } catch(e){} },
   motion(){ return !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); },
 };
+
+/* shown inside Classic's window (?embed=1): Classic's dock is the navigation, so the rail steps aside */
+try { if (new URLSearchParams(location.search).get('embed')) document.documentElement.classList.add('embed'); } catch(e){}
 
 /* Classic's Patterns engine (js/chartpatterns.js) expects these two helpers. Timurila keeps its
    own copy of the settings so nothing here can change what Classic has saved. */

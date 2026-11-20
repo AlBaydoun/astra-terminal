@@ -81,6 +81,11 @@ const Feed = {
       if (!was){ toast('MT5 bridge connected — live broker prices' + (j.server ? ' (' + j.server + ')' : ''), 'ok'); BUS.emit('feed'); }
     } catch(e){
       this.bridgeMisses++;
+      /* One missed check is not a lost link. A page that is busy for a few seconds, or a single refused
+         connection, can swallow one answer while MetaTrader is perfectly well — and calling that a
+         disconnect pauses every broker instrument. So ask once more three seconds later, and only if
+         that check fails too is the bridge called disconnected. */
+      if (this.bridge && this.bridgeMisses < 2){ clearTimeout(this._recheck); this._recheck = setTimeout(() => this.probeBridge(), 3000); return; }
       if (this.bridge){ this.bridge = null; toast('MT5 bridge disconnected — broker instruments paused', 'warn'); BUS.emit('feed'); }
     }
   },

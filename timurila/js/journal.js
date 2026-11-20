@@ -32,7 +32,7 @@ const Journal = {
       this.render();
     });
     T.on('symbols', () => { if (App.room === 'journal') this.refresh(); });
-    setInterval(() => { if (App.room === 'journal' && !document.hidden && T.online) this.refresh(true); }, 60000);
+    setInterval(() => { if (App.room === 'journal' && !T.hidden() && T.online) this.refresh(true); }, 60000);
     this.render();
   },
   show(){ this.refresh(); },

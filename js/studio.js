@@ -67,7 +67,12 @@ const Studio = {
     const closes = raw.map(b => b.close), rets = []; for (let i = Math.max(1, closes.length - 300); i < closes.length; i++) rets.push(Math.log(closes[i] / closes[i - 1]));
     const mu = rets.reduce((a, b) => a + b, 0) / (rets.length || 1), sd1 = Math.sqrt(rets.reduce((a, b) => a + (b - mu) ** 2, 0) / (rets.length || 1));
     let signals = []; try { if (typeof JMMarks !== 'undefined' && closed.length > 40) signals = JMMarks.analyse(closed).filter(x => x.i >= base).map(x => ({ gi: x.i, dir: x.dir, text: x.text, strong: x.strong })); } catch(e){ signals = []; }
-    return { base, n, A, zones, marks: kept, channel, ema: this.ema(closes, 20), signals, sd1, lastIdx: raw.length - 1, last: raw[raw.length - 1].close };
+    /* market structure (js/proind.js): gaps and order blocks still open, the latest breaks, sweeps and divergences */
+    let smc = null;
+    try { if (typeof ProInd !== 'undefined' && closed.length > 60){ const P = ProInd.prep(closed), N = closed.length, near = (a, k) => a.slice().sort((x, y) => Math.abs((x.top + x.bot) / 2 - last) - Math.abs((y.top + y.bot) / 2 - last)).slice(0, k);
+      smc = { fvg: near(ProInd.fvgs(P).filter(g => g.end < 0 && g.i >= N - 120), 4), ob: near(ProInd.orderBlocks(P).filter(g => g.end < 0 && g.born >= N - 160), 3),
+        bos: ProInd.structure(P).filter(e => e.i >= base).slice(-6), sweeps: ProInd.sweeps(P).filter(e => e.i >= base).slice(-5), div: ProInd.divergences(P).filter(d => d.b >= base).slice(-4) }; } } catch(e){ smc = null; }
+    return { base, n, A, zones, marks: kept, channel, ema: this.ema(closes, 20), signals, sd1, smc, lastIdx: raw.length - 1, last: raw[raw.length - 1].close };
   },
 
   /* view: { X(i), Y(price), left, right, i0, i1, bars, layers, fmt(price), pulse, sans, mono } */
@@ -101,6 +106,24 @@ const Studio = {
         for (let h = 1; h <= 24; h++) ctx.lineTo(X(i + h), Y(lc * (1 + R.sd1 * Math.sqrt(h)))); for (let h = 24; h >= 1; h--) ctx.lineTo(X(i + h), Y(lc * (1 - R.sd1 * Math.sqrt(h))));
         ctx.closePath(); ctx.fillStyle = 'rgba(154,167,184,.18)'; ctx.fill(); ctx.setLineDash([4, 5]); ctx.strokeStyle = 'rgba(169,182,202,.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, Y(lc)); ctx.lineTo(xe, Y(lc)); ctx.stroke(); ctx.setLineDash([]);
         halo('usual range · no direction', xe, Y(lc * (1 + R.sd1 * Math.sqrt(24))) - 9, '#C9D4E5', '11px ' + sans, 'right'); } }
+    const S = R.smc, xr = Math.min(v.right, (ok(X(R.lastIdx)) ? X(R.lastIdx) : v.right) + 10);
+    if (S){
+      const box = (g, rgb, tag) => { const x0 = Math.max(v.left, X(g.i)), yT = Y(g.top), yB = Y(g.bot); if (![x0, yT, yB].every(ok) || xr - x0 < 6) return;
+        ctx.fillStyle = `rgba(${rgb},.13)`; ctx.fillRect(x0, yT, xr - x0, Math.max(2, yB - yT)); ctx.strokeStyle = `rgba(${rgb},.7)`; ctx.lineWidth = 1; ctx.setLineDash(tag === 'FVG' ? [3, 3] : []);
+        ctx.strokeRect(Math.round(x0) + .5, Math.round(yT) + .5, Math.round(xr - x0) - 1, Math.max(2, Math.round(yB - yT))); ctx.setLineDash([]);
+        const ty = (yT + yB) / 2; if (yB - yT >= 9 && free(x0 + 6, x0 + 40, ty)){ lab.push({ x0: x0 + 6, x1: x0 + 40, y: ty }); halo(tag, x0 + 6, ty, `rgb(${rgb})`, '600 10px ' + mono, 'left'); } };
+      if (L.fvg) for (const g of S.fvg) box({ i: g.i - 2, top: g.top, bot: g.bot }, g.up ? '79,216,247' : '255,150,190', 'FVG');
+      if (L.ob) for (const g of S.ob) box(g, g.up ? '61,220,151' : '255,182,72', 'OB');
+      if (L.bos) for (const e of S.bos){ const xa = X(e.from), xb = X(e.i), y = Y(e.level); if (![xa, xb, y].every(ok)) continue; const col = e.up ? '#7BE8B8' : '#FF9AA4', xs = Math.max(v.left, xa);
+        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash(e.kind === 'CHoCH' ? [2, 3] : []); ctx.beginPath(); ctx.moveTo(xs, Math.round(y) + .5); ctx.lineTo(xb, Math.round(y) + .5); ctx.stroke(); ctx.setLineDash([]);
+        const tx = (xs + xb) / 2, ty = e.up ? y - 8 : y + 9; if (free(tx - 18, tx + 18, ty)){ lab.push({ x0: tx - 18, x1: tx + 18, y: ty }); halo(e.kind, tx, ty, col, '600 10px ' + mono); } }
+      if (L.sweep) for (const e of S.sweeps){ const x = X(e.i), xf = X(e.from), y = Y(e.level); if (![x, xf, y].every(ok)) continue; const col = e.up ? '#7BE8B8' : '#FF9AA4', ty = e.up ? y + 13 : y - 12;
+        ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([1, 3]); ctx.beginPath(); ctx.moveTo(Math.max(v.left, xf), y); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+        if (free(x - 20, x + 20, ty)){ lab.push({ x0: x - 20, x1: x + 20, y: ty }); halo('Sweep', x, ty, col, '600 10px ' + mono); } }
+      if (L.div) for (const d of S.div){ const xa = X(d.a), xb = X(d.b), ya = Y(d.pa), yb = Y(d.pb); if (![xa, xb, ya, yb].every(ok)) continue;
+        ctx.strokeStyle = '#FFB648'; ctx.lineWidth = 1.3; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke(); ctx.setLineDash([]);
+        const ty = d.up ? yb + 13 : yb - 12; if (free(xb - 14, xb + 14, ty)){ lab.push({ x0: xb - 14, x1: xb + 14, y: ty }); halo('Div', xb, ty, '#FFB648', '600 10px ' + mono); } }
+    }
     ctx.restore();
   },
 };
@@ -108,7 +131,7 @@ const Studio = {
 /* ---------- Classic: the "✦ Studio" button beside Patterns ---------- */
 Studio.overlay = {
   KEY: 'astra_studio',
-  DEF: { on: false, look: 140, zones: true, channel: true, events: true, ma: true, signals: false, range: true, patWasOn: false },
+  DEF: { on: false, look: 140, zones: true, channel: true, events: true, ma: true, signals: false, range: true, fvg: false, ob: false, bos: false, sweep: false, div: false, patWasOn: false },
   cfg(){ return Object.assign({}, this.DEF, (typeof lsGet === 'function' ? lsGet(this.KEY, {}) : {}) || {}); },
   save(c){ lsSet(this.KEY, c); this._key = ''; this.syncBtn(); try { Draw.redraw(); } catch(e){} },
   syncBtn(){ const b = document.getElementById('studioBtn'); if (b) b.classList.toggle('on', this.cfg().on); },
@@ -139,6 +162,7 @@ Studio.overlay = {
     document.body.insertAdjacentHTML('beforeend', '<div id="studioPanel" class="autoSrPanel asPanel"><b>Studio — the Timurila chart look</b><div class="srLook"><b>What to show</b>' +
       chk('zones', 'Support and resistance zones') + chk('channel', 'Trend channel (dashed)') + chk('events', 'Bounces, rejections, breakouts, retests') + chk('ma', 'Moving average (20-candle EMA)') +
       chk('signals', 'Signal labels (TD, UT Bot, Chandelier…)') + chk('range', 'Usual range ahead (no direction)') +
+      '<b>Market structure</b>' + chk('fvg', 'Fair value gaps still open') + chk('ob', 'Order blocks still standing') + chk('bos', 'Breaks of structure and changes of character') + chk('sweep', 'Liquidity sweeps') + chk('div', 'RSI divergences') +
       '<label>Candles to read <input type="number" data-sn="look" value="' + c.look + '" min="60" max="600" step="10"></label></div></div>');
     el = document.getElementById('studioPanel');
     const b = document.getElementById('studioCfg').getBoundingClientRect(); el.style.left = Math.max(8, Math.min(innerWidth - 350, b.left - 150)) + 'px'; el.style.top = (b.bottom + 6) + 'px';

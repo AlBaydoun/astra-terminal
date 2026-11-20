@@ -226,3 +226,6 @@ table.pick thead th{position:sticky;top:0;background:var(--panel)}
   .chartBox{height:360px}
   .mapWrap canvas{height:340px}
 }
+
+/* shown inside Classic's window: Classic's dock is the navigation */
+html.embed .rail, html.embed .top .brand{display:none}

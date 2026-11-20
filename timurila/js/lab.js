@@ -14,6 +14,7 @@ const Lab = {
         </section>
         <section class="card" style="flex:2 1 400px" aria-label="Evidence court" id="lbCourt"></section>
       </div>
+      <section class="card" aria-label="Indicator court" id="lbSignals"></section>
       <section class="card" aria-label="How a rule earns its place">
         <div class="hd"><h2>How the proven candle rules were found</h2><span class="sub">ASTRA research run 4 · bar lengths use a log scale</span></div>
         <div class="funnel">
@@ -41,7 +42,34 @@ const Lab = {
     document.getElementById('lbCounts').innerHTML = ['proven', 'leaning', 'queued', 'benched'].map(k => `<span class="pill" style="border-color:${T.STAGES[k].color};color:${T.STAGES[k].color};cursor:default">${n(k)} ${k}</span>`).join('');
     document.getElementById('lbBoard').innerHTML = ['queued', 'leaning', 'proven', 'benched'].map(k => `<div class="lane ${k}"><div class="lh"><i style="background:${T.STAGES[k].color}"></i><h3 style="color:${k === 'proven' ? 'var(--amber)' : 'inherit'}">${T.STAGES[k].label}</h3></div><span class="sub">${T.STAGES[k].about}</span>` +
       (all.filter(s => s.stage === k).map(s => `<button class="strat" data-id="${s.id}" aria-pressed="${s.id === this.sel}">${s.isNew ? '<span class="tag cyan new">round ' + s.runNo + '</span>' : ''}<b>${T.esc(s.name)}</b><span>${T.esc(s.line)}</span></button>`).join('') || `<div class="empty" style="padding:14px 10px;font-size:12px">Empty</div>`) + `</div>`).join('');
-    this.renderRun(R); this.renderCourt(all.find(s => s.id === this.sel));
+    this.renderRun(R); this.renderCourt(all.find(s => s.id === this.sel)); this.renderSignals();
+  },
+
+  /* run 7: the popular "advanced" indicators, each signal against a random entry (timurila/research/signals.cjs) */
+  renderSignals(){
+    const el = document.getElementById('lbSignals'), R = window.TIMURILA_SIGNALS; if (!el) return;
+    if (!R){ el.innerHTML = '<div class="hd"><h2>Indicator court</h2><span class="sub">Not run yet: node research/signals.cjs</span></div>'; return; }
+    const tfs = ['1d', '4h', '1h'], ids = [...new Set(R.tests.map(t => t.id))], by = {}; for (const t of R.tests) by[t.id + '|' + t.tf] = t;
+    const wavg = (rows, pick) => { let n = 0, v = 0; for (const x of rows) if (pick(x)){ n += x.n; v += x.exR * x.n; } return n ? v / n : 0; };
+    const cell = t => { if (!t) return '<span class="sub">–</span>'; const w = Math.min(50, Math.abs(t.exR) / 0.1 * 50), pos = t.exR >= 0, strong = Math.abs(t.t) >= 2, col = strong ? (pos ? 'var(--amber)' : 'var(--down-text)') : '#5E6F8C';
+      return `<span title="${t.n.toLocaleString('en-US')} signals · ${T.signed(t.exR, 3)}R above a random entry (t ${t.t}) · ${T.signed(t.avgR, 3)}R a trade after the spread" style="position:relative;display:block;height:26px;border-radius:7px;background:var(--raised)">` +
+        `<i style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--line)"></i><i style="position:absolute;top:6px;bottom:6px;${pos ? 'left:50%' : 'right:50%'};width:${w.toFixed(1)}%;border-radius:4px;background:${col}"></i>` +
+        `<b class="mono" style="position:absolute;${pos ? 'right:8px' : 'left:8px'};top:5px;font-size:11.5px;font-weight:500;color:${strong ? 'var(--text)' : 'var(--text2)'}">${T.signed(t.exR, 3)}</b></span>`; };
+    const proven = R.tests.filter(t => t.verdict === 'proven').length, leaning = R.tests.filter(t => t.verdict === 'leaning').length, losing = R.tests.filter(t => t.avgR < 0).length;
+    const tile = (k, b, sub, col) => `<div class="tile"><span class="k">${k}</span><b${col ? ` style="color:${col}"` : ''}>${b}</b><span class="sub">${sub}</span></div>`;
+    el.innerHTML = `<div class="hd"><h2>Indicator court</h2><span class="sub">Run ${R.run} · ${ids.length} signals from the most popular advanced indicators · ${(R.events / 1e6).toFixed(1)} million signals on ${R.instruments} instruments · each held ${R.horizon} candles</span></div>
+      <div class="funnel">
+        ${tile('Beat a random entry', proven + ' of ' + R.tests.length, leaning ? leaning + ' more are leaning.' : 'None is even leaning.', proven ? 'var(--amber)' : 'var(--down-text)')}
+        ${tile('Lose money after the spread', losing + ' of ' + R.tests.length, 'Five candles is rarely enough to earn back the spread.')}
+        ${tile('When most readings agree', T.signed(wavg(R.agree, x => x.bucket === 'most agree'), 3) + 'R', 'Against ' + T.signed(wavg(R.agree, x => x.bucket === 'few agree'), 3) + 'R when few agree. Agreement did not help: by then the move has often happened.')}
+        ${tile('With the daily trend', T.signed(wavg(R.stream, x => x.side === 'with'), 3) + 'R', 'Against it: ' + T.signed(wavg(R.stream, x => x.side === 'against'), 3) + 'R. Taking these signals only with the trend did not help.')}
+        ${tile('On shock days', T.signed(wavg(R.shock, x => x.state === 'shock'), 3) + 'R', 'Normal days: ' + T.signed(wavg(R.shock, x => x.state === 'calm'), 3) + 'R. No reliable difference in direction.')}
+      </div>
+      <div class="scrollx"><div style="display:grid;grid-template-columns:minmax(230px,1.5fr) repeat(3,minmax(130px,1fr));gap:6px 10px;align-items:center;min-width:680px">
+        <span class="sub">Signal · bar = move above a random entry, in R, before the verdict on costs</span>${tfs.map(tf => `<span class="sub mono" style="text-align:center">${tf}</span>`).join('')}
+        ${ids.map(id => { const t0 = R.tests.find(t => t.id === id); return `<span><b style="font-weight:600">${T.esc(t0.name)}</b><br><span class="sub">${T.esc(t0.how)}</span></span>` + tfs.map(tf => cell(by[id + '|' + tf])).join(''); }).join('')}
+      </div></div>
+      <p style="color:var(--text2);text-wrap:pretty">Amber and red bars are the few results that are unlikely to be chance (t of 2 or more); grey ones are indistinguishable from a coin. Even the best of them, the Nadaraya–Watson fade on the 1-hour chart, loses after the spread. The indicators can still help you see a market; their signals alone are not an edge. The agreement, trend and shock figures measure direction only, before costs.</p>`;
   },
 
   renderRun(R){

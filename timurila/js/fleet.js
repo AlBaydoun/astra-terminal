@@ -53,7 +53,7 @@ const Fleet = {
       else this.sel = id;
       T.save('fleet', this.state); T.save('fleetSel', this.sel); this.compute(); this.render(); T.emit('fleet'); });
     T.on('symbols', () => this.refresh()); T.on('quotes', () => { if (this.series){ Shadow.sync(); if (App.room === 'fleet'){ this.compute(); this.render(); } } });
-    setInterval(() => { if (!document.hidden && T.online) this.refresh(true); }, 600000);
+    setInterval(() => { if (!T.hidden() && T.online) this.refresh(true); }, 600000);
     this.render();
   },
   show(){ this.refresh(); },
