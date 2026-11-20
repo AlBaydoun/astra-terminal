@@ -10,10 +10,14 @@ const T = {
   on(ev, fn){ (this.listeners[ev] = this.listeners[ev] || []).push(fn); },
   emit(ev, a){ (this.listeners[ev] || []).forEach(fn => { try { fn(a); } catch(e){ console.error(e); } }); },
 
-  async get(path, ms = 9000){
-    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
-    try { const r = await fetch(this.BRIDGE + path, { signal: ac.signal, cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
-    finally { clearTimeout(timer); }
+  /* One request to the bridge at a time. Classic talks to the same bridge and treats a single slow
+     answer as "disconnected", so Timurila never opens more than one connection to it at once. */
+  _queue: Promise.resolve(),
+  get(path, ms = 9000){
+    const run = async () => { const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
+      try { const r = await fetch(this.BRIDGE + path, { signal: ac.signal, cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
+      finally { clearTimeout(timer); } };
+    const p = this._queue.then(run, run); this._queue = p.catch(() => {}); return p;
   },
 
   /* ---- what kind of market a broker symbol is (by name) ---- */

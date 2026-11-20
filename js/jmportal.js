@@ -666,7 +666,7 @@ const JMPortal = {
       (S.tab === id ? ' style="outline:1px solid currentColor"' : '') + '>' + this.esc(label) + '</button>';
     return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px">' +
       b('universe', 'Instruments') + b('bots', 'Bots & readiness') +
-      b('evidence', 'Can I rely on it') + b('coverage', 'Coverage') +
+      b('evidence', 'Can I rely on it') + b('coverage', 'Coverage') + b('map', 'Market map') +
       '<span style="flex:1"></span>' +
       (S.tab === 'universe'
         ? '<label style="font-size:12px;opacity:.8;display:flex;gap:5px;align-items:center">' +
@@ -759,6 +759,7 @@ const JMPortal = {
     const body = S.tab === 'bots' ? this.botTable()
       : S.tab === 'coverage' ? this.coverageView()
       : S.tab === 'evidence' ? this.evidenceView()
+      : S.tab === 'map' ? this.mapView()
       : this.universeTable();
     return '<div style="padding:12px 14px">' + this.head() + this.tabs() + body + this.footer() + '</div>';
   },
@@ -774,6 +775,7 @@ const JMPortal = {
       return;
     }
     const S = this.state();
+    if (S.tab === 'map') this.mapInit(host);
     host.querySelectorAll('[data-jmtab]').forEach(b =>
       b.addEventListener('click', () => { S.tab = b.dataset.jmtab; this.save(); this.render(); }));
     const gaps = host.querySelector('#jmGaps');
@@ -799,6 +801,30 @@ const JMPortal = {
       this.render();
       if (typeof Bots !== 'undefined' && Bots.render) { try { Bots.render(); } catch(e){} }
     });
+  },
+
+  /* ---- Market map: every instrument on the account, one ring per kind of market (js/marketmap.js) ----
+     Read only. It asks the bridge for quotes (GET /quotes) and opens a chart when a dot is clicked. */
+  mapView(){
+    const have = typeof Feed !== 'undefined' && Feed.bridge && Feed.bridge.symbols && Feed.bridge.symbols.size;
+    if (!have || typeof MarketMap === 'undefined') return '<div style="padding:18px;font-size:13px;opacity:.8">The market map needs the MT5 bridge. Start it and press Refresh.</div>';
+    return '<div style="position:relative;border-radius:10px;overflow:hidden;background:radial-gradient(ellipse at 50% 46%, rgba(79,216,247,.12), rgba(6,10,18,.55) 62%)">' +
+      '<canvas id="jmMapCv" style="display:block;width:100%;height:460px;cursor:crosshair"></canvas>' +
+      '<div id="jmMapTip" style="position:absolute;pointer-events:none;z-index:4;padding:6px 10px;border-radius:8px;background:rgba(6,10,18,.94);border:1px solid rgba(120,150,200,.35);font-size:12px;white-space:nowrap;transform:translate(-50%,-135%);opacity:0;transition:opacity .12s;color:#EAF1FB"></div></div>' +
+      '<div id="jmMapLegend" style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;opacity:.8;margin:8px 0 12px"></div>';
+  },
+  mapInit(host){
+    const cv = host.querySelector('#jmMapCv'); if (!cv) return;
+    const syms = [...Feed.bridge.symbols], Q = this._mapQ = this._mapQ || {};
+    const map = new MarketMap(cv, host.querySelector('#jmMapTip'), { quote: s => Q[s], proven: s => /^(XAU|XAG)USD/.test(MarketMap.base(s)), selected: () => (typeof STORE !== 'undefined' ? STORE.symbol : null),
+      onPick: s => { try { if (typeof WorkspaceUI !== 'undefined' && WorkspaceUI.openChart) WorkspaceUI.openChart(s); else App.setSymbol(s); } catch(e){} } });
+    map.build(syms);
+    const dot = c => '<i style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:' + c + '"></i>';
+    host.querySelector('#jmMapLegend').innerHTML = MarketMap.RINGS.filter(r => map.counts[r[0]]).map(r => '<span>' + MarketMap.NAMES[r[0]] + ' <b>' + map.counts[r[0]] + '</b></span>').join('') +
+      '<span>' + dot('#3DDC97') + 'up today</span><span>' + dot('#FF6B7A') + 'down today</span><span>' + dot('#FFB648') + 'a proven strategy is on file</span><span>rings run from shares (outside) to energy (inside) · click a dot to open its chart</span>';
+    const pull = async () => { if (!cv.isConnected){ clearInterval(timer); return; }
+      for (let i = 0; i < syms.length; i += 50){ try { const r = await fetch(Feed.BRIDGE_URL + '/quotes?symbols=' + encodeURIComponent(syms.slice(i, i + 50).join(',')), { cache: 'no-store' }); const j = await r.json(); for (const q of j.quotes || []) Q[q.symbol] = q; } catch(e){ return; } } };
+    const timer = setInterval(pull, 45000); pull();
   },
 
   /* binds itself, so no other file has to change */

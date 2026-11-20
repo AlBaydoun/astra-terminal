@@ -1,8 +1,8 @@
 /* Timurila — Markets room: the radar (every instrument on the account) and the chart studio. */
 const Markets = {
   group: 'all', q: '', sym: null, tf: '1h', chart: null,
-  LAYERS: [['zones', 'Zones', 'Patterns'], ['curve', 'Trend curve', 'Patterns'], ['events', 'Bounces and breaks', 'Patterns'], ['ma', 'Moving average', '50-candle EMA'], ['range', 'Usual range', 'next 24 candles']],
-  SCENES: { clean: [], patterns: ['zones', 'curve', 'events'], research: ['ma', 'range'], all: ['zones', 'curve', 'events', 'ma', 'range'] },
+  LAYERS: [['zones', 'Zones', 'support and resistance'], ['channel', 'Trend channel', 'the leg in progress'], ['events', 'Bounces and breaks', 'on the zones'], ['ma', 'Moving average', '20-candle EMA'], ['signals', 'Signal labels', 'TD, UT Bot, Chandelier'], ['range', 'Usual range', 'next 24 candles'], ['classic', 'Classic zones', 'sloped, from Patterns']],
+  SCENES: { clean: [], studio: ['zones', 'channel', 'events', 'ma'], research: ['ma', 'signals', 'range'], all: ['zones', 'channel', 'events', 'ma', 'signals', 'range'], classic: ['classic'] },
   TFS: ['15m', '1h', '4h', '1d'],
 
   init(){
@@ -31,10 +31,10 @@ const Markets = {
       </div>`;
     this.tf = T.load('tf', '1h'); this.sym = T.load('sym', null);
     this.chart = new TChart(document.getElementById('mkChart'));
-    this.chart.layers = Object.assign(this.chart.layers, T.load('layers', {}));
+    this.chart.layers = Object.assign(this.chart.layers, T.load('layers2', {}));
     this.chart.onHover = b => { document.getElementById('mkOhlc').textContent = b ? 'O ' + this.chart.fmt(b.open) + '  H ' + this.chart.fmt(b.high) + '  L ' + this.chart.fmt(b.low) + '  C ' + this.chart.fmt(b.close) : ''; };
     document.getElementById('mkTf').innerHTML = this.TFS.map(t => `<button class="pill" data-tf="${t}">${t}</button>`).join('');
-    document.getElementById('mkScenes').innerHTML = [['clean', 'Clean'], ['patterns', 'Patterns'], ['research', 'Research'], ['all', 'Everything']].map(s => `<button class="pill" data-scene="${s[0]}">${s[1]}</button>`).join('');
+    document.getElementById('mkScenes').innerHTML = [['clean', 'Clean'], ['studio', 'Studio'], ['research', 'Research'], ['all', 'Everything'], ['classic', 'Classic zones']].map(s => `<button class="pill" data-scene="${s[0]}">${s[1]}</button>`).join('');
     document.getElementById('mkLayers').insertAdjacentHTML('beforeend', this.LAYERS.map(l => `<button class="layer" data-layer="${l[0]}"><i></i><span><b>${l[1]}</b><small>${l[2]}</small></span><em></em></button>`).join(''));
     el.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -55,7 +55,7 @@ const Markets = {
   open(sym){ this.sym = sym; T.save('sym', sym); this.renderRadar(); this.loadChart(true); },
 
   syncLayers(){
-    T.save('layers', this.chart.layers); const L = this.chart.layers;
+    T.save('layers2', this.chart.layers); const L = this.chart.layers;
     document.querySelectorAll('#mkLayers .layer').forEach(b => { const on = !!L[b.dataset.layer]; b.setAttribute('aria-pressed', on); b.querySelector('em').textContent = on ? 'on' : 'off'; });
     const cur = Object.keys(this.SCENES).find(k => this.LAYERS.every(l => this.SCENES[k].includes(l[0]) === !!L[l[0]]));
     document.querySelectorAll('#mkScenes .pill').forEach(b => b.setAttribute('aria-pressed', b.dataset.scene === cur));

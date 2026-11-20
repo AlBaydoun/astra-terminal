@@ -1,13 +1,11 @@
 /* Timurila — Command room: where things stand, in one screen. Everything shown is read live
    from the MT5 bridge (account, positions, closed deals, quotes) or from the evidence on file. */
 const Command = {
-  RINGS: [['shares', 1.0, 0.020], ['forex', 0.83, -0.030], ['crypto', 0.67, 0.045], ['indices', 0.53, -0.060], ['metals', 0.39, 0.080], ['energy', 0.26, -0.100]],
   LEVELS: [['Manual', 'You place every trade. Timurila watches, explains and keeps the journal.', true],
-    ['Advisor', 'Timurila proposes each trade with entry, stop and target. You decide.', false],
+    ['Advisor', 'Timurila proposes each trade from the tested rules. You decide and place it yourself.', true],
     ['Paper', 'Bots trade by themselves with pretend money at real prices.', true],
     ['Shadow', 'Bots write down the orders they would send to the real account.', true],
-    ['Live', 'Real orders, only through your four typed gates in Classic.', false]],
-  t: 0, lastFrame: 0, dots: [], hot: null,
+    ['Live', 'Real orders stay in Classic, behind your four typed gates. Timurila sends none.', false]],
 
   init(){
     const el = document.getElementById('room-command');
@@ -17,6 +15,7 @@ const Command = {
         <div class="hd"><h2>Autopilot</h2><span class="sub" id="cmAutoSub"></span></div>
         <div class="auto" id="cmAuto"></div>
       </section>
+      <section class="card" id="cmAdvisor" aria-label="Advisor" style="display:none"></section>
       <div class="cols stretch">
         <section class="card equity" style="flex:1 1 320px" aria-label="Account" id="cmAccount"></section>
         <section class="card" style="flex:2 1 520px" aria-label="Market map">
@@ -30,27 +29,37 @@ const Command = {
         <section class="card" style="flex:1 1 360px" aria-label="Earned its place"><div class="hd"><h2>Earned its place</h2><span class="sub">beat random entries, with proof</span></div><div class="list" id="cmProven"></div></section>
         <section class="card" style="flex:1 1 300px" aria-label="Benched"><div class="hd"><h2>Benched</h2><span class="sub">tested, no edge found</span></div><div class="list" id="cmBenched"></div></section>
       </div>`;
-    this.cv = document.getElementById('cmMap'); this.ctx = this.cv.getContext('2d');
-    new ResizeObserver(() => this.sizeMap()).observe(this.cv); this.sizeMap();
-    this.cv.addEventListener('pointermove', e => { const r = this.cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; let best = null, bd = 100;
-      for (const d of this.dots){ const q = (d.x - x) ** 2 + (d.y - y) ** 2; if (q < bd){ bd = q; best = d; } } this.hot = best; this.tip(); });
-    this.cv.addEventListener('pointerleave', () => { this.hot = null; this.tip(); });
-    this.cv.addEventListener('click', () => { if (this.hot){ Markets.open(this.hot.s); location.hash = '#markets'; } });
-    document.getElementById('cmAuto').addEventListener('click', e => { if (e.target.closest('button:not([disabled])')) location.hash = '#fleet'; });
-    T.on('fleet', () => { this.renderAuto(); this.renderLists(); }); this.renderAuto();
+    this.map = new MarketMap(document.getElementById('cmMap'), document.getElementById('cmTip'), {
+      quote: sym => T.quotes[sym], group: sym => T.groupOf(sym), groupName: g => T.groupName(g), base: sym => T.base(sym), motion: () => T.motion(),
+      proven: sym => T.strategies().some(x => x.stage === 'proven' && x.match && x.match(sym)), selected: () => Markets.sym, active: () => App.room === 'command',
+      onPick: sym => { Markets.open(sym); location.hash = '#markets'; } });
+    document.getElementById('cmAuto').addEventListener('click', e => { const b = e.target.closest('button:not([disabled])'); if (!b) return;
+      if (b.dataset.lv === '1'){ T.save('advisor', !T.load('advisor', false)); this.renderAuto(); this.renderAdvisor(); } else if (b.dataset.lv !== '0') location.hash = '#fleet'; });
+    T.on('fleet', () => { this.renderAuto(); this.renderLists(); this.renderAdvisor(); }); this.renderAuto(); this.renderAdvisor();
     T.on('health', () => this.renderAccount()); T.on('account', () => { this.renderAccount(); this.renderLists(); });
-    T.on('symbols', () => { this.buildDots(); this.renderLists(); }); T.on('quotes', () => this.renderLegend());
+    T.on('symbols', () => { this.map.build(T.symbols); this.renderLists(); }); T.on('quotes', () => { this.renderLegend(); this.renderAdvisor(); });
     this.renderAccount(); this.renderLists(); this.renderLegend();
-    const loop = now => { requestAnimationFrame(loop); if (App.room !== 'command' || document.hidden) return;
-      if (now - this.lastFrame < 33) return; const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 0; this.lastFrame = now;
-      if (T.motion() && !this.hot) this.t += dt; this.drawMap(now); };
-    requestAnimationFrame(loop);
   },
-  show(){ this.lastFrame = 0; this.sizeMap(); this.renderAuto(); },
+  show(){ this.map.resize(); this.renderAuto(); this.renderAdvisor(); },
   renderAuto(){
-    const paper = typeof Fleet !== 'undefined' && Fleet.on(), nOn = paper ? Fleet.BOTS.filter(b => Fleet.on(b.id)).length : 0, nSh = typeof Shadow !== 'undefined' ? Fleet.BOTS.filter(b => Shadow.on(b.id)).length : 0, level = nSh ? 3 : paper ? 2 : 0;
-    document.getElementById('cmAutoSub').textContent = nSh ? 'Shadow: ' + nSh + ' bot' + (nSh === 1 ? ' is' : 's are') + ' writing down real-account orders without sending them' + (nOn ? ', and ' + nOn + ' on paper' : '') + '. Live stays in Classic.' : paper ? 'Paper: ' + nOn + ' bot' + (nOn === 1 ? ' is' : 's are') + ' keeping a paper record. Live stays in Classic.' : 'Manual: no bot is running here. Start one in the Fleet. Live stays in Classic.';
-    document.getElementById('cmAuto').innerHTML = this.LEVELS.map((l, i) => `<button type="button" aria-pressed="${i === level}" ${l[2] ? '' : 'disabled'}><b>${l[0]}</b><span>${l[1]}</span></button>`).join('');
+    const paper = typeof Fleet !== 'undefined' && Fleet.on(), nOn = paper ? Fleet.BOTS.filter(b => Fleet.on(b.id)).length : 0, nSh = typeof Shadow !== 'undefined' ? Fleet.BOTS.filter(b => Shadow.on(b.id)).length : 0, adv = T.load('advisor', false), level = nSh ? 3 : paper ? 2 : adv ? 1 : 0;
+    document.getElementById('cmAutoSub').textContent = nSh ? 'Shadow: ' + nSh + ' bot' + (nSh === 1 ? ' is' : 's are') + ' writing down real-account orders without sending them' + (nOn ? ', and ' + nOn + ' on paper' : '') + '. Live stays in Classic.' : paper ? (adv ? 'Advisor is on. ' : '') + 'Paper: ' + nOn + ' bot' + (nOn === 1 ? ' is' : 's are') + ' keeping a paper record. Live stays in Classic.' : adv ? 'Advisor: Timurila lists the trades its tested rules propose today. You place them yourself in Classic.' : 'Manual: no bot is running here. Start one in the Fleet. Live stays in Classic.';
+    document.getElementById('cmAuto').innerHTML = this.LEVELS.map((l, i) => `<button type="button" data-lv="${i}" aria-pressed="${i === level || (i === 1 && adv)}" ${l[2] ? '' : 'disabled'}><b>${l[0]}${l[2] ? '' : ' <span class="tag">in Classic only</span>'}</b><span>${l[1]}</span></button>`).join('');
+  },
+
+  /* ---- Advisor: what the tested rules propose today, for you to place by hand ---- */
+  renderAdvisor(){
+    const el = document.getElementById('cmAdvisor'), on = T.load('advisor', false); el.style.display = on ? '' : 'none'; if (!on) return;
+    const S = typeof Fleet !== 'undefined' ? Fleet.series : null, ready = S && typeof Shadow !== 'undefined' && Shadow.specs, rows = [];
+    if (ready) for (const bot of Fleet.BOTS) for (const sym of Object.keys(S).sort()){ const s = S[sym], j = s.c.length - 2;
+      if (s.s200[j] == null || !(s.c[j].close > s.s200[j]) || !bot.trig(s, j)) continue; const sh = Shadow.sheet(sym, s, j); if (sh) rows.push({ bot, sym, sh }); }
+    el.innerHTML = `<div class="hd"><h2>Advisor · proposals for today</h2><span class="sub">from the rules that passed or lean in the Lab · you decide, and place them yourself in Classic</span></div>` +
+      (!ready ? `<div class="empty">${T.online ? 'Reading the indices…' : 'Waiting for the MT5 bridge.'}</div>`
+      : rows.length ? `<div class="scrollx"><table class="t"><thead><tr><th>Rule</th><th>Index</th><th>Proposal</th><th class="n">Lots for ${Fleet.CFG.riskPct}%</th><th class="n">Ask now</th><th>Leave when</th><th>Checks</th></tr></thead><tbody>` +
+          rows.map(r => `<tr><td>${T.esc(r.bot.name)}</td><td class="mono">${T.esc(T.base(r.sym))}</td><td>Buy</td><td class="n">${T.num(r.sh.lots, 2)}</td><td class="n">${T.num(r.sh.ask, 1)}</td><td>a close above the 5-day average, or after 10 days</td>
+            <td>${r.sh.allowed ? '<span class="up">all pass</span>' : '<span class="down">' + r.sh.checks.filter(c => !c.pass).map(c => T.esc(c.fail)).join('; ') + '</span>'}</td></tr>`).join('') + `</tbody></table></div>
+          <p class="sub" style="text-wrap:pretty">These rules have no stop-loss; see their cases in the Lab before acting. Timurila does not place anything.</p>`
+        : `<div class="empty">No proposal today. The dip rules are waiting for an index to close below its trigger while still above its 200-day average.</div>`);
   },
 
   /* ---- account ---- */
@@ -100,41 +109,7 @@ const Command = {
   renderLegend(){
     const counts = {}; for (const s of T.symbols){ const g = T.groupOf(s); counts[g] = (counts[g] || 0) + 1; }
     document.getElementById('cmMapSub').textContent = T.symbols.length ? T.symbols.length + ' instruments, live from your MT5 · point at one, click to open it' : 'waiting for the MT5 bridge';
-    document.getElementById('cmLegend').innerHTML = this.RINGS.filter(r => counts[r[0]]).map(r => `<span>${T.groupName(r[0])} <b class="mono" style="color:var(--text)">${counts[r[0]]}</b></span>`).join('') +
+    document.getElementById('cmLegend').innerHTML = MarketMap.RINGS.filter(r => counts[r[0]]).map(r => `<span>${T.groupName(r[0])} <b class="mono" style="color:var(--text)">${counts[r[0]]}</b></span>`).join('') +
       `<span><i style="background:var(--up)"></i>up today</span><span><i style="background:var(--down)"></i>down today</span><span><i style="background:var(--amber)"></i>a proven strategy is on file</span><span>rings run from shares (outside) to energy (inside)</span>`;
-  },
-
-  /* ---- the market map ---- */
-  buildDots(){
-    const S = T.strategies().filter(x => x.stage === 'proven' && x.match), by = {};
-    for (const s of T.symbols) (by[T.groupOf(s)] = by[T.groupOf(s)] || []).push(s);
-    this.dots = [];
-    this.RINGS.forEach(([g, rf, w]) => (by[g] || []).sort().forEach((s, k, a) => this.dots.push({ s, g, rf, w, a0: k / a.length * Math.PI * 2, proven: S.some(x => x.match(s)), x: -99, y: -99 })));
-  },
-  sizeMap(){ const r = this.cv.getBoundingClientRect(), d = window.devicePixelRatio || 1; if (!r.width) return; this.mw = r.width; this.mh = r.height;
-    this.cv.width = Math.round(r.width * d); this.cv.height = Math.round(r.height * d); this.ctx.setTransform(d, 0, 0, d, 0, 0); this.drawMap(performance.now()); },
-  drawMap(now){
-    const ctx = this.ctx, W = this.mw, H = this.mh; if (!W) return; ctx.clearRect(0, 0, W, H);
-    const tilt = 0.44, cx = W / 2, cy = H * 0.5, RM = Math.min(W * 0.47, H * 0.48 / tilt);
-    for (const [, rf] of this.RINGS){ ctx.beginPath(); ctx.ellipse(cx, cy, RM * rf, RM * rf * tilt, 0, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(79,216,247,.16)'; ctx.lineWidth = 1; ctx.stroke(); }
-    const pulse = 0.5 + 0.5 * Math.sin(now / 420), sel = typeof Markets !== 'undefined' ? Markets.sym : null;
-    for (const d of this.dots){ const a = d.a0 + d.w * this.t; d.depth = Math.sin(a); d.x = cx + RM * d.rf * Math.cos(a); d.y = cy + RM * d.rf * tilt * d.depth; }
-    const dot = d => { const q = T.quotes[d.s], pct = q ? q.pct : null, near = (d.depth + 1) / 2, r = (d.g === 'shares' ? 2.3 : 3.2) * (0.72 + 0.5 * near), mag = pct == null ? 0 : Math.min(1, Math.abs(pct) / 2);
-      ctx.globalAlpha = 0.42 + 0.58 * near;
-      if (d.proven){ ctx.beginPath(); ctx.arc(d.x, d.y, r + 3.5 + pulse * 2.5, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,182,72,' + (0.35 + 0.45 * pulse) + ')'; ctx.lineWidth = 1.4; ctx.stroke(); }
-      ctx.beginPath(); ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = pct == null ? '#5E6F8C' : pct >= 0 ? `rgb(${Math.round(94 - 33 * mag)},${Math.round(150 + 70 * mag)},${Math.round(140 + 11 * mag)})` : `rgb(${Math.round(170 + 85 * mag)},${Math.round(120 - 13 * mag)},${Math.round(135 - 13 * mag)})`;
-      if (mag > 0.5){ ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8 * mag; } ctx.fill(); ctx.shadowBlur = 0;
-      if (d.s === sel || d === this.hot){ ctx.beginPath(); ctx.arc(d.x, d.y, r + 3, 0, Math.PI * 2); ctx.strokeStyle = '#EAF1FB'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.stroke(); } };
-    this.dots.filter(d => d.depth < 0).forEach(dot); ctx.globalAlpha = 1;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, RM * 0.2); g.addColorStop(0, 'rgba(79,216,247,.55)'); g.addColorStop(0.35, 'rgba(79,216,247,.16)'); g.addColorStop(1, 'rgba(79,216,247,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, RM * 0.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#EAF1FB'; ctx.font = '600 20px ' + (getComputedStyle(document.body).getPropertyValue('--font-mono') || 'monospace'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(T.symbols.length || ''), cx, cy);
-    this.dots.filter(d => d.depth >= 0).forEach(dot); ctx.globalAlpha = 1;
-  },
-  tip(){
-    const el = document.getElementById('cmTip'), d = this.hot; el.classList.toggle('on', !!d); this.cv.style.cursor = d ? 'pointer' : 'crosshair'; if (!d) return;
-    const q = T.quotes[d.s]; el.style.left = d.x + 'px'; el.style.top = d.y + 'px';
-    el.innerHTML = `<b class="mono">${T.esc(T.base(d.s))}</b> · ${T.groupName(d.g)}${q ? ` · <span class="mono ${T.cls(q.pct)}">${T.signed(q.pct, 2, '%')}</span>` : ''}${d.proven ? ' · <span class="amber">★ proven on file</span>' : ''}`;
   },
 };
