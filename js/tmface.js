@@ -35,10 +35,10 @@ const $ = id => document.getElementById(id), esc = s => String(s == null ? '' : 
 const Face = window.Face = {
   ROOMS: [
     { id: 'chart', label: 'Chart', kind: 'chart', tip: 'The chart, full size' },
-    { id: 'deep', label: 'Deep Dive', kind: 'bot', bot: 'explorer', tip: 'Deep Dive: every paper trade, sliced' },
-    { id: 'live', label: 'Live', kind: 'bot', bot: 'liveManual', tip: 'The live trading desk' },
+    { id: 'deep', label: 'Deep Dive', kind: 'bot', bot: 'explorer', info: 'deep', tip: 'Deep Dive: every trade, sliced. Click any bar.' },
+    { id: 'live', label: 'Live', kind: 'bot', bot: 'liveManual', info: 'live', tip: 'Your real account at a glance; the live desk is one click away' },
     { id: 'livedive', label: 'Live Dive', kind: 'bot', bot: 'livedive', tip: 'Live Deep Dive: real trades, sliced' },
-    { id: 'dash', label: 'Dashboard', kind: 'bot', bot: 'dash', tip: 'Every bot at a glance' },
+    { id: 'dash', label: 'Dashboard', kind: 'bot', bot: 'dash', info: 'dash', tip: 'Every bot at a glance' },
     { id: 'autopsy', label: 'Autopsy', kind: 'native', tip: 'Why each trade won or lost: trend, agreement, shock' },
     { sep: true },
     { id: 'home', label: 'Command', kind: 'frame', hash: 'command', tip: 'Market map, account and autopilot' },
@@ -55,7 +55,7 @@ const Face = window.Face = {
     if (isPanel) return;
     try { localStorage.setItem(KEY, on ? 'tm' : 'classic'); } catch(e){}
     if (on){ H.dataset.face = 'tm'; this.build(); this.arrange(); this.go(localStorage.getItem('astra_face_room') || 'chart', true); }
-    else { this.closePops(); this.restore(); delete H.dataset.face; delete H.dataset.tmroom; delete H.dataset.tmlayers; const st = $('tmStage'); if (st) st.hidden = true;
+    else { this.closePops(); this.restore(); delete H.dataset.face; delete H.dataset.tmroom; delete H.dataset.tmlayers; delete H.dataset.tmview; const st = $('tmStage'); if (st) st.hidden = true; if ($('tmViewSwitch')) $('tmViewSwitch').hidden = true;
       const bp = $('bottomPanel'); if (bp && this._wasCollapsed != null) bp.classList.toggle('collapsed', this._wasCollapsed); }
     this.measure(); setTimeout(() => { window.dispatchEvent(new Event('resize')); try { Draw.redraw(); } catch(e){} }, 60);
     if (typeof toast === 'function') toast(on ? 'Timurila look on. Everything Classic does is still here: press Ctrl+K to find any of it.' : 'Classic look on. Nothing else changed.', 'info');
@@ -72,7 +72,9 @@ const Face = window.Face = {
       '<button type="button" id="tmClassic" title="Back to the Classic look. Nothing else changes.">Classic</button>';
     document.body.appendChild(dock);
     dock.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.room) this.go(b.dataset.room); else if (b.id === 'tmMore') this.palette(true); else if (b.id === 'tmClassic') this.set(false); });
-    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div>'; document.body.appendChild(stage);
+    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div><div id="tmInfo" hidden></div>'; document.body.appendChild(stage);
+    /* on a Classic page that also has an infographic view: the way back to it */
+    const vs = document.createElement('button'); vs.id = 'tmViewSwitch'; vs.type = 'button'; vs.hidden = true; vs.textContent = '◧ Infographic view'; vs.title = 'Back to the infographic view of this page'; vs.onclick = () => this.view(this.room, 'info'); document.body.appendChild(vs);
     const pal = document.createElement('div'); pal.id = 'tmPal'; pal.hidden = true; pal.innerHTML = '<div class="tmPalBox" role="dialog" aria-label="Find anything"><input id="tmPalIn" type="text" placeholder="Find a page, a bot, a button or an instrument…" autocomplete="off" spellcheck="false"><div id="tmPalList"></div><p>↑ ↓ to move · Enter to open · Esc to close</p></div>'; document.body.appendChild(pal);
     pal.addEventListener('mousedown', e => { if (e.target === pal) this.palette(false); });
     $('tmPalIn').addEventListener('input', () => this.palFill()); $('tmPalIn').addEventListener('keydown', e => this.palKey(e));
@@ -117,6 +119,9 @@ const Face = window.Face = {
   restore(){ for (const m of this.moved.reverse()){ try { if (m.label === undefined) delete m.el.dataset.tml; else m.el.dataset.tml = m.label; m.parent.insertBefore(m.el, m.next && m.next.parentNode === m.parent ? m.next : null); } catch(e){} } this.moved = []; },
 
   /* ---------- rooms ---------- */
+  /* Dashboard, Deep Dive and Live each have two views: the infographic one and the full Classic page */
+  viewOf(id){ try { return localStorage.getItem('astra_face_view_' + id) === 'classic' ? 'classic' : 'info'; } catch(e){ return 'info'; } },
+  view(id, v){ try { localStorage.setItem('astra_face_view_' + id, v); } catch(e){} this.go(id); },
   measure(){ const m = $('main'), s = $('statusbar'); if (!m) return; H.style.setProperty('--tm-top', Math.round(m.getBoundingClientRect().top) + 'px'); H.style.setProperty('--tm-bot', (s ? Math.round(s.getBoundingClientRect().height) : 26) + 'px'); },
   openTab(tab){ const bp = $('bottomPanel'), b = document.querySelector('#botTabs [data-tab="' + tab + '"]'); if (!bp || !b) return;
     try { if (H.dataset.chartmax === '1' && typeof App !== 'undefined' && App.setMax) App.setMax(false); } catch(e){}
@@ -126,16 +131,18 @@ const Face = window.Face = {
     if (!this.on()) return; const r = this.ROOMS.find(x => x.id === id) || this.ROOMS[0]; this.room = r.id; this.closePops(); this.measure();
     try { localStorage.setItem('astra_face_room', r.kind === 'chart' || r.kind === 'bot' ? r.id : 'chart'); } catch(e){}
     document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.toggle('on', b.dataset.room === r.id));
-    const stage = $('tmStage'), frame = $('tmFrame'), nat = $('tmNative'), bp = $('bottomPanel');
+    const stage = $('tmStage'), frame = $('tmFrame'), nat = $('tmNative'), inf = $('tmInfo'), bp = $('bottomPanel'), info = !!r.info && this.viewOf(r.id) === 'info' && typeof Info !== 'undefined';
+    H.dataset.tmview = r.info && !info ? 'classic' : ''; $('tmViewSwitch').hidden = true;
     if (r.kind === 'chart'){ H.dataset.tmroom = 'chart'; stage.hidden = true; if (bp && !quiet) bp.classList.add('collapsed'); setTimeout(() => window.dispatchEvent(new Event('resize')), 40); }
-    else if (r.kind === 'tab' || r.kind === 'bot'){ H.dataset.tmroom = 'panel'; stage.hidden = true; this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
+    else if ((r.kind === 'tab' || r.kind === 'bot') && !info){ H.dataset.tmroom = 'panel'; stage.hidden = true; $('tmViewSwitch').hidden = !r.info; this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
       if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
-      if (r.kind === 'frame'){ nat.hidden = true; frame.hidden = false; const want = 'timurila/index.html?embed=1#' + r.hash;
+      if (info){ frame.hidden = true; nat.hidden = true; inf.hidden = false; Info.open(inf, r.info); }
+      else if (r.kind === 'frame'){ nat.hidden = true; inf.hidden = true; frame.hidden = false; const want = 'timurila/index.html?embed=1#' + r.hash;
         if (!frame.dataset.loaded){ frame.src = want; frame.dataset.loaded = '1'; } else try { frame.contentWindow.location.hash = '#' + r.hash; } catch(e){ frame.src = want; } }
-      else { frame.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => Autopsy.paint()); } } }
+      else { frame.hidden = true; inf.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => { if (Autopsy.want){ const w = Autopsy.want; Autopsy.want = null; Autopsy.filter = { src: 'all', bot: '', out: 'all' }; Autopsy.select(w); } else Autopsy.paint(); }); } } }
   },
-  panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
+  panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
   bot(id){ this.panel('bots'); setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + id + '"]'); if (b) b.click(); }, 80); },
   badges(){ if (!this.on()) return; try { const b = document.querySelector('#tmDock [data-room="live"] em'); if (b && typeof Live !== 'undefined' && Live.book){ const n = (Live.book.open || []).length, d = typeof Live.dayPnl === 'function' ? Live.dayPnl() : 0; b.hidden = !n && !d; b.textContent = n ? String(n) : ''; b.className = d > 0 ? 'up' : d < 0 ? 'dn' : ''; b.title = n + ' live position' + (n === 1 ? '' : 's') + ' open'; } } catch(e){} },
 
@@ -152,8 +159,9 @@ const Face = window.Face = {
     const cur = CandleStyles.shape(), pal = CandleStyles.palette();
     p.innerHTML = '<h4>Candle shape</h4><div class="tmShapes">' + CandleStyles.SHAPES.map(s => '<button type="button" data-shape="' + s[0] + '" class="' + (s[0] === cur ? 'on' : '') + '" title="' + esc(s[3]) + '"><canvas width="132" height="72"></canvas><span>' + s[1] + '</span></button>').join('') + '</div>' +
       '<h4>Colours</h4><div class="tmPals">' + CandleStyles.PALETTES.map(x => '<button type="button" data-pal="' + x[0] + '" class="' + (x[0] === pal ? 'on' : '') + '"><i style="background:' + (x[2] || CFG.UP) + '"></i><i style="background:' + (x[3] || CFG.DOWN) + '"></i><span>' + x[1] + '</span></button>').join('') + '</div>' +
-      '<p class="tmNote">Hollow, Trend, Volume and Power recolour real candles: every price stays where it was. Heikin Ashi shows averaged prices.</p>';
-    p.onclick = e => { const a = e.target.closest('[data-shape]'), b = e.target.closest('[data-pal]'); if (a) CandleStyles.set(a.dataset.shape); else if (b) CandleStyles.setPalette(b.dataset.pal); else return; this.candleFill(p); };
+      '<p class="tmNote">Hollow, Trend, Volume and Power recolour real candles: every price stays where it was. Heikin Ashi shows averaged prices.</p>' +
+      (typeof Lens !== 'undefined' ? '<h4>Candles without a time axis · in their own window</h4><div class="tmPals"><button type="button" data-lens="off" class="' + (Lens.cfg().on ? '' : 'on') + '"><span>Off</span></button>' + Lens.TYPES.map(t => '<button type="button" data-lens="' + t[0] + '" class="' + (Lens.cfg().on && Lens.cfg().type === t[0] ? 'on' : '') + '" title="' + esc(Lens.ABOUT[t[0]]) + '"><span>' + t[1] + '</span></button>').join('') + '</div><p class="tmNote">These open as a separate lens over the chart, so your drawings, alerts and indicators are not moved.</p>' : '');
+    p.onclick = e => { const a = e.target.closest('[data-shape]'), b = e.target.closest('[data-pal]'), l = e.target.closest('[data-lens]'); if (a) CandleStyles.set(a.dataset.shape); else if (b) CandleStyles.setPalette(b.dataset.pal); else if (l){ if (l.dataset.lens === 'off'){ if (Lens.cfg().on) Lens.toggle(); } else Lens.set('type', l.dataset.lens); } else return; this.candleFill(p); };
     const [UP, DN] = CandleStyles.colors(); p.querySelectorAll('[data-shape] canvas').forEach(cv => this.thumb(cv, cv.parentElement.dataset.shape, UP, DN));
   },
   /* a small sample of each shape */
@@ -225,8 +233,22 @@ const Face = window.Face = {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (isPanel) return;
+  /* F12 switches the look (Classic's own shortcuts already use F1 to F10). Handled here as well as in the desktop menu,
+     and stopped here, so the two can never both fire and cancel each other out. */
+  document.addEventListener('keydown', e => { if (e.key === 'F12' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey){ e.preventDefault(); e.stopPropagation(); Face.toggle(); } }, true);
+  /* Classic's own ways of moving about (its shortcut keys, the account pill, a click on a ticker) keep working in the new
+     look: when Classic opens a page, the face shows that page; when Classic opens a chart, the face goes to the chart. */
+  try {
+    const MAP = { explorer: 'deep', livedive: 'livedive', liveManual: 'live', dash: 'dash' };
+    if (typeof WorkspaceUI !== 'undefined' && WorkspaceUI.openBot && !WorkspaceUI._tmWrapped){ WorkspaceUI._tmWrapped = true;
+      const ob = WorkspaceUI.openBot.bind(WorkspaceUI), oc = WorkspaceUI.openChart.bind(WorkspaceUI);
+      WorkspaceUI.openBot = function(id){ const r = ob.apply(null, arguments); try { if (Face.on() && !Face._busy){ Face._busy = true; if (MAP[id]) Face.go(MAP[id]); else { Face.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmStage').hidden = true; $('tmViewSwitch').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); const bp = $('bottomPanel'); if (bp) bp.classList.remove('collapsed'); } Face._busy = false; } } catch(e){ Face._busy = false; } return r; };
+      WorkspaceUI.openChart = function(){ try { if (Face.on() && Face.room !== 'chart') Face.go('chart'); } catch(e){} return oc.apply(null, arguments); };
+    }
+    if (typeof Shortcuts !== 'undefined' && Shortcuts.tab && !Shortcuts._tmWrapped){ Shortcuts._tmWrapped = true; const ot = Shortcuts.tab.bind(Shortcuts); Shortcuts.tab = function(name){ if (Face.on()) return Face.panel(name); return ot.apply(null, arguments); }; }
+  } catch(e){ console.warn('Face: could not follow Classic navigation', e); }
   /* a way in from the Classic look: one button beside the theme switch */
-  const theme = $('themeBtn'); if (theme && !$('tmFaceBtn')){ const b = document.createElement('button'); b.className = 'tbtn'; b.id = 'tmFaceBtn'; b.type = 'button'; b.title = 'Switch to the Timurila look: a dock, one Layers panel, and every function still here. Click “Classic” in the dock to come back.'; b.innerHTML = '✦ Timurila'; theme.before(b); b.onclick = () => Face.set(true); }
+  const theme = $('themeBtn'); if (theme && !$('tmFaceBtn')){ const b = document.createElement('button'); b.className = 'tbtn'; b.id = 'tmFaceBtn'; b.type = 'button'; b.title = 'Switch to the Timurila look (F12 in the desktop app): a dock, one Layers panel, and every function still here. Click “Classic” in the dock, or press F12 again, to come back.'; b.innerHTML = '✦ Timurila'; theme.before(b); b.onclick = () => Face.set(true); }
   if (Face.on()){ Face.build(); /* wait for Classic to finish adding its own buttons before moving them */ setTimeout(() => { Face.arrange(); Face.measure(); Face.go(localStorage.getItem('astra_face_room') || 'chart', true); Face.badges(); }, 900); }
 });
 })();

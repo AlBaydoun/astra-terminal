@@ -194,12 +194,15 @@ function buildMenu(){
             for (const w of Array.from(extraWins)) { try { w.close(); } catch(e){} } } },
       ]) },
     { label: 'Face', submenu: [
-      { label: 'Switch between Classic and Timurila', accelerator: 'F9', click: () => runInMain('typeof Face !== "undefined" && Face.toggle()') },
+      /* F12, because Classic's own shortcuts already use F1 to F10 (F9 is the live desk) */
+      { label: 'Switch between Classic and Timurila', accelerator: 'F12', click: () => runInMain('typeof Face !== "undefined" && Face.toggle()') },
       { label: 'Classic look', click: () => runInMain('typeof Face !== "undefined" && Face.set(false)') },
       { label: 'Timurila look', click: () => runInMain('typeof Face !== "undefined" && Face.set(true)') },
       { type: 'separator' },
       { label: 'Find anything…', accelerator: 'CmdOrCtrl+K', click: () => runInMain('typeof Face !== "undefined" && (Face.on() || Face.set(true), Face.palette(true))') },
-      { label: 'Open Timurila in its own window', click: () => runInMain('window.open("timurila/index.html", "timurila", "width=1500,height=950")') },
+      { label: 'Open Timurila in its own window', click: () => {
+          const w = makeWindow(URL_BASE + 'timurila/index.html', 'timurila', { width: 1500, height: 950, child: true });
+          extraWins.add(w); w.on('closed', () => extraWins.delete(w)); } },
     ] },
     { label: 'View', submenu: [
       { role: 'zoomIn', accelerator: 'CmdOrCtrl+=' }, { role: 'zoomOut' }, { role: 'resetZoom' },

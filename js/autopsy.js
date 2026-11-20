@@ -113,7 +113,7 @@ const Autopsy = {
       '<canvas id="auStrip" class="auStrip" height="74"></canvas><div class="auGrid"><div class="auList" id="auList"></div><div class="auMain" id="auMain"><div class="auEmpty">Reading your trades…</div></div><div class="auSide" id="auSide"></div></div><div class="auAudit" id="auAudit"></div></div>';
     host.onclick = e => this.click(e); host.onchange = e => { if (e.target.id === 'auBot'){ this.filter.bot = e.target.value; this.paint(); } };
     await this.collect(); this.paint();
-    const first = this.rows()[0]; if (first) this.select(first.id);
+    const first = this.rows()[0], want = this.want; this.want = null; if (want && this.trades.some(t => t.id === want)) this.select(want); else if (first) this.select(first.id);
   },
   click(e){
     const b = e.target.closest('[data-ap]'); if (!b) { if (e.target.id === 'auStrip') this.stripPick(e); return; } const [k, v] = b.dataset.ap.split(':');
