@@ -317,13 +317,21 @@ const JMRange = {
   sigList(page, el, r){
     let rows = [];
     try { page._sigOff = true; rows = page.filtered(); } catch(e){} finally { page._sigOff = false; }
-    const n = {}; for (const t of rows){ const k = this.trig(t); n[k] = (n[k] || 0) + 1; }
-    const hid = new Set(r.sig || []), names = [...new Set(Object.keys(n).concat([...hid]))].sort((a, b) => (n[b] || 0) - (n[a] || 0) || a.localeCompare(b));
+    /* each signal's trades, net result and wins in the open view */
+    const S = {}; for (const t of rows){ const k = this.trig(t), g = S[k] || (S[k] = { n: 0, net: 0, w: 0 }); g.n++; g.net += Number.isFinite(t.pnl) ? t.pnl : 0; if (t.pnl > 0) g.w++; }
+    /* the most profitable first, the biggest loser last; a signal with no trade in this view comes after them, by name */
+    const hid = new Set(r.sig || []), names = [...new Set(Object.keys(S).concat([...hid]))].sort((x, y) => { const a = S[x], b = S[y]; if (!a || !b) return a ? -1 : b ? 1 : x.localeCompare(y); return b.net - a.net || b.n - a.n || x.localeCompare(y); });
     el._sigNames = names;
     const q = el.querySelector('.jmSigQ').value.trim().toLowerCase(), shown = names.filter(x => !q || x.toLowerCase().includes(q));
-    el.querySelector('.jmSigCount').textContent = names.length ? (names.length - names.filter(x => hid.has(x)).length) + ' of ' + names.length + ' shown' : '';
-    el.querySelector('.jmSigList').innerHTML = shown.length ? shown.map(x => `<label class="jmSigItem${n[x] ? '' : ' zero'}"><input type="checkbox" data-rgsigname="${esc(x)}"${hid.has(x) ? '' : ' checked'}>
-        <span title="${esc(x)}">${esc(x)}</span><small>${n[x] || 0}</small><button type="button" class="jmSigOnly" data-rgsigonly="${esc(x)}" title="Show only ${esc(x)}">only</button></label>`).join('')
+    const live = shown.filter(x => S[x]), idle = shown.filter(x => !S[x]), max = Math.max(1e-9, ...live.map(x => Math.abs(S[x].net)));
+    const money = v => (v > 0 ? '+' : v < 0 ? '−' : '') + (typeof fmtNum === 'function' ? fmtNum(Math.abs(v)) : Math.abs(v).toFixed(2));
+    el.querySelector('.jmSigCount').textContent = names.length ? (names.length - names.filter(x => hid.has(x)).length) + ' of ' + names.length + ' shown · most profitable first' : '';
+    const item = x => { const g = S[x], won = g ? Math.round(100 * g.w / g.n) : 0, cls = g && g.net < 0 ? 'down' : 'up';
+      return `<label class="jmSigItem${g ? '' : ' zero'}"><input type="checkbox" data-rgsigname="${esc(x)}"${hid.has(x) ? '' : ' checked'}>
+        <span title="${esc(x)}">${esc(x)}</span>` + (g ? `<i class="jmSigBar" title="${esc(x)}: ${money(g.net)} over ${g.n} trades, ${won}% won"><u class="${cls}" style="width:${(Math.abs(g.net) / max * 100).toFixed(1)}%"></u></i><b class="${cls}">${money(g.net)}</b><small>${g.n} · ${won}%</small>` : `<small>0</small>`) +
+        `<button type="button" class="jmSigOnly" data-rgsigonly="${esc(x)}" title="Show only ${esc(x)}">only</button></label>`; };
+    el.querySelector('.jmSigList').innerHTML = shown.length
+      ? live.map(item).join('') + (idle.length ? `<div class="jmSigIdle">${idle.length} ${idle.length === 1 ? 'signal' : 'signals'} with no trade in this view</div>` + idle.map(item).join('') : '')
       : `<span class="jmNone">${names.length ? 'No signal matches.' : 'No trades here.'}</span>`;
   },
 
@@ -479,10 +487,15 @@ const JMRange = {
       .jmSigHead{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; } .jmSigHead h4{ margin:0; }
       .jmSigCount{ color:var(--dim); font-size:11px; flex:1; }
       .jmSigQ{ width:200px; max-width:100%; padding:3px 7px; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:6px; font:inherit; }
-      .jmSigList{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:2px 10px; max-height:150px; overflow:auto; }
-      .jmSigItem{ display:flex; align-items:center; gap:6px; padding:3px 4px; border-radius:5px; cursor:pointer; }
-      .jmSigItem:hover{ background:rgba(127,127,127,.1); } .jmSigItem span{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-      .jmSigItem small{ color:var(--dim); font-variant-numeric:tabular-nums; } .jmSigItem.zero span{ opacity:.55; }
+      .jmSigList{ display:grid; grid-template-columns:repeat(auto-fill,minmax(420px,1fr)); gap:2px 18px; max-height:236px; overflow:auto; }
+      .jmSigItem{ display:grid; grid-template-columns:auto minmax(130px,1.4fr) minmax(70px,1fr) 70px 62px auto; align-items:center; gap:8px; padding:3px 4px; border-radius:5px; cursor:pointer; }
+      .jmSigItem:hover{ background:rgba(127,127,127,.1); } .jmSigItem span{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .jmSigItem small{ color:var(--dim); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; } .jmSigItem.zero span{ opacity:.55; } .jmSigItem.zero{ grid-template-columns:auto minmax(70px,1fr) auto auto; }
+      /* each signal as a bar of what it earned or lost in the open view, the most profitable first */
+      .jmSigBar{ height:9px; border-radius:5px; background:rgba(127,127,127,.16); overflow:hidden; } .jmSigBar u{ display:block; height:100%; border-radius:5px; text-decoration:none; transition:width .5s cubic-bezier(.2,.8,.2,1); }
+      .jmSigBar u.up{ background:linear-gradient(90deg, rgba(46,189,133,.5), var(--up,#2ebd85)); } .jmSigBar u.down{ background:linear-gradient(90deg, rgba(246,70,93,.5), var(--down,#f6465d)); }
+      .jmSigItem b{ font-family:var(--font-mono); font-size:11px; font-weight:500; text-align:right; white-space:nowrap; } .jmSigItem b.up{ color:var(--up,#2ebd85); } .jmSigItem b.down{ color:var(--down,#f6465d); }
+      .jmSigIdle{ grid-column:1 / -1; margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); color:var(--dim); font-size:11px; }
       .jmSigOnly{ display:none; background:none; border:1px solid var(--border); border-radius:4px; color:var(--dim); font:inherit; font-size:10px; padding:0 4px; cursor:pointer; }
       .jmSigItem:hover .jmSigOnly, .jmSigOnly:focus-visible{ display:inline-block; }
       .jmHidden{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; border-top:1px solid var(--border); background:rgba(255,183,77,.1); color:#ffcc80; }
