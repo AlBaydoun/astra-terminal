@@ -20,8 +20,8 @@ const Autopsy = {
   num(v, d = 2){ return v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); },
   sg(v, d = 2, u = ''){ if (v == null || !isFinite(v)) return '–'; const z = Math.abs(v) < 0.5 * Math.pow(10, -d); return (z ? '' : v > 0 ? '+' : '−') + this.num(Math.abs(v), d) + u; },
   esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
-  load(){ try { this.facts = JSON.parse(localStorage.getItem('astra_autopsy_v1') || '{}') || {}; } catch(e){ this.facts = {}; } },
-  save(){ try { const k = Object.keys(this.facts); if (k.length > 2500) for (const x of k.slice(0, k.length - 2500)) delete this.facts[x]; localStorage.setItem('astra_autopsy_v1', JSON.stringify(this.facts)); } catch(e){} },
+  load(){ try { this.facts = JSON.parse(localStorage.getItem('astra_autopsy_v2') || '{}') || {}; localStorage.removeItem('astra_autopsy_v1'); /* worked out with the old clock */ } catch(e){ this.facts = {}; } },
+  save(){ try { const k = Object.keys(this.facts); if (k.length > 2500) for (const x of k.slice(0, k.length - 2500)) delete this.facts[x]; localStorage.setItem('astra_autopsy_v2', JSON.stringify(this.facts)); } catch(e){} },
 
   /* ---------- the trades: every paper ledger, and live trades read from MetaTrader's history ---------- */
   async collect(){
@@ -29,21 +29,31 @@ const Autopsy = {
     try { if (typeof BOTS !== 'undefined' && typeof Bots !== 'undefined') for (const b of BOTS){ if (Bots.isPage(b)) continue; const L = Bots.ledgers[b.id];
       for (const t of (L && L.closed) || []){ if (!t.entryTime || !t.exitTime || !(t.entry > 0)) continue;
         out.push({ id: 'p:' + b.id + ':' + t.id, src: 'paper', bot: b.id, botName: typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : b.name, sym: t.sym, tf: t.tf, dir: t.dir > 0 ? 1 : -1, entry: t.entry, exit: t.exit,
-          t0: t.entryTime, t1: t.exitTime, sl: t.slInit || t.sl || null, tp: t.tp || null, pnl: t.pnl, r: isFinite(t.r) ? t.r : null, reason: t.reason || '', why: (t.reasons || []).slice(0, 4), score: t.score }); } } } catch(e){ console.warn('autopsy paper', e); }
+          t0: t.entryTime, t1: t.exitTime, sl: t.slInit || t.sl || null, tp: t.tp || null, pnl: t.pnl, r: isFinite(t.r) ? t.r : null, reason: t.reason || '', why: (t.reasons || []).slice(0, 4), score: t.score, orig: t }); } } } catch(e){ console.warn('autopsy paper', e); }
     try { if (!this.live && typeof Feed !== 'undefined' && Feed.bridge){ const d = await fetch(Feed.BRIDGE_URL + '/deals?days=365&entries=1', { cache: 'no-store', signal: AbortSignal.timeout(15000) }).then(r => r.json()), ent = {}, by = {};
         for (const e of d.entries || []) ent[e.position] = e;
         for (const x of d.deals || []){ const e = ent[x.position] || {}, id = String(e.comment || '').replace(/^ASTRA\s*/, '').trim() || 'untagged', c = String(x.comment || '');
           const t = by[x.position] = by[x.position] || { id: 'l:' + x.position, src: 'live', bot: id, botName: id, sym: x.symbol, tf: (id.match(/(\d+)(m|h)$/) || [])[0] || '15m', dir: (e.type || (x.type === 'sell' ? 'buy' : 'sell')) === 'buy' ? 1 : -1,
-            entry: e.price || null, exit: null, raw0: e.time || x.time, raw1: 0, sl: null, tp: null, pnl: (e.commission || 0) + (e.swap || 0) + (e.fee || 0), r: null, reason: 'closed', why: [] };
+            entry: e.price || null, exit: null, raw0: e.time || x.time, raw1: 0, sl: null, tp: null, pnl: (e.commission || 0) + (e.swap || 0) + (e.fee || 0), r: null, reason: 'closed', why: [], orig: { model: id, trigger: e.comment ? String(e.comment).replace(/^ASTRA\s*/, '').trim() : '' } };
           t.pnl += (x.profit || 0) + (x.commission || 0) + (x.swap || 0) + (x.fee || 0);
           if (x.time >= t.raw1){ t.raw1 = x.time; t.exit = x.price; const m = c.match(/^\[(sl|tp)\s*([\d.]+)/i); if (m){ t.reason = m[1].toLowerCase() === 'sl' ? 'stop-loss' : 'target reached'; if (m[1].toLowerCase() === 'sl') t.sl = +m[2]; else t.tp = +m[2]; } } }
-        this.live = Object.values(by).filter(t => t.entry > 0 && t.exit > 0); } } catch(e){ console.warn('autopsy live', e); }
-    for (const t of this.live || []){ const sh = this.shift(t.sym); out.push(Object.assign({}, t, { t0: (t.raw0 - sh) * 1000, t1: (t.raw1 - sh) * 1000 })); }
+        this.live = Object.values(by).filter(t => t.entry > 0 && t.exit > 0);
+        for (const t of this.live){ try { if (typeof BOT_BY_ID !== 'undefined' && BOT_BY_ID[t.bot] && typeof WorkspaceUI !== 'undefined') t.botName = WorkspaceUI.name(BOT_BY_ID[t.bot]); } catch(e){} }
+        /* Classic's Live Deep Dive knows more about each order than MetaTrader keeps: the signal, the timeframe, the stop, the costs */
+        try { if (typeof LiveDive !== 'undefined'){ if (!(LiveDive.data && LiveDive.data.trades) && LiveDive.refresh) await LiveDive.refresh(); const m = new Map(((LiveDive.data && LiveDive.data.trades) || []).map(x => [String(x.ticket), x]));
+            for (const t of this.live){ const x = m.get(t.id.slice(2)); if (!x) continue; t.orig = x; if (x.tf && this.TF[x.tf]) t.tf = x.tf; if (x.sl > 0 && !t.sl) t.sl = x.sl; if (x.tp > 0 && !t.tp) t.tp = x.tp; if (Number.isFinite(x.r)) t.r = x.r; if (x.reason) t.reason = x.reason; } } } catch(e){} } } catch(e){ console.warn('autopsy live', e); }
+    for (const t of this.live || []) out.push(Object.assign({}, t, { t0: (t.raw0 - this.shift(t.sym, t.raw0)) * 1000, t1: (t.raw1 - this.shift(t.sym, t.raw1)) * 1000 }));
     this.trades = out.sort((a, b) => b.t1 - a.t1); return out;
   },
   kind(sym){ try { return Feed.route(sym).kind; } catch(e){ return 'none'; } },
-  shift(sym){ return this.kind(sym) === 'bridge' && typeof PosLines !== 'undefined' ? (PosLines.serverShift() || 0) : 0; },
-  raw(t, ms){ return Math.floor(ms / 1000) + this.shift(t.sym); },
+  /* The broker stamps candles and deals in its own clock (UTC+2, +3 in European summer). Classic's own reading follows the
+     summer-time dates; the chart's learned shift is only the last resort, because it depends on the chart that is open. */
+  off(raw){ try { if (typeof USStocks !== 'undefined' && USStocks.brokerOffsetAt) return USStocks.brokerOffsetAt(raw); } catch(e){}
+    try { if (typeof Feed !== 'undefined' && Feed.bridgeClock && Feed.bridgeClock.offset != null) return Feed.bridgeClock.offset; } catch(e){}
+    return typeof PosLines !== 'undefined' ? (PosLines.serverShift() || 0) : 0; },
+  /* raw = a moment in the broker's clock; left out = now */
+  shift(sym, raw){ return this.kind(sym) === 'bridge' ? this.off(raw != null ? raw : Math.floor(Date.now() / 1000) + 7200) : 0; },
+  raw(t, ms){ const u = Math.floor(ms / 1000); return u + this.shift(t.sym, u + 7200); },
 
   /* ---------- candles, one request at a time ---------- */
   q: Promise.resolve(),
@@ -65,7 +75,7 @@ const Autopsy = {
   async analyse(t, keep){
     const S = this.TF[t.tf]; if (!S || typeof ProInd === 'undefined') return (this.facts[t.id] = { err: 'timeframe' });
     const r0 = this.raw(t, t.t0), r1 = this.raw(t, t.t1); let bars = null, day = null;
-    try { bars = await this.candles(t.sym, t.tf, r0 - 260 * S, r1 + 40 * S); day = await this.daily(t.sym); } catch(e){ return (this.facts[t.id] = { err: 'no candles' }); }
+    try { bars = await this.candles(t.sym, t.tf, r0 - 260 * S - (S < 86400 ? 3 * 86400 : 0), r1 + 40 * S); day = await this.daily(t.sym); } catch(e){ return (this.facts[t.id] = { err: 'no candles' }); }
     if (!bars || bars.length < 80) return (this.facts[t.id] = { err: 'no candles' });
     const P = ProInd.prep(bars.map(b => ({ time: b.rawTime != null ? b.rawTime : b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })));
     const iE = ProInd.indexAt(P, r0), iX = Math.max(iE, ProInd.indexAt(P, r1)), k = iE - 1; if (k < 40) return (this.facts[t.id] = { err: 'no candles' });
@@ -198,7 +208,7 @@ const Autopsy = {
     dot(X(iE), Y(t.entry), C.cy, t.dir > 0 ? 'Buy' : 'Sell', t.dir < 0); dot(X(iX), Y(t.exit), win ? C.up : C.dn, 'Out ' + this.sg(V.F.r, 1, 'R'), t.dir > 0 === win);
     if (V.F.mfe > 0.3) dot(X(V.iBest), Y(t.dir > 0 ? P.h[V.iBest] : P.l[V.iBest]), C.am, 'best', t.dir > 0);
     if (V.F.mae > 0.3 && V.iWorst !== V.iBest) dot(X(V.iWorst), Y(t.dir > 0 ? P.l[V.iWorst] : P.h[V.iWorst]), C.dim, 'worst', t.dir < 0);
-    c.fillStyle = C.dim; c.textAlign = 'center'; const tl = i => { const d = new Date((P.t[i] - this.shift(t.sym)) * 1000); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toTimeString().slice(0, 5); };
+    c.fillStyle = C.dim; c.textAlign = 'center'; const tl = i => { const d = new Date((P.t[i] - this.shift(t.sym, P.t[i])) * 1000); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toTimeString().slice(0, 5); };
     c.fillText(tl(iE), Math.max(60, Math.min(w - padR - 60, X(iE))), h - 9); if (X(iX) - X(iE) > 130) c.fillText(tl(iX), Math.min(w - padR - 50, X(iX)), h - 9);
   },
   px(p){ const a = Math.abs(p), d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 10 ? 3 : a >= 1 ? 4 : 5; return Number(p).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); },

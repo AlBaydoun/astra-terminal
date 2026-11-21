@@ -39,7 +39,7 @@ const Face = window.Face = {
     { id: 'live', label: 'Live', kind: 'bot', bot: 'liveManual', info: 'live', tip: 'Your real account at a glance; the live desk is one click away' },
     { id: 'livedive', label: 'Live Dive', kind: 'bot', bot: 'livedive', info: 'livedive', visual: true, tip: 'Live Deep Dive: real trades, sliced' },
     { id: 'dash', label: 'Dashboard', kind: 'bot', bot: 'dash', info: 'dash', tip: 'Every bot at a glance' },
-    { id: 'autopsy', label: 'Autopsy', kind: 'native', tip: 'Why each trade won or lost: trend, agreement, shock' },
+    { id: 'autopsy', label: 'Replay', kind: 'native', tip: 'Replay studio: one trade candle by candle, who opened it, why, and what was going on around it' },
     { sep: true },
     { id: 'home', label: 'Command', kind: 'frame', hash: 'command', tip: 'Market map, account and autopilot' },
     { id: 'markets', label: 'Markets', kind: 'frame', hash: 'markets', tip: 'Radar and the chart studio' },
@@ -153,6 +153,7 @@ const Face = window.Face = {
         const check = () => { if (this.room !== r.id || frame.hidden) return; if (alive()) return; frame.hidden = true; frame.dataset.loaded = ''; fail.hidden = false; fail.innerHTML = '<div><b>This room could not be loaded</b><p>The page that serves ASTRA’s files is not answering, so Timurila’s ' + esc(r.label) + ' room did not arrive. The chart and your bots are not affected.</p><button type="button" id="tmRetry">Try again</button></div>'; $('tmRetry').onclick = () => this.go(r.id); };
         if (!frame.dataset.loaded || !alive()){ frame.onload = () => setTimeout(check, 300); frame.src = frame.dataset.loaded ? 'timurila/index.html?embed=1&r=' + Date.now() + '#' + r.hash : want; frame.dataset.loaded = '1'; clearTimeout(this._ft); this._ft = setTimeout(check, 7000); }
         else try { frame.contentWindow.location.hash = '#' + r.hash; } catch(e){ frame.src = want; } }
+      else if (typeof Replay !== 'undefined' && typeof Autopsy !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = false; Replay.show(nat); }
       else { frame.hidden = true; inf.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => { if (Autopsy.want){ const w = Autopsy.want; Autopsy.want = null; Autopsy.filter = { src: 'all', bot: '', out: 'all' }; Autopsy.select(w); } else Autopsy.paint(); }); } } }
   },
   panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
@@ -329,6 +330,13 @@ document.addEventListener('DOMContentLoaded', () => {
       WorkspaceUI.openBot = function(id){ const r = ob.apply(null, arguments); try { if (Face.on() && !Face._busy){ Face._busy = true; if (MAP[id]){ const rm = Face.ROOMS.find(x => x.id === MAP[id]), cur = H.dataset.tmview; if (cur === 'visual' && rm.visual) Face.view(MAP[id], 'visual'); else if (cur === 'classic' && rm.info) Face.view(MAP[id], 'classic'); else Face.go(MAP[id]); } else { Face.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmStage').hidden = true; $('tmViewSwitch').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); const bp = $('bottomPanel'); if (bp) bp.classList.remove('collapsed'); } Face._busy = false; } } catch(e){ Face._busy = false; } return r; };
       WorkspaceUI.openChart = function(){ try { if (Face.on() && Face.room !== 'chart') Face.go('chart'); } catch(e){} return oc.apply(null, arguments); };
     }
+    /* Classic's "Replay" buttons (the Deep Dive's trade list, F3) open the Replay studio in the new look */
+    const toStudio = (bot, entryTime, sym, live, id) => { if (!Face.on() || typeof Replay === 'undefined' || typeof Autopsy === 'undefined') return false; const find = () => (id && Autopsy.trades.find(t => t.id === id)) || Autopsy.trades.find(t => live ? (t.src === 'live' && t.sym === sym && Math.abs(t.t0 - entryTime) < 120000) : (t.src === 'paper' && t.bot === bot && Math.abs(t.t0 - entryTime) < 1000));
+      Autopsy.collect().then(() => { const t = find(); if (t) Autopsy.want = t.id; Face.go('autopsy'); }); return true; };
+    if (typeof Explorer !== 'undefined' && Explorer.replay && !Explorer._tmWrapped){ Explorer._tmWrapped = true; const or = Explorer.replay; Explorer.replay = function(bot, entryTime, exitTime, sym){ if (toStudio(bot, entryTime, sym, this !== Explorer)) return; return or.apply(this, arguments); }; }
+    /* the Live Dive has a Replay button of its own, for real trades */
+    if (typeof LiveDive !== 'undefined' && Object.prototype.hasOwnProperty.call(LiveDive, 'replay') && !LiveDive._tmReplay){ LiveDive._tmReplay = true; const lr = LiveDive.replay; LiveDive.replay = function(bot, entryTime, exitTime, sym){ let id = null; try { const x = this.all().find(x => x.bot === bot && x.entryTime === entryTime && x.sym === sym); if (x && x.ticket != null) id = 'l:' + x.ticket; } catch(e){} if (toStudio(bot, entryTime, sym, true, id)) return; return lr.apply(this, arguments); }; }
+    if (typeof Shortcuts !== 'undefined' && Shortcuts.obs && !Shortcuts._tmObs){ Shortcuts._tmObs = true; const oo = Shortcuts.obs.bind(Shortcuts); Shortcuts.obs = function(name){ if (name === 'replay' && Face.on() && typeof Replay !== 'undefined') return Face.go('autopsy'); return oo.apply(null, arguments); }; }
     if (typeof Shortcuts !== 'undefined' && Shortcuts.tab && !Shortcuts._tmWrapped){ Shortcuts._tmWrapped = true; const ot = Shortcuts.tab.bind(Shortcuts); Shortcuts.tab = function(name){ if (Face.on()) return Face.panel(name); return ot.apply(null, arguments); }; }
   } catch(e){ console.warn('Face: could not follow Classic navigation', e); }
   /* a way in from the Classic look: one button beside the theme switch */
