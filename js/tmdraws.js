@@ -40,11 +40,14 @@ const Draws = {
   px2(g, s){ return s.pts.map(q => [g.X(this.fi(g, q[0])), g.Y(q[1])]); },
 
   /* ---------- what a measurement says ---------- */
-  info(g, m){ const i0 = g.idx(m.t0), i1 = g.idx(m.t1), d = m.p1 - m.p0; return { i0, i1, d, pct: d / m.p0 * 100, n: Math.abs(i1 - i0), sec: m.t1 - m.t0, money: g.pv ? d * g.pv : null }; },
+  /* a measurement read from a side: on a sell, the price going down is the profit; on a buy, going up. side 0 = the plain price move */
+  sideOf(g, m){ return m.side != null ? m.side : (g.side || 0); },
+  info(g, m){ const i0 = g.idx(m.t0), i1 = g.idx(m.t1), d = m.p1 - m.p0, side = this.sideOf(g, m), res = side ? side * d : d;
+    return { i0, i1, d, side, res, good: res >= 0, movePct: d / m.p0 * 100, pct: res / m.p0 * 100, n: Math.abs(i1 - i0), sec: m.t1 - m.t0, money: side && g.money ? g.money(res) : g.pv ? res * g.pv : null, perLot: !(side && g.money) }; },
   sg(v, d){ return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); },
 
   /* ---------- drawing ---------- */
-  draw(c, g, key){ const L = this.ls(key).filter(x => !x.off), M = this.ms(key).filter(x => !x.off), sel = this.sel && this.sel.key === key ? this.sel.id : null;
+  draw(c, g, key){ this._gside = g.side || 0; const L = this.ls(key).filter(x => !x.off), M = this.ms(key).filter(x => !x.off), sel = this.sel && this.sel.key === key ? this.sel.id : null;
     for (const k of this.is(key).filter(x => !x.off)) Ink.stroke(c, this.px2(g, k), k, k.id === sel); if (this.op && this.op.mode === 'ink' && this.op.key === key) Ink.stroke(c, this.px2(g, this.op.s), this.op.s);
     this.drawLines(c, g, L, sel); for (const m of M) this.drawM(c, g, m, m.id === sel); if (this.op && this.op.mode === 'new' && this.op.key === key) this.drawM(c, g, this.op.m, true, true); },
   pill(c, txt, x, y, col, align){ c.font = '700 10.5px JetBrains Mono, monospace'; const w = c.measureText(txt).width + 12, x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x; c.fillStyle = col; c.beginPath(); c.roundRect ? c.roundRect(x0, y - 9, w, 18, 6) : c.rect(x0, y - 9, w, 18); c.fill(); c.fillStyle = '#04121A'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x0 + 6, y); },
@@ -59,10 +62,12 @@ const Draws = {
       const txt = g.px(a.p - b.p) + ' · ' + ((a.p / b.p - 1) * 100).toFixed(2) + '%' + (g.pv ? ' · $' + Math.round((a.p - b.p) * g.pv).toLocaleString('en-US') + '/lot' : ''); c.font = '600 10px JetBrains Mono, monospace'; const w = c.measureText(txt).width + 12; c.fillStyle = 'rgba(6,10,18,.9)'; c.fillRect(x - w - 6, (ya + yb) / 2 - 9, w, 18); c.fillStyle = '#E6EEFF'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x - w, (ya + yb) / 2); }
     for (let k = 1; k < V.length; k++){ const a = V[k - 1], b = V[k], xa = g.X(a.i), xb = g.X(b.i), y = g.h - 46; if (xb - xa < 30) continue; c.strokeStyle = 'rgba(230,238,255,.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(xa + 3, y); c.lineTo(xb - 3, y); c.moveTo(xa + 3, y - 4); c.lineTo(xa + 3, y + 4); c.moveTo(xb - 3, y - 4); c.lineTo(xb - 3, y + 4); c.stroke();
       const txt = (b.i - a.i) + ' candles · ' + g.dur(b.t - a.t); c.font = '600 10px JetBrains Mono, monospace'; const w = c.measureText(txt).width + 12; c.fillStyle = 'rgba(6,10,18,.9)'; c.fillRect((xa + xb) / 2 - w / 2, y + 5, w, 17); c.fillStyle = '#E6EEFF'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, (xa + xb) / 2, y + 13.5); } },
-  drawM(c, g, m, on, live){ const r = this.info(g, m), x0 = g.X(r.i0), x1 = g.X(r.i1), y0 = g.Y(m.p0), y1 = g.Y(m.p1), up = r.d >= 0, col = up ? '#3DDC97' : '#FF6B7A', W = g.w, H = g.h;
-    c.save(); c.fillStyle = up ? 'rgba(61,220,151,' + (on ? .16 : .10) + ')' : 'rgba(255,107,122,' + (on ? .16 : .10) + ')'; c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) || 1, Math.abs(y1 - y0) || 1); c.strokeStyle = col; c.lineWidth = on ? 1.6 : 1; c.setLineDash(live ? [4, 3] : []); if (on){ c.shadowColor = col; c.shadowBlur = 12; } c.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0)); c.setLineDash([]);
+  drawM(c, g, m, on, live){ const r = this.info(g, m), x0 = g.X(r.i0), x1 = g.X(r.i1), y0 = g.Y(m.p0), y1 = g.Y(m.p1), up = r.d >= 0, col = r.good ? '#3DDC97' : '#FF6B7A', W = g.w, H = g.h;
+    c.save(); c.fillStyle = r.good ? 'rgba(61,220,151,' + (on ? .16 : .10) + ')' : 'rgba(255,107,122,' + (on ? .16 : .10) + ')'; c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) || 1, Math.abs(y1 - y0) || 1); c.strokeStyle = col; c.lineWidth = on ? 1.6 : 1; c.setLineDash(live ? [4, 3] : []); if (on){ c.shadowColor = col; c.shadowBlur = 12; } c.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0)); c.setLineDash([]);
     c.lineWidth = 1.8; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.shadowBlur = 0; const ah = Math.atan2(y1 - y0, x1 - x0); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - 9 * Math.cos(ah - 0.4), y1 - 9 * Math.sin(ah - 0.4)); c.lineTo(x1 - 9 * Math.cos(ah + 0.4), y1 - 9 * Math.sin(ah + 0.4)); c.closePath(); c.fillStyle = col; c.fill(); c.restore();
-    const lines = [this.sg(r.d, Math.abs(r.d) >= 100 ? 1 : 4) + '  (' + this.sg(r.pct, 2) + '%)' + (r.money != null ? '  ' + this.sg(r.money, 2) + ' ' + (g.ccy || '') + '/lot' : ''), r.n + ' candles · ' + g.dur(r.sec), g.date(m.t0, true) + '  →', g.date(m.t1, true)];
+    const money = r.money != null ? '  ' + this.sg(r.money, 2) + ' ' + (g.ccy || '') + (r.perLot ? '/lot' : g.size ? ' · ' + g.size : '') : '';
+    const lines = r.side ? [(r.side > 0 ? 'BUY  ' : 'SELL  ') + this.sg(r.pct, 2) + '%' + money, 'price ' + this.sg(r.d, Math.abs(r.d) >= 100 ? 1 : 4) + ' (' + this.sg(r.movePct, 2) + '%) · ' + r.n + ' candles · ' + g.dur(r.sec), g.date(m.t0, true) + '  →', g.date(m.t1, true)]
+      : [this.sg(r.d, Math.abs(r.d) >= 100 ? 1 : 4) + '  (' + this.sg(r.pct, 2) + '%)' + money, r.n + ' candles · ' + g.dur(r.sec), g.date(m.t0, true) + '  →', g.date(m.t1, true)];
     c.font = '600 11px JetBrains Mono, monospace'; const w = Math.max(...lines.map(s => c.measureText(s).width)) + 18, bx = Math.max(4, Math.min(W - w - 4, (x0 + x1) / 2 - w / 2)), by = up ? Math.max(4, Math.min(y0, y1) - 76) : Math.min(H - 74, Math.max(y0, y1) + 8);
     c.fillStyle = 'rgba(6,10,18,.92)'; c.strokeStyle = col; c.lineWidth = 1; c.beginPath(); c.roundRect ? c.roundRect(bx, by, w, 68, 9) : c.rect(bx, by, w, 68); c.fill(); c.stroke(); c.textAlign = 'left'; c.textBaseline = 'middle';
     lines.forEach((s, k) => { c.fillStyle = k === 0 ? col : k === 1 ? '#E6EEFF' : '#7C8BA8'; c.font = (k === 0 ? '700 ' : '500 ') + '11px JetBrains Mono, monospace'; c.fillText(s, bx + 9, by + 12 + k * 15); });
@@ -79,7 +84,7 @@ const Draws = {
   snap(g, key, x, y){ let i = g.I(x), p = g.P(y); for (const l of this.ls(key).filter(q => !q.off)){ if (l.k === 'h' && Math.abs(g.Y(l.p) - y) < 8) p = l.p; if (l.k === 'v'){ const k = g.idx(l.t); if (Math.abs(g.X(k) - x) < 8) i = k; } } return { i, p }; },
   /* a press on the chart: returns true when a drawing took it (the studio then does not pan) */
   down(g, key, tool, x, y){ if (x < 0 || y < 0 || x > g.w || y > g.h) return false; this.closeCard();
-    if (tool === 'measure'){ const q = this.snap(g, key, x, y), t = g.T(q.i); this.op = { mode: 'new', key, m: { t0: t, p0: q.p, t1: t, p1: q.p } }; return true; }
+    if (tool === 'measure'){ const q = this.snap(g, key, x, y), t = g.T(q.i); this.op = { mode: 'new', key, m: { t0: t, p0: q.p, t1: t, p1: q.p, side: g.side || 0 } }; return true; }
     if (tool === 'ink'){ const s = Ink.load(); this.op = { mode: 'ink', key, s: { pen: s.pen, c: s.c, w: s.w, tip: s.tip || 'round', pts: [[this.tAt(g, x), g.P(y)]] }, lx: x, ly: y }; return true; }
     if (tool === 'hl' || tool === 'vl'){ const L = this.ls(key), n = L.length, l = tool === 'hl' ? { id: this.uid(), k: 'h', p: g.P(y), c: this.COL[n % this.COL.length] } : { id: this.uid(), k: 'v', t: g.T(g.I(x)), c: this.COL[n % this.COL.length] }; L.push(l); this.saveL(key, L); this.sel = { key, id: l.id }; return true; }
     const h = this.hit(g, key, x, y); if (!h){ if (this.sel){ this.sel = null; } return false; }
@@ -107,18 +112,20 @@ const Draws = {
   card(host, key, id, x, y, onChange){ this.closeCard(); const f = this.find(key, id); if (!f || !host) return; const o = f.o, el = document.createElement('div'); el.id = 'dwCard';
     const what = f.type === 'm' ? 'Measurement' : f.type === 'i' ? ((Ink.PENS.find(p => p[0] === o.pen) || [0, 'Pen'])[1] + ' stroke') : o.k === 'h' ? 'Price line' : 'Time line';
     el.innerHTML = '<div class="dwHead"><b>' + what + '</b><button type="button" data-dw="x" title="Close">✕</button></div><p>Drag it, or its ends, to move it.</p>' +
+      (f.type === 'm' ? '<div class="dwSide"><span>Read it as</span>' + [[1, 'a buy'], [-1, 'a sell'], [0, 'the price']].map(x => '<button type="button" data-dw="side:' + x[0] + '" class="' + ((o.side != null ? o.side : (this._gside || 0)) === x[0] ? 'on' : '') + '">' + x[1] + '</button>').join('') + '</div><p class="dwHint">A buy earns when the price goes up, a sell when it goes down.</p>' : '') +
       (f.type !== 'm' ? '<div class="dwCols">' + this.COL.map(cl => '<button type="button" data-dw="c:' + cl + '" style="--c:' + cl + '" class="' + (o.c === cl ? 'on' : '') + '"></button>').join('') + '</div>' : '') +
       '<div class="dwAct"><button type="button" data-dw="hide">Hide from the chart</button><button type="button" data-dw="del" class="dn">Remove</button></div>';
     host.appendChild(el); const hr = host.getBoundingClientRect(); el.style.left = Math.max(6, Math.min(hr.width - 230, x + 14)) + 'px'; el.style.top = Math.max(6, Math.min(hr.height - 150, y - 20)) + 'px';
     el.addEventListener('mousedown', e => e.stopPropagation()); el.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-dw]'); if (!b) return; const k = b.dataset.dw;
-      if (k === 'x') this.closeCard(); else if (k === 'hide') this.toggle(key, id); else if (k === 'del') this.remove(key, id); else if (k.startsWith('c:')){ this.update(key, id, d => { d.c = k.slice(2); }); el.querySelectorAll('[data-dw^="c:"]').forEach(q => q.classList.toggle('on', q === b)); }
+      if (k.startsWith('side:')){ const v = +k.slice(5); this.update(key, id, d => { d.side = v; }); el.querySelectorAll('[data-dw^="side:"]').forEach(q => q.classList.toggle('on', q === b)); }
+      else if (k === 'x') this.closeCard(); else if (k === 'hide') this.toggle(key, id); else if (k === 'del') this.remove(key, id); else if (k.startsWith('c:')){ this.update(key, id, d => { d.c = k.slice(2); }); el.querySelectorAll('[data-dw^="c:"]').forEach(q => q.classList.toggle('on', q === b)); }
       if (onChange) onChange(); }); },
 
   /* ---------- a list of them, with show / hide and remove ---------- */
   listHtml(g, key){ const L = this.ls(key), M = this.ms(key), I = this.is(key); if (!L.length && !M.length && !I.length) return '<p class="dwNone">No drawings on this chart yet.</p>';
     const row = (id, off, col, title, sub, go) => '<div class="dwRow' + (off ? ' off' : '') + '"><button type="button" class="dwGo" ' + (go != null ? 'data-dl="go:' + go + '"' : '') + ' style="--c:' + col + '"><b>' + title + '</b><span>' + sub + '</span></button><button type="button" class="dwEye" data-dl="eye:' + id + '" title="' + (off ? 'Show it on the chart again' : 'Hide it from the chart (it stays here)') + '">' + (off ? '◌' : '◉') + '</button><button type="button" class="dwDel" data-dl="del:' + id + '" title="Remove">✕</button></div>';
     return L.map(l => row(l.id, l.off, l.c, l.k === 'h' ? '― ' + g.px(l.p) : '| ' + g.date(l.t), l.k === 'h' ? 'price line' : 'time line', l.k === 'v' ? l.t : null)).join('') +
-      M.map(m => { const r = this.info(g, m); return row(m.id, m.off, r.d >= 0 ? '#3DDC97' : '#FF6B7A', this.sg(r.pct, 2) + '%', r.n + ' candles · ' + g.dur(r.sec), m.t0); }).join('') +
+      M.map(m => { const r = this.info(g, m); return row(m.id, m.off, r.good ? '#3DDC97' : '#FF6B7A', (r.side ? (r.side > 0 ? 'buy ' : 'sell ') : '') + this.sg(r.pct, 2) + '%', r.n + ' candles · ' + g.dur(r.sec), m.t0); }).join('') +
       I.map(k => row(k.id, k.off, k.c, '✎ ' + (Ink.PENS.find(p => p[0] === k.pen) || [0, 'Pen'])[1], k.pts.length + ' points · ' + g.date(k.pts[0][0]), k.pts[0][0])).join(''); },
   /* clear everything on this chart, keeping a copy so it can be undone */
   clearAll(key){ const bak = { m: this.ms(key), l: this.ls(key), i: this.is(key) }; this.saveM(key, []); this.saveL(key, []); this.saveI(key, []); this.sel = null; this.closeCard(); return bak; },

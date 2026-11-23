@@ -154,9 +154,11 @@ const Inspect = {
   myLines(){ return Draws.ls(this.dkey()); },
   saveLines(L){ Draws.saveL(this.dkey(), L); },
   /* the measuring tape sticks to a line when it comes within a few pixels of it */
+  /* a new measurement reads from the side of the trade you picked; with none picked, as a buy (change it on the measurement) */
+  measureSide(){ if (this.trSel && this.trSel.size === 1){ const x = (this.tr || []).find(q => this.trSel.has(q.t.id)); if (x) return x.t.dir; } return 1; },
   /* the geometry the shared drawings need */
   dg(){ const g = this.g, B = this.bars, n = B.length; if (!g || !n) return null; const cl = i => Math.max(0, Math.min(n - 1, i));
-    return { X: g.X, Y: g.Y, F: x => (x - 6) / g.cw - 0.5 + this.a, I: x => cl(Math.round((x - 6) / g.cw - 0.5) + this.a), P: y => g.hi - (y - 8) / (g.mainH - 16) * (g.hi - g.lo), idx: t => this.idx(t), T: i => B[cl(i)].t, w: g.W - g.padR, h: g.mainH, date: (t, f) => this.date(t, f), px: v => this.px(v), dur: v => this.dur(v), pv: this.pv(), ccy: this.ccy(), last: B[this.lastShown()].c }; },
+    return { X: g.X, Y: g.Y, F: x => (x - 6) / g.cw - 0.5 + this.a, I: x => cl(Math.round((x - 6) / g.cw - 0.5) + this.a), P: y => g.hi - (y - 8) / (g.mainH - 16) * (g.hi - g.lo), idx: t => this.idx(t), T: i => B[cl(i)].t, w: g.W - g.padR, h: g.mainH, side: this.measureSide(), money: this.pv() ? v => v * this.pv() * (this.rule.lots || 0.1) : null, size: (this.rule.lots || 0.1) + ' lots', date: (t, f) => this.date(t, f), px: v => this.px(v), dur: v => this.dur(v), pv: this.pv(), ccy: this.ccy(), last: B[this.lastShown()].c }; },
 
   /* ---------- your trades on this instrument: their entries and exits ---------- */
   async loadTrades(){ this.tr = []; if (typeof Autopsy === 'undefined' || !this.bars.length) return; try { if (!Autopsy.trades || !Autopsy.trades.length) await Autopsy.collect(); } catch(e){} const me = this.base(this.sym).toUpperCase(), B = this.bars;
