@@ -805,3 +805,55 @@ html[data-face="tm"] #sideTabs button[data-tab]:nth-child(n+10)::after { left: a
 .tcpRows { display: grid; gap: 2px; } .tcpRows div { display: flex; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 6px; border-left: 2px solid transparent; color: #7C8BA8; } .tcpRows div.on { border-left-color: var(--c); color: #E6EEFF; background: rgba(255,255,255,.02); } .tcpRows b { font: 600 10.5px JetBrains Mono, monospace; }
 #tsClockPop > button { width: 100%; margin-top: 8px; height: 28px; border: 1px solid rgba(79,216,247,.35); border-radius: 9px; background: rgba(79,216,247,.08); color: #4FD8F7; font: 600 11px Inter, sans-serif; cursor: pointer; }
 .tcpLife { position: absolute; left: 0; bottom: 0; height: 2px; background: #4FD8F7; width: 100%; transform-origin: left; } #tsClockPop.go .tcpLife { animation: tcpLife 6s linear forwards; } #tsClockPop:hover .tcpLife { animation-play-state: paused; } @keyframes tcpLife { to { transform: scaleX(0); } }
+
+/* ===== beacons: entry and exit points that glow (js/tmbeacon.js) ===== */
+.bcnLayer { position: absolute; left: 0; top: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.bcn { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: transform .12s linear; }
+.bcn > i, .bcn > b, .bcn > span { position: absolute; }
+.bcnCore { left: -6px; top: -6px; width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, var(--c) 55%, color-mix(in srgb, var(--c) 40%, #000)); box-shadow: 0 0 0 2px #060A12, 0 0 12px 3px var(--c), 0 0 34px 8px color-mix(in srgb, var(--c) 45%, transparent); animation: bcnBreath 2.4s ease-in-out infinite; }
+.bcnRing { left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--c); opacity: 0; animation: bcnRing 2.4s cubic-bezier(.2,.6,.3,1) infinite; } .bcnRing.r2 { animation-delay: 1.2s; }
+.bcnBeam { left: -10px; top: -190px; width: 20px; height: 380px; background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--c) 6%, transparent) 25%, color-mix(in srgb, var(--c) 22%, transparent) 50%, color-mix(in srgb, var(--c) 6%, transparent) 75%, transparent 100%); filter: blur(1.5px); }
+.bcnBeam::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--c) 55%, transparent) 50%, transparent); }
+.bcnLevel { left: 8px; top: -1px; width: var(--lw); height: 2px; background: linear-gradient(90deg, var(--c), color-mix(in srgb, var(--c) 30%, transparent) 60%, transparent); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent); opacity: .8; }
+.bcnTag { left: 12px; top: -40px; display: grid; gap: 1px; padding: 4px 9px 5px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); background: rgba(6,10,18,.88); box-shadow: 0 0 16px color-mix(in srgb, var(--c) 35%, transparent), 0 6px 16px rgba(0,0,0,.45); white-space: nowrap; pointer-events: auto; backdrop-filter: blur(4px); animation: bcnIn .45s cubic-bezier(.2,.8,.2,1) both; }
+.bcnTag b { color: var(--c); font: 800 10px Inter, sans-serif; letter-spacing: .08em; } .bcnTag small { color: #E6EEFF; font: 600 10.5px JetBrains Mono, monospace; } .bcnTag small:empty { display: none; }
+.bcnTag::before { content: ''; position: absolute; left: -7px; bottom: -6px; width: 10px; height: 1.5px; background: var(--c); transform: rotate(-40deg); opacity: .7; }
+.bcn.low .bcnTag { top: 14px; } .bcn.low .bcnTag::before { bottom: auto; top: -5px; transform: rotate(40deg); }
+.bcn.flip .bcnTag { left: auto; right: 12px; } .bcn.flip .bcnTag::before { left: auto; right: -7px; transform: rotate(40deg); } .bcn.flip.low .bcnTag::before { transform: rotate(-40deg); }
+.bcn.exit .bcnCore { border-radius: 3px; transform: rotate(45deg); }
+.bcn.dim { opacity: .45; } .bcn.dim .bcnRing, .bcn.dim .bcnBeam { display: none; }
+.bcnEdge { display: none; }
+.bcn.off > i, .bcn.off > b, .bcn.off .bcnTag { display: none; }
+.bcn.off .bcnEdge { display: block; top: -11px; padding: 3px 8px; border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--c) 22%, rgba(6,10,18,.9)); border: 1px solid var(--c); color: var(--c); font: 800 9.5px Inter, sans-serif; letter-spacing: .06em; white-space: nowrap; pointer-events: auto; cursor: pointer; box-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); animation: bcnEdge 1.6s ease-in-out infinite; }
+.bcn.off.left .bcnEdge { left: 0; border-left: 0; } .bcn.off.right .bcnEdge { right: 0; border-right: 0; border-radius: 8px 0 0 8px; }
+@keyframes bcnRing { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(3.6); opacity: 0; } }
+@keyframes bcnBreath { 50% { box-shadow: 0 0 0 2px #060A12, 0 0 18px 5px var(--c), 0 0 46px 12px color-mix(in srgb, var(--c) 55%, transparent); } }
+@keyframes bcnIn { from { opacity: 0; transform: translateY(4px) scale(.95); } }
+@keyframes bcnEdge { 50% { box-shadow: 0 0 22px color-mix(in srgb, var(--c) 70%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .bcnCore, .bcnRing, .bcnTag, .bcnEdge { animation: none !important; } .bcnRing { display: none; } }
+
+.bcn.mini .bcnTag, .bcn.mini .bcnBeam, .bcn.mini .bcnLevel, .bcn.mini .bcnRing.r2, .bcn.nolevel .bcnLevel { display: none; } .bcn.mini .bcnCore { transform: scale(.8); } .bcn.exit.mini .bcnCore { transform: rotate(45deg) scale(.8); }
+#inCv[data-tool="hl"], #inCv[data-tool="vl"] { cursor: crosshair; } .inTool[data-i="tool:hl"].on, .inTool[data-i="tool:vl"].on { background: rgba(79,216,247,.16); color: #4FD8F7; box-shadow: inset 0 0 0 1px rgba(79,216,247,.45), 0 0 12px rgba(79,216,247,.25); }
+
+/* ===== target and stop beacons; editable drawings (js/tmbeacon.js, js/tmdraws.js) ===== */
+.bcn .bcnCore { pointer-events: auto; cursor: pointer; }
+.bcn.target .bcnCore { left: -8px; top: -8px; width: 16px; height: 16px; background: radial-gradient(circle, var(--c) 0 3px, transparent 3.5px 5px, color-mix(in srgb, var(--c) 35%, transparent) 5.5px); border: 2px solid var(--c); box-sizing: border-box; }
+.bcn.stop .bcnCore { border-radius: 3px; background: linear-gradient(135deg, #fff -30%, var(--c) 45%, color-mix(in srgb, var(--c) 45%, #000)); }
+.bcn.stop .bcnCore::after { content: ''; position: absolute; left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; background: #060A12; border-radius: 1px; }
+.bcn.target .bcnRing, .bcn.stop .bcnRing { border-style: dashed; }
+.bcn.dim .bcnCore { animation: none; box-shadow: 0 0 0 2px #060A12, 0 0 8px 1px color-mix(in srgb, var(--c) 60%, transparent); }
+.bcn.dim .bcnTag { opacity: .8; border-style: dashed; }
+#dwCard { position: absolute; z-index: 40; width: 216px; padding: 10px; border-radius: 12px; border: 1px solid rgba(79,216,247,.35); background: linear-gradient(180deg, rgba(14,22,42,.98), rgba(8,13,26,.98)); box-shadow: 0 16px 44px rgba(0,0,0,.6); color: #E6EEFF; font: 11.5px Inter, sans-serif; animation: tmPopIn .2s cubic-bezier(.2,.8,.2,1); }
+#dwCard .dwHead { display: flex; align-items: center; justify-content: space-between; } #dwCard .dwHead b { font-size: 12.5px; } #dwCard .dwHead button { border: 0; background: none; color: #7C8BA8; cursor: pointer; }
+#dwCard p { margin: 4px 0 8px; color: #7C8BA8; font-size: 10.5px; }
+.dwCols { display: flex; gap: 6px; margin-bottom: 8px; } .dwCols button { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; background: var(--c); cursor: pointer; box-shadow: 0 0 8px color-mix(in srgb, var(--c) 50%, transparent); } .dwCols button.on { border-color: #fff; }
+.dwAct { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .dwAct button { height: 30px; border-radius: 9px; border: 1px solid #1F2C48; background: #0B1324; color: #C9D4EA; font: 600 11px Inter, sans-serif; cursor: pointer; } .dwAct button:hover { border-color: rgba(79,216,247,.5); } .dwAct button.dn { color: #FF6B7A; } .dwAct button.dn:hover { border-color: rgba(255,107,122,.5); }
+.dwList { display: grid; gap: 4px; }
+.dwRow { display: flex; gap: 3px; animation: tmRowIn .25s both; } .dwRow.off .dwGo { opacity: .45; }
+.dwGo { flex: 1; min-width: 0; display: grid; gap: 1px; padding: 6px 8px; border: 1px solid #16223A; border-left: 3px solid var(--c); border-radius: 9px; background: rgba(255,255,255,.02); color: #E6EEFF; text-align: left; cursor: pointer; } .dwGo:hover { border-color: color-mix(in srgb, var(--c) 50%, #16223A); } .dwGo b { color: var(--c); font: 700 11.5px JetBrains Mono, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dwGo span { color: #7C8BA8; font-size: 10px; }
+.dwEye, .dwDel { width: 26px; border: 0; border-radius: 8px; background: transparent; color: #7C8BA8; cursor: pointer; font-size: 12px; } .dwEye:hover { color: #4FD8F7; background: rgba(79,216,247,.08); } .dwDel:hover { color: #FF6B7A; background: rgba(255,107,122,.08); }
+.dwNone { margin: 0; color: #5D6B88; font-size: 11px; }
+#rpDwList { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px; padding: 10px; margin: -2px 0 8px; border-radius: 12px; border: 1px solid #16223A; background: rgba(8,14,28,.6); animation: tmPopIn .2s; }
+.rpDwHead { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; } .rpDwHead b { font: 700 12px Inter, sans-serif; color: #E6EEFF; } .rpDwHead span { color: #5D6B88; font-size: 10.5px; }
+#rpCv[data-tool="measure"], #rpCv[data-tool="hl"], #rpCv[data-tool="vl"] { cursor: crosshair !important; }
+.rpCanvasBox #dwCard { z-index: 6; }

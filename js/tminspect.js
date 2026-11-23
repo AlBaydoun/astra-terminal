@@ -23,7 +23,7 @@ const Inspect = {
   TFS: ['1m', '5m', '15m', '30m', '1h', '4h', '1d'], SEC: { '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '4h': 14400, '1d': 86400 },
   HKEY: 'astra_inspect_hist', MKEY: 'astra_inspect_marks',
   sym: null, tf: '1h', bars: [], P: null, a: 0, b: 0, cur: null, tool: 'pan', rule: { stop: 1, tgt: 2, hold: 48, lots: +(localStorage.getItem('astra_inspect_lots') || 0.1) }, clock: 'mine',
-  L: { ma: true, vol: true, zones: false, sig: false }, probe: null, drag: null, hov: null, playing: false, speed: 4, busy: false,
+  L: { ma: true, vol: true, zones: false, sig: false, trades: true }, LKEY: 'astra_inspect_lines', LCOL: ['#4FD8F7', '#FFB648', '#A78BFA', '#FF6BD6', '#3DDC97'], probe: null, drag: null, hov: null, playing: false, speed: 4, busy: false,
   $: id => document.getElementById(id),
   esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
   px(p){ const a = Math.abs(p), d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 10 ? 3 : a >= 1 ? 4 : 5; return Number(p).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); },
@@ -39,8 +39,9 @@ const Inspect = {
   money(v){ return (v >= 0 ? '+' : '−') + '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: Math.abs(v) < 100 ? 2 : 0, maximumFractionDigits: Math.abs(v) < 100 ? 2 : 0 }); },
   hist(){ try { return JSON.parse(localStorage.getItem(this.HKEY) || '[]') || []; } catch(e){ return []; } },
   marks(){ try { return JSON.parse(localStorage.getItem(this.MKEY) || '{}') || {}; } catch(e){ return {}; } },
-  myMarks(){ return this.marks()[this.sym + '|' + this.tf] || []; },
-  saveMarks(list){ const m = this.marks(); if (list.length) m[this.sym + '|' + this.tf] = list.slice(-60); else delete m[this.sym + '|' + this.tf]; try { localStorage.setItem(this.MKEY, JSON.stringify(m)); } catch(e){} },
+  dkey(){ return Draws.key(this.sym, this.tf); },
+  myMarks(){ return Draws.ms(this.dkey()); },
+  saveMarks(list){ Draws.saveM(this.dkey(), list); },
   remember(){ if (!this.bars.length) return; const h = this.hist().filter(x => !(x.sym === this.sym && x.tf === this.tf)); h.unshift({ sym: this.sym, tf: this.tf, t0: this.bars[this.a].t, t1: this.bars[this.b].t, at: Date.now() }); try { localStorage.setItem(this.HKEY, JSON.stringify(h.slice(0, 30))); } catch(e){} },
 
   /* ---------- the room ---------- */
@@ -51,7 +52,7 @@ const Inspect = {
         '<div class="inMain"><aside class="inRail" id="inRail"></aside><section class="inStage" id="inStage"></section><aside class="inSide" id="inSide"></aside></div></div>';
       host.addEventListener('click', e => this.click(e));
       host.addEventListener('change', e => { const x = e.target; if (x.id === 'inSym'){ const s = this.resolve(x.value); if (s) this.load(s, this.tf); } else if (x.id === 'inJump') this.jumpTo(x.value); else if (x.dataset.rule){ this.rule[x.dataset.rule] = +x.value; if (x.dataset.rule === 'lots') try { localStorage.setItem('astra_inspect_lots', x.value); } catch(er){} this.probe ? this.runProbe() : this.paintSide(); } });
-      host.addEventListener('keydown', e => { if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; if (e.key === ' '){ e.preventDefault(); this.playing ? this.pause() : this.play(); } else if (e.key === 'ArrowRight'){ e.preventDefault(); this.step(1); } else if (e.key === 'ArrowLeft'){ e.preventDefault(); this.step(-1); } else if (e.key === 'Escape'){ this.setTool('pan'); this.probe = null; this.paintSide(); this.draw(); } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'measure' ? 'pan' : 'measure'); else if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'entry' ? 'pan' : 'entry'); else return; e.stopPropagation(); });
+      host.addEventListener('keydown', e => { if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; if (e.key === ' '){ e.preventDefault(); this.playing ? this.pause() : this.play(); } else if (e.key === 'ArrowRight'){ e.preventDefault(); this.step(1); } else if (e.key === 'ArrowLeft'){ e.preventDefault(); this.step(-1); } else if (e.key === 'Escape'){ this.setTool('pan'); this.probe = null; this.paintSide(); this.draw(); } else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'measure' ? 'pan' : 'measure'); else if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'entry' ? 'pan' : 'entry'); else if ((e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'hl' ? 'pan' : 'hl'); else if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.altKey) this.setTool(this.tool === 'vl' ? 'pan' : 'vl'); else return; e.stopPropagation(); });
       window.addEventListener('resize', () => { if (this.host && this.host.offsetParent !== null) this.draw(); });
       this.paintStage();
     }
@@ -63,7 +64,7 @@ const Inspect = {
   resolve(v){ v = String(v || '').trim(); if (!v) return null; const all = Feed.bridge && Feed.bridge.symbols ? [...Feed.bridge.symbols] : []; return all.find(s => s === v) || all.find(s => this.base(s).toUpperCase() === this.base(v).toUpperCase()) || (all.length ? null : v); },
   async load(sym, tf, at, more){
     if (this.busy) return; this.busy = true; this.pause(); const S = this.SEC[tf] || 3600, keep = more && this.bars.length ? this.bars[this.a].t : null;
-    if (!more){ this.sym = sym; this.tf = tf; this.bars = []; this.P = null; this.probe = null; this.cur = null; this.sigCache = null; }
+    if (!more){ Draws.sel = null; Draws.closeCard(); this.sym = sym; this.tf = tf; this.bars = []; this.P = null; this.probe = null; this.cur = null; this.sigCache = null; }
     this.paintStage(); this.msg('Reading ' + (more ? 'older candles' : 'the history') + '…');
     try { const want = more ? Math.min(60000, Math.max(3000, this.bars.length * 2)) : (S >= 86400 ? 3000 : 5000), from = more && this.bars.length ? this.bars[0].t - want * S * 1.6 : null;
       const raw = await API.klines(sym, tf, want, from ? { from: Math.floor(from) } : undefined); if (this.sym !== sym || this.tf !== tf) return;
@@ -74,7 +75,7 @@ const Inspect = {
       else { this.b = this.bars.length - 1; this.a = Math.max(0, this.b - 160); }
       if (at) this.centre(at);
     } catch(e){ this.msg('Could not read the candles: ' + this.esc(e.message || e)); this.busy = false; return; }
-    this.busy = false; this.remember(); this.paintStage(); this.paintRail(); this.paintSide(); this.draw();
+    this.busy = false; this.remember(); this.paintStage(); this.paintRail(); this.paintSide(); this.draw(); this.loadTrades();
   },
   prep(){ const B = this.bars; if (typeof ProInd === 'undefined' || B.length < 30){ this.P = null; return; }
     this.P = ProInd.prep(B.map(b => ({ time: b.t, open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v }))); const P = this.P;
@@ -91,8 +92,10 @@ const Inspect = {
     st.innerHTML = '<div class="inTools"><span class="inSeg"><button type="button" class="inTool' + (this.tool === 'pan' ? ' on' : '') + '" data-i="tool:pan" title="Move and zoom the chart (drag, wheel)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3m3-3 3 3M12 21l-3-3m3 3 3-3M3 12l3-3m-3 3 3 3M21 12l-3-3m3 3-3 3"/></svg>Move</button>' +
         '<button type="button" class="inTool' + (this.tool === 'measure' ? ' on' : '') + '" data-i="tool:measure" title="Drag from one point to another (M)"><svg viewBox="0 0 24 24"><path d="M3 17 17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2"/></svg>Measure</button>' +
         '<button type="button" class="inTool' + (this.tool === 'entry' ? ' on' : '') + '" data-i="tool:entry" title="Click a candle: entries at its top, middle and bottom (E)"><svg viewBox="0 0 24 24"><path d="M12 3v18M7 7h10v10H7zM4 7h3M4 12h3M4 17h3"/></svg>From entry</button>' +
+        '<button type="button" class="inTool' + (this.tool === 'hl' ? ' on' : '') + '" data-i="tool:hl" title="Click the chart: a glowing price line across the whole chart (H). Right-click a line to remove it."><svg viewBox="0 0 24 24"><path d="M3 12h18M6 8v8M18 8v8"/></svg>Price line</button>' +
+        '<button type="button" class="inTool' + (this.tool === 'vl' ? ' on' : '') + '" data-i="tool:vl" title="Click a candle: a glowing time line from top to bottom (V). Right-click a line to remove it."><svg viewBox="0 0 24 24"><path d="M12 3v18M8 6h8M8 18h8"/></svg>Time line</button>' +
         '<button type="button" class="inTool" data-i="clear" title="Remove the measurements and the entry test on this chart">Clear</button></span>' +
-      '<span class="inSeg"><small>SHOW</small>' + [['ma', 'Averages'], ['vol', 'Volume'], ['zones', 'Zones'], ['sig', 'Signals']].map(l => '<button type="button" class="inChip' + (this.L[l[0]] ? ' on' : '') + '" data-i="lay:' + l[0] + '">' + l[1] + '</button>').join('') + '</span>' +
+      '<span class="inSeg"><small>SHOW</small>' + [['trades', 'My trades'], ['ma', 'Averages'], ['vol', 'Volume'], ['zones', 'Zones'], ['sig', 'Signals']].map(l => '<button type="button" class="inChip' + (this.L[l[0]] ? ' on' : '') + '" data-i="lay:' + l[0] + '">' + l[1] + '</button>').join('') + '</span>' +
       '<span class="inSeg"><small>CLOCK</small><button type="button" class="inChip' + (this.clock === 'mine' ? ' on' : '') + '" data-i="clock:mine" title="Your computer’s time">Mine</button><button type="button" class="inChip' + (this.clock === 'broker' ? ' on' : '') + '" data-i="clock:broker" title="The broker’s server time, as MetaTrader shows it">Broker</button></span>' +
       '<span class="inGrow"></span><button type="button" class="inGhost" data-i="png" title="Save this picture">Picture</button><button type="button" class="inGhost" data-i="rec" id="inRec" title="Record the chart while you work, as a video">Record</button><button type="button" class="inGhost" data-i="csv" title="The visible candles and your measurements as a spreadsheet file">CSV</button><button type="button" class="inGhost" data-i="chart" title="Open this instrument on the live chart">Live chart</button></div>' +
       '<div class="inCanvasBox"><canvas id="inCv"></canvas><div class="inHud" id="inHud"></div><div class="inMsg" id="inMsg" hidden></div></div>' +
@@ -110,6 +113,7 @@ const Inspect = {
       const ns = Math.max(20, Math.min(2000, Math.round(span * dz))), mid = this.a + f * span; this.a = Math.round(mid - f * ns); this.b = this.a + ns; this.clamp(); this.draw(); }, { passive: false });
     cv.addEventListener('mousedown', e => this.down(e)); window.addEventListener('mousemove', this._mv || (this._mv = e => this.move(e))); window.addEventListener('mouseup', this._mu || (this._mu = e => this.up(e)));
     cv.addEventListener('mouseleave', () => { this.hov = null; this.draw(); });
+    cv.addEventListener('contextmenu', e => { const p = this.at(e), g = this.dg(), h = p && g ? Draws.hit(g, this.dkey(), p.x, p.y) : null; if (!h) return; e.preventDefault(); Draws.remove(this.dkey(), h.id); this.paintRail(); this.draw(); });
     const map = this.$('inMap'); map.addEventListener('mousedown', e => { const r = map.getBoundingClientRect(), n2 = this.bars.length, k = Math.round((e.clientX - r.left) / r.width * (n2 - 1)), span = this.b - this.a; this.mapDrag = { x: e.clientX, a: this.a, inside: k >= this.a && k <= this.b }; if (!this.mapDrag.inside){ this.a = k - Math.round(span / 2); this.b = this.a + span; this.clamp(); this.draw(); this.mapDrag.a = this.a; } });
   },
   iso(raw){ const d = new Date((raw - this.shift(raw)) * 1000), z = n => String(n).padStart(2, '0'); return this.clock === 'broker' ? d.getUTCFullYear() + '-' + z(d.getUTCMonth() + 1) + '-' + z(d.getUTCDate()) + 'T' + z(d.getUTCHours()) + ':' + z(d.getUTCMinutes()) : d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()); },
@@ -125,19 +129,44 @@ const Inspect = {
   setTool(t){ this.tool = t; this.host.querySelectorAll('[data-i^="tool:"]').forEach(b => b.classList.toggle('on', b.dataset.i === 'tool:' + t)); const cv = this.$('inCv'); if (cv) cv.dataset.tool = t; },
   at(e){ const g = this.g, cv = this.$('inCv'); if (!g || !cv) return null; const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; if (x < 0 || y < 0 || x > g.pw + 6 || y > g.mainH) return null; const i = Math.max(0, Math.min(this.bars.length - 1, Math.round((x - 6) / g.cw - 0.5) + this.a)); return { i, x, y, p: g.hi - (y - 8) / (g.mainH - 16) * (g.hi - g.lo) }; },
   down(e){ const p = this.at(e); if (!p) return; this.host.focus({ preventScroll: true });
-    if (this.tool === 'measure'){ this.drag = { kind: 'm', A: { i: p.i, p: p.p }, B: { i: p.i, p: p.p } }; }
-    else if (this.tool === 'entry'){ this.probe = { i: Math.min(p.i, this.lastShown()) }; this.runProbe(); }
+    if (this.tool !== 'entry' && this.dg() && Draws.down(this.dg(), this.dkey(), this.tool, p.x, p.y)){ this.draw(); return; }
+    if (this.tool === 'entry'){ this.probe = { i: Math.min(p.i, this.lastShown()) }; this.runProbe(); }
     else this.drag = { kind: 'pan', x: e.clientX, a: this.a, b: this.b }; },
   move(e){ if (this.mapDrag){ const map = this.$('inMap'); if (!map) return; const r = map.getBoundingClientRect(), d = Math.round((e.clientX - this.mapDrag.x) / r.width * this.bars.length), span = this.b - this.a; this.a = this.mapDrag.a + d; this.b = this.a + span; this.clamp(); this.draw(); return; }
-    if (!this.host || this.host.offsetParent === null) return; const p = this.at(e);
+    if (!this.host || this.host.offsetParent === null) return;
+    if (Draws.op && this.dg()){ const r = this.$('inCv').getBoundingClientRect(); Draws.move(this.dg(), e.clientX - r.left, e.clientY - r.top); this.draw(); return; }
+    const p = this.at(e);
     if (this.drag && this.drag.kind === 'pan'){ const d = Math.round((this.drag.x - e.clientX) / this.g.cw); this.a = this.drag.a + d; this.b = this.drag.b + d; this.clamp(); this.draw(); return; }
-    if (this.drag && this.drag.kind === 'm' && p){ this.drag.B = { i: p.i, p: p.p }; }
     const h = p ? p.i : null; if (h !== this.hov || (p && this.hy !== p.y) || this.drag){ this.hov = h; this.hy = p ? p.y : null; if (!this.playing) this.draw(); } },
-  up(){ if (this.mapDrag){ this.mapDrag = null; this.remember(); return; } if (!this.drag) return; const d = this.drag; this.drag = null;
-    if (d.kind === 'm' && (d.A.i !== d.B.i || Math.abs(d.A.p - d.B.p) > 0)){ const B = this.bars, list = this.myMarks(); list.push({ t0: B[d.A.i].t, p0: d.A.p, t1: B[d.B.i].t, p1: d.B.p, at: Date.now() }); this.saveMarks(list); this.paintRail(); }
+  up(e){ if (this.mapDrag){ this.mapDrag = null; this.remember(); return; }
+    if (Draws.op && this.host && this.host.offsetParent !== null && this.dg()){ const cv = this.$('inCv'), r = cv.getBoundingClientRect(); Draws.up(cv.parentElement, this.dg(), (e ? e.clientX : 0) - r.left, (e ? e.clientY : 0) - r.top, () => { this.paintRail(); this.draw(); }); return; }
+    if (!this.drag) return; const d = this.drag; this.drag = null;
     if (d.kind === 'pan') this.remember(); this.draw(); },
   lastShown(){ return this.cur != null ? this.cur : this.bars.length - 1; },
 
+
+  /* ---------- lines that run across the whole chart ---------- */
+  myLines(){ return Draws.ls(this.dkey()); },
+  saveLines(L){ Draws.saveL(this.dkey(), L); },
+  /* the measuring tape sticks to a line when it comes within a few pixels of it */
+  /* the geometry the shared drawings need */
+  dg(){ const g = this.g, B = this.bars, n = B.length; if (!g || !n) return null; const cl = i => Math.max(0, Math.min(n - 1, i));
+    return { X: g.X, Y: g.Y, I: x => cl(Math.round((x - 6) / g.cw - 0.5) + this.a), P: y => g.hi - (y - 8) / (g.mainH - 16) * (g.hi - g.lo), idx: t => this.idx(t), T: i => B[cl(i)].t, w: g.W - g.padR, h: g.mainH, date: (t, f) => this.date(t, f), px: v => this.px(v), dur: v => this.dur(v), pv: this.pv(), ccy: this.ccy(), last: B[this.lastShown()].c }; },
+
+  /* ---------- your trades on this instrument: their entries and exits ---------- */
+  async loadTrades(){ this.tr = []; if (typeof Autopsy === 'undefined' || !this.bars.length) return; try { if (!Autopsy.trades || !Autopsy.trades.length) await Autopsy.collect(); } catch(e){} const me = this.base(this.sym).toUpperCase(), B = this.bars;
+    this.tr = (Autopsy.trades || []).filter(t => this.base(t.sym).toUpperCase() === me && t.entry > 0).map(t => { const r0 = Autopsy.raw(t, t.t0), r1 = Autopsy.raw(t, t.t1); if (r1 < B[0].t || r0 > B[B.length - 1].t + 86400) return null; return { t, iE: this.idx(r0), iX: this.idx(r1) }; }).filter(Boolean); this.draw(); },
+  drawTrades(c, X, Y, cw, mainH){ const T = (this.tr || []).filter(x => x.iX >= this.a && x.iE <= this.b); this._trView = T; for (const { t, iE, iX } of T){ const x0 = X(iE), x1 = X(iX), y0 = Y(t.entry), y1 = Y(t.exit), col = t.pnl > 0 ? '61,220,151' : '255,107,122';
+      const g = c.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, 'rgba(79,216,247,.75)'); g.addColorStop(1, 'rgba(' + col + ',.85)'); c.strokeStyle = g; c.lineWidth = 1.6; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.setLineDash([]);
+      c.fillStyle = 'rgba(' + col + ',.06)'; c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.max(2, Math.abs(x1 - x0)), Math.max(2, Math.abs(y1 - y0))); } },
+  beacons(){ if (typeof Beacon === 'undefined') return; const box = this.$('inCv') && this.$('inCv').parentElement, g = this.g; if (!box || !g) return; const T = this.L.trades ? (this._trView || []) : [], many = T.length > 6, items = [];
+    const B = this.bars, hitAt = (t, iE, price, up) => { for (let k = iE + 1; k < B.length; k++) if (up ? B[k].h >= price : B[k].l <= price) return k; return null; };
+    for (const { t, iE, iX } of T.slice(-24)){ const mv = (t.exit - t.entry) * t.dir, pct = mv / t.entry * 100, focus = this.focusTr === t.id, go = () => { if (this.focusTr !== t.id){ this.focusTr = t.id; this.draw(); if (typeof toast === 'function') toast('Click it again to open this trade in the Replay studio', 'info'); return; } if (typeof Autopsy !== 'undefined'){ Autopsy.want = t.id; Face.go('autopsy'); } }, mini = many && !focus;
+      if (focus){ const pmv = d => (d >= 0 ? '+' : '') + (d / t.entry * 100).toFixed(2) + '%'; if (t.tp > 0){ const k = hitAt(t, iE, t.tp, t.dir > 0); items.push({ key: 't' + t.id, kind: 'target', x: g.X(k != null ? k : iE), y: g.Y(t.tp), color: '#3DDC97', tag: k != null ? 'TARGET HIT' : 'TARGET', sub: this.px(t.tp) + ' · ' + pmv(Math.abs(t.tp - t.entry)), dim: k == null, flip: k == null, noLevel: true, onClick: go }); }
+        if (t.sl > 0){ const k = hitAt(t, iE, t.sl, t.dir < 0); items.push({ key: 's' + t.id, kind: 'stop', x: g.X(k != null ? k : iE), y: g.Y(t.sl), color: '#FF6B7A', tag: k != null ? 'STOP HIT' : 'STOP', sub: this.px(t.sl) + ' · ' + pmv(-Math.abs(t.entry - t.sl)), dim: k == null, flip: k == null, noLevel: true, onClick: go }); } }
+      items.push({ key: 'e' + t.id, kind: 'entry', x: g.X(iE), y: g.Y(t.entry), color: '#4FD8F7', tag: mini ? '' : 'ENTRY · ' + (t.dir > 0 ? 'BUY' : 'SELL'), sub: mini ? '' : this.px(t.entry) + ' · ' + (t.botName || t.bot), title: 'Entry · ' + (t.dir > 0 ? 'buy' : 'sell') + ' ' + this.px(t.entry) + ' · ' + (t.botName || t.bot) + ' · click to bring this trade forward', mini, noLevel: true, onClick: go });
+      items.push({ key: 'x' + t.id, kind: 'exit', x: g.X(iX), y: g.Y(t.exit), color: t.pnl > 0 ? '#3DDC97' : '#FF6B7A', title: 'Exit ' + this.px(t.exit) + ' · ' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% · click to bring this trade forward', tag: mini ? '' : 'EXIT', sub: mini ? '' : this.px(t.exit) + ' · ' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' + (t.pnl != null ? ' · ' + (t.pnl >= 0 ? '+$' : '−$') + Math.abs(t.pnl).toFixed(2) : ''), mini, noLevel: true, onClick: go }); }
+    Beacon.render(box, items.filter(it => it.x >= 0 && it.x <= g.pw + 6), { w: g.pw + 6, h: g.mainH }); },
   /* ---------- a measurement, in words ---------- */
   measure(m){ const B = this.bars, i0 = this.idx(m.t0), i1 = this.idx(m.t1), lo = Math.min(i0, i1), hi = Math.max(i0, i1); let mx = -Infinity, mn = Infinity; for (let i = lo; i <= hi; i++){ mx = Math.max(mx, B[i].h); mn = Math.min(mn, B[i].l); }
     const d = m.p1 - m.p0, pv = this.pv(); return { i0, i1, d, pct: d / m.p0 * 100, n: Math.abs(i1 - i0), sec: m.t1 - m.t0, money: pv ? d * pv : null, mx, mn }; },
@@ -172,7 +201,7 @@ const Inspect = {
   syncPlay(){ const b = this.$('inPlayB'); if (b){ b.textContent = this.playing ? '❚❚' : '▶'; b.classList.toggle('on', this.playing); } },
 
   /* ---------- drawing ---------- */
-  draw(){ if (!this.host || this.host.offsetParent === null) return; this.drawMain(); this.drawMap(); this.hud(); const sp = this.$('inSpan'); if (sp && this.bars.length){ const B = this.bars, a = Math.max(0, this.a), b = Math.min(B.length - 1, this.b); sp.textContent = this.date(B[a].t) + ' → ' + this.date(B[b].t) + ' · ' + (b - a + 1) + ' candles · ' + this.dur(B[b].t - B[a].t); } },
+  draw(){ if (!this.host || this.host.offsetParent === null) return; this.drawMain(); if (this._railStale) this.paintRail(); this.beacons(); this.drawMap(); this.hud(); const sp = this.$('inSpan'); if (sp && this.bars.length){ const B = this.bars, a = Math.max(0, this.a), b = Math.min(B.length - 1, this.b); sp.textContent = this.date(B[a].t) + ' → ' + this.date(B[b].t) + ' · ' + (b - a + 1) + ' candles · ' + this.dur(B[b].t - B[a].t); } },
   drawMain(){
     const cv = this.$('inCv'); if (!cv) return; const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, Hh = cv.clientHeight; if (W < 80 || Hh < 80) return; cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr); const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, Hh);
     const B = this.bars, C = this.C; if (!B.length){ this.g = null; return; } const a = this.a, b = this.b, last = this.lastShown(), n = b - a + 1, padR = 76, mainH = Hh - 24, pw = W - padR - 6, cw = pw / n, X = i => 6 + (i - a + 0.5) * cw;
@@ -194,14 +223,6 @@ const Inspect = {
     if (this.L.sig && this.P){ const S = this.sigs(), put = {}; c.font = '600 9px JetBrains Mono, monospace'; c.textAlign = 'center'; const CODE = typeof Replay !== 'undefined' ? Replay.CODE : {};
       for (const id of Object.keys(S)){ const arr = S[id].arr; for (let i = Math.max(0, a); i <= Math.min(b, last); i++){ const d = arr[i]; if (!d) continue; const k = i + '|' + d, m = put[k] = (put[k] || 0) + 1; if (m > 3) continue; const y = d > 0 ? Y(B[i].l) + 10 + (m - 1) * 10 : Y(B[i].h) - 10 - (m - 1) * 10; c.fillStyle = d > 0 ? '#7BE8B8' : '#FF9AA4'; c.fillText(CODE[id] || id, X(i), y); } } }
     /* measurements */
-    const drawM = (m, live) => { const r = this.measure(m), x0 = X(r.i0), x1 = X(r.i1), y0 = Y(m.p0), y1 = Y(m.p1), up = r.d >= 0, col = up ? C.up : C.dn;
-      c.fillStyle = up ? 'rgba(61,220,151,.10)' : 'rgba(255,107,122,.10)'; c.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0) || 1, Math.abs(y1 - y0) || 1); c.strokeStyle = col; c.lineWidth = 1; c.setLineDash(live ? [4, 3] : []); c.strokeRect(Math.min(x0, x1) + 0.5, Math.min(y0, y1) + 0.5, Math.abs(x1 - x0), Math.abs(y1 - y0)); c.setLineDash([]);
-      c.lineWidth = 1.6; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); const ah = Math.atan2(y1 - y0, x1 - x0); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - 9 * Math.cos(ah - 0.4), y1 - 9 * Math.sin(ah - 0.4)); c.lineTo(x1 - 9 * Math.cos(ah + 0.4), y1 - 9 * Math.sin(ah + 0.4)); c.closePath(); c.fillStyle = col; c.fill();
-      const lines = [this.sg(r.d, Math.abs(r.d) >= 100 ? 1 : 4) + '  (' + this.sg(r.pct, 2, '%') + ')' + (r.money != null ? '  ' + this.sg(r.money, 2) + ' ' + this.ccy() + '/lot' : ''), r.n + ' candles · ' + this.dur(r.sec), this.date(m.t0, true) + '  →', this.date(m.t1, true)];
-      c.font = '600 11px JetBrains Mono, monospace'; const w = Math.max(...lines.map(s => c.measureText(s).width)) + 18, bx = Math.max(4, Math.min(W - padR - w - 4, (x0 + x1) / 2 - w / 2)), by = up ? Math.max(4, Math.min(y0, y1) - 76) : Math.min(mainH - 74, Math.max(y0, y1) + 8);
-      c.fillStyle = 'rgba(6,10,18,.92)'; c.strokeStyle = col; c.beginPath(); c.roundRect ? c.roundRect(bx, by, w, 68, 9) : c.rect(bx, by, w, 68); c.fill(); c.stroke(); c.textAlign = 'left';
-      lines.forEach((s, k) => { c.fillStyle = k === 0 ? col : k === 1 ? C.text : C.dim; c.font = (k === 0 ? '700 ' : '500 ') + '11px JetBrains Mono, monospace'; c.fillText(s, bx + 9, by + 12 + k * 15); }); };
-    for (const m of this.myMarks()) drawM(m); if (this.drag && this.drag.kind === 'm'){ const d = this.drag; drawM({ t0: B[d.A.i].t, p0: d.A.p, t1: B[d.B.i].t, p1: d.B.p }, true); }
     /* the entry test: three prices on the candle, labels spread apart so they stay readable */
     if (this.probe && this.probe.rows){ const pr = this.probe, x = X(pr.i), k = B[pr.i]; c.strokeStyle = C.am; c.lineWidth = 1; c.setLineDash([2, 3]); c.strokeRect(x - cw / 2 - 2, Y(k.h) - 3, cw + 4, Y(k.l) - Y(k.h) + 6); c.setLineDash([]);
       const want = pr.rows.map(r => Y(r.price)), gap = 40, ys = want.slice(); for (let j = 1; j < 3; j++) if (ys[j] - ys[j - 1] < gap) ys[j] = ys[j - 1] + gap; const shift = Math.max(0, ys[2] - (mainH - 26)); for (let j = 0; j < 3; j++) ys[j] -= shift; for (let j = 0; j < 3; j++) ys[j] = Math.max(22, ys[j]);
@@ -212,6 +233,7 @@ const Inspect = {
         c.fillStyle = C.am; c.font = '700 10px Inter, sans-serif'; c.textAlign = 'left'; c.fillText(r.name, lx + 2, yl - 4); c.fillStyle = C.text; c.font = '500 10px JetBrains Mono, monospace'; c.fillText(this.px(r.price), lx + 2, yl + 8); cell(r.buy, 1, 52); cell(r.sell, -1, 178); });
       /* where the buy from the middle would have ended */
       const mid = pr.rows[1]; for (const [res, dir] of [[mid.buy, 1], [mid.sell, -1]]){ if (!res || res.k == null || res.k <= pr.i) continue; const xe = X(res.k); if (xe < 0 || xe > W - padR) continue; c.strokeStyle = dir > 0 ? 'rgba(61,220,151,.35)' : 'rgba(255,107,122,.35)'; c.setLineDash([3, 4]); c.beginPath(); c.moveTo(x, Y(mid.price)); c.lineTo(xe, Y(mid.price + dir * res.r * res.risk)); c.stroke(); c.setLineDash([]); } }
+    if (this.dg()) Draws.draw(c, this.dg(), this.dkey()); if (this.L.trades) this.drawTrades(c, X, Y, cw, mainH);
     /* the playback cursor and the hidden future */
     if (this.cur != null){ const x = X(this.cur) + cw / 2; c.fillStyle = 'rgba(79,216,247,.05)'; c.fillRect(x, 0, W - padR - x, mainH); c.strokeStyle = C.cy; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, mainH); c.stroke(); c.fillStyle = C.cy; c.font = '600 10px Inter, sans-serif'; c.textAlign = 'left'; c.fillText('the future is hidden', x + 8, 14); }
     c.restore();
@@ -231,8 +253,8 @@ const Inspect = {
       (this.tool !== 'pan' ? '<i class="inHint">' + (this.tool === 'measure' ? 'Drag from one point to another' : 'Click a candle to test entries at its top, middle and bottom') + '</i>' : ''); },
 
   /* ---------- the left rail: history and measurements ---------- */
-  paintRail(){ const el = this.$('inRail'); if (!el) return; const h = this.hist(), ms = this.myMarks();
-    el.innerHTML = '<small class="inCap">YOUR MEASUREMENTS HERE</small>' + (ms.length ? ms.map((m, k) => { const r = this.measure(m); return '<div class="inMRow"><button type="button" data-i="goto:' + m.t0 + '"><b class="' + (r.d >= 0 ? 'up' : 'dn') + '">' + this.sg(r.pct, 2, '%') + '</b><span>' + r.n + ' candles · ' + this.dur(r.sec) + '</span><small>' + this.date(m.t0) + '</small></button><button type="button" class="x" data-i="delm:' + k + '" title="Remove">✕</button></div>'; }).join('') : '<p class="inMuted">Choose <b>Measure</b> and drag on the chart.</p>') +
+  paintRail(){ const el = this.$('inRail'); if (!el) return; const h = this.hist(), g = this.dg(); this._railStale = !g;
+    el.innerHTML = '<small class="inCap">YOUR DRAWINGS HERE</small><div class="dwList">' + (g ? Draws.listHtml(g, this.dkey()) : '') + '</div><p class="inMuted">Click a drawing on the chart to move it, hide it or remove it.</p>' +
       '<small class="inCap">RECENTLY INSPECTED</small>' + (h.length ? h.map(x => '<button type="button" class="inHRow' + (x.sym === this.sym && x.tf === this.tf ? ' on' : '') + '" data-i="hist:' + this.esc(x.sym) + '|' + x.tf + '|' + x.t1 + '"><b>' + this.esc(this.base(x.sym)) + '</b><em>' + x.tf + '</em><small>' + new Date(x.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + new Date(x.at).toTimeString().slice(0, 5) + '</small></button>').join('') : '<p class="inMuted">Nothing yet.</p>'); },
 
   /* ---------- the right side: the entry test and the signals ---------- */
@@ -249,12 +271,13 @@ const Inspect = {
         : '<p class="inMuted">No signal fired on this candle or the three before it.</p>') + '</div>' + ruleHtml; },
 
   /* ---------- clicks ---------- */
-  click(e){ const b = e.target.closest('[data-i]'); if (!b || !this.host.contains(b)) return; const i = b.dataset.i.indexOf(':'), k = i < 0 ? b.dataset.i : b.dataset.i.slice(0, i), v = i < 0 ? '' : b.dataset.i.slice(i + 1);
+  click(e){ const dl = typeof Draws !== 'undefined' && this.$('inRail') && this.$('inRail').contains(e.target) ? Draws.listClick(e, this.dkey()) : null; if (dl){ if (dl.k === 'go'){ this.centre(+dl.v); } this.paintRail(); this.draw(); return; }
+    const b = e.target.closest('[data-i]'); if (!b || !this.host.contains(b)) return; const i = b.dataset.i.indexOf(':'), k = i < 0 ? b.dataset.i : b.dataset.i.slice(0, i), v = i < 0 ? '' : b.dataset.i.slice(i + 1);
     if (k === 'tf') this.load(this.sym, v);
     else if (k === 'here') this.load(STORE.symbol, this.TFS.includes(STORE.tf) ? STORE.tf : this.tf);
     else if (k === 'classic'){ Inspect._pass = true; try { TradeReview.current(); } catch(er){} Inspect._pass = false; }
-    else if (k === 'tool') this.setTool(v);
-    else if (k === 'clear'){ this.saveMarks([]); this.probe = null; this.paintRail(); this.paintSide(); this.draw(); }
+    else if (k === 'tool'){ this.setTool(v); Draws.closeCard(); }
+    else if (k === 'clear'){ this.saveMarks([]); this.saveLines([]); Draws.sel = null; Draws.closeCard(); this.probe = null; this.paintRail(); this.paintSide(); this.draw(); }
     else if (k === 'lay'){ this.L[v] = !this.L[v]; b.classList.toggle('on', this.L[v]); this.draw(); }
     else if (k === 'clock'){ this.clock = v; this.paintStage(); this.paintRail(); this.paintSide(); this.draw(); }
     else if (k === 'span'){ const B = this.bars; if (!B.length) return; const end = this.b >= B.length - 1 ? B.length - 1 : Math.min(B.length - 1, this.b); if (+v === 0){ this.a = 0; this.b = B.length - 1; } else { this.b = end; this.a = Math.max(0, this.idx(B[end].t - +v)); if (this.b - this.a < 20) this.a = Math.max(0, this.b - 20); } this.draw(); }
@@ -266,6 +289,7 @@ const Inspect = {
     else if (k === 'step') this.step(+v);
     else if (k === 'speed'){ this.speed = +v; b.parentElement.querySelectorAll('.inChip').forEach(x => x.classList.toggle('on', x === b)); if (this.playing) this.play(); }
     else if (k === 'goto'){ this.centre(+v); this.draw(); }
+    else if (k === 'dell'){ const l = this.myLines(); l.splice(+v, 1); this.saveLines(l); this.paintRail(); this.draw(); }
     else if (k === 'delm'){ const l = this.myMarks(); l.splice(+v, 1); this.saveMarks(l); this.paintRail(); this.draw(); }
     else if (k === 'hist'){ const [s, tf, t1] = v.split('|'); this.load(s, tf, +t1); }
     else if (k === 'unprobe'){ this.probe = null; this.paintSide(); this.draw(); }
