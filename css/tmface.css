@@ -768,3 +768,40 @@ html[data-face="tm"][data-tmroom="chart"].tsSideAuto #tsSideHandle { display: bl
 #tsSideHandle:hover i { opacity: 1; width: 4px; } @keyframes tsEdge { 50% { opacity: .85; } }
 html.tsSideOpen #tsSideHandle { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { html[data-face="tm"].tsSideAuto #sidebar, #tsSideHandle i { transition: none; animation: none; } }
+
+/* ===== side panel: Clock tab and the quick-look card (js/tmsidex.js) ===== */
+html[data-face="tm"] #sideTabs { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+html[data-face="tm"] #sideTabs button[data-tab]:nth-child(n+10)::after { left: auto; right: 0; transform: translate(0, -4px); }
+#tab-tsclock.active { display: block; }
+.tcBody { padding: 10px; display: grid; gap: 10px; }
+.tcHead { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; gap: 10px; padding: 8px; border-radius: 14px; border: 1px solid #16223A; background: radial-gradient(120% 100% at 0% 50%, rgba(79,216,247,.08), transparent 60%), rgba(8,14,28,.5); }
+.tcDial { width: 132px; height: 132px; } .tcDial text { fill: #5D6B88; font: 600 8px JetBrains Mono, monospace; } .tcHand, .tcSecHand { transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+.tcNowBox { display: grid; gap: 3px; min-width: 0; } .tcNowBox > span { color: #9FB3D6; font-size: 11px; } .tcNowBox > em { color: #5D6B88; font: 10px JetBrains Mono, monospace; font-style: normal; }
+.tcTime { font: 700 30px/1 JetBrains Mono, monospace; color: #E6EEFF; letter-spacing: -.02em; } .tcTime i { font-style: normal; color: #4FD8F7; animation: tcBlink 1s steps(2) infinite; } .tcTime small { font-size: 13px; color: #5D6B88; margin-left: 3px; } @keyframes tcBlink { 50% { opacity: .25; } }
+.tcMini { display: flex; gap: 8px; margin-top: 3px; } .tcMini span { color: #5D6B88; font-size: 10px; } .tcMini b { color: #C9D4EA; font: 600 10.5px JetBrains Mono, monospace; }
+.tcOpenN { color: #7C8BA8; font-size: 10.5px; } .tcOpenN b { color: #3DDC97; font: 700 12px JetBrains Mono, monospace; }
+.tcCities { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.tcCity { position: relative; display: grid; justify-items: center; gap: 1px; padding: 7px 2px 6px; border-radius: 10px; border: 1px solid #16223A; background: rgba(255,255,255,.02); overflow: hidden; }
+.tcCity i { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--c); opacity: .25; } .tcCity.on { border-color: color-mix(in srgb, var(--c) 50%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); } .tcCity.on i { opacity: 1; box-shadow: 0 0 10px var(--c); }
+.tcCity span { color: #9FB3D6; font: 600 9.5px Inter, sans-serif; } .tcCity b { color: #E6EEFF; font: 700 13px JetBrains Mono, monospace; } .tcCity small { color: #5D6B88; font-size: 9px; } .tcCity.on small { color: var(--c); font-weight: 700; }
+.tcCap { color: #5D6B88; font: 700 9.5px Inter, sans-serif; letter-spacing: .08em; margin-bottom: -6px; }
+.tcScale { display: flex; justify-content: space-between; padding: 0 2px 0 110px; color: #3F4D69; font: 9px JetBrains Mono, monospace; margin-bottom: -6px; }
+.tcRows { display: grid; gap: 4px; }
+.tcRow { padding: 7px 8px; border-radius: 10px; border: 1px solid #16223A; border-left: 3px solid color-mix(in srgb, var(--c) 35%, transparent); background: rgba(255,255,255,.015); cursor: pointer; transition: background .15s, border-color .15s; animation: tsIn .3s both; }
+.tcRow:hover { background: rgba(79,216,247,.05); } .tcRow.on { border-left-color: var(--c); }
+.tcRowTop { display: flex; align-items: center; gap: 6px; } .tcIc { width: 18px; text-align: center; font-size: 12px; } .tcRowTop b { flex: 1; min-width: 0; color: #E6EEFF; font: 600 11.5px Inter, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcRowTop u { text-decoration: none; padding: 1px 6px; border-radius: 5px; font: 700 8.5px Inter, sans-serif; letter-spacing: .06em; color: #7C8BA8; background: rgba(124,139,168,.14); } .tcRow.on .tcRowTop u { color: #04121A; background: var(--c); }
+.tcWhen { color: #5D6B88; font-size: 9.5px; white-space: nowrap; } .tcWhen b { color: #C9D4EA; font: 600 11px JetBrains Mono, monospace; }
+.tcBar { position: relative; height: 8px; margin: 6px 0 0 24px; border-radius: 4px; background: rgba(126,156,224,.07); overflow: visible; }
+.tcBar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: color-mix(in srgb, var(--c) 55%, transparent); } .tcRow.on .tcBar i { background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 60%, transparent); }
+.tcNow { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: #E6EEFF; box-shadow: 0 0 6px #fff; }
+.tcSyms { margin: 8px 0 2px 24px; } .tcSyms small { display: block; color: #7C8BA8; font-size: 10px; margin-bottom: 5px; } .tcSyms div { display: flex; flex-wrap: wrap; gap: 3px; } .tcSyms button { padding: 2px 7px; border-radius: 6px; border: 1px solid #1F2C48; background: #0B1324; color: #C9D4EA; font: 600 10px Inter, sans-serif; cursor: pointer; } .tcSyms button:hover { border-color: var(--c); color: #fff; } .tcSyms em { color: #5D6B88; font-size: 10px; font-style: normal; align-self: center; }
+.tcNote { margin: 0; color: #4A5875; font-size: 10px; line-height: 1.4; }
+#tsClockPop { position: fixed; z-index: 96; width: 270px; padding: 12px; border-radius: 14px; border: 1px solid rgba(79,216,247,.35); background: linear-gradient(180deg, rgba(14,22,42,.98), rgba(8,13,26,.98)); box-shadow: 0 20px 50px rgba(0,0,0,.6); color: #E6EEFF; font: 11px Inter, sans-serif; overflow: hidden; }
+#tsClockPop[hidden] { display: none; } #tsClockPop.go { animation: tmPopIn .25s cubic-bezier(.2,.8,.2,1); }
+.tcpHead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; } .tcpHead b { font: 700 18px JetBrains Mono, monospace; } .tcpHead span { color: #FFB648; font-weight: 600; }
+.tcpCities { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin-bottom: 8px; } .tcpCities div { position: relative; display: grid; justify-items: center; padding: 5px 0; border-radius: 8px; background: rgba(255,255,255,.03); } .tcpCities i { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--c); opacity: .25; } .tcpCities .on { background: color-mix(in srgb, var(--c) 12%, transparent); } .tcpCities .on i { opacity: 1; }
+.tcpCities span { color: #9FB3D6; font-size: 9px; } .tcpCities b { font: 700 11.5px JetBrains Mono, monospace; }
+.tcpRows { display: grid; gap: 2px; } .tcpRows div { display: flex; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 6px; border-left: 2px solid transparent; color: #7C8BA8; } .tcpRows div.on { border-left-color: var(--c); color: #E6EEFF; background: rgba(255,255,255,.02); } .tcpRows b { font: 600 10.5px JetBrains Mono, monospace; }
+#tsClockPop > button { width: 100%; margin-top: 8px; height: 28px; border: 1px solid rgba(79,216,247,.35); border-radius: 9px; background: rgba(79,216,247,.08); color: #4FD8F7; font: 600 11px Inter, sans-serif; cursor: pointer; }
+.tcpLife { position: absolute; left: 0; bottom: 0; height: 2px; background: #4FD8F7; width: 100%; transform-origin: left; } #tsClockPop.go .tcpLife { animation: tcpLife 6s linear forwards; } #tsClockPop:hover .tcpLife { animation-play-state: paused; } @keyframes tcpLife { to { transform: scaleX(0); } }
