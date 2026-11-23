@@ -17,7 +17,7 @@
    A studio hands over its geometry as g = { X(i), Y(p), P(y), I(x), idx(t), T(i), w, h, W, padR,
    date(t, full), px(p), dur(sec), pv, ccy, last }. Read-only apart from your own drawings. */
 const Draws = {
-  KM: 'astra_inspect_marks', KL: 'astra_inspect_lines', COL: ['#4FD8F7', '#FFB648', '#A78BFA', '#FF6BD6', '#3DDC97', '#FF6B7A'],
+  KM: 'astra_inspect_marks', KL: 'astra_inspect_lines', KI: 'astra_draw_ink', COL: ['#4FD8F7', '#FFB648', '#A78BFA', '#FF6BD6', '#3DDC97', '#FF6B7A'],
   sel: null, op: null,
   base(s){ return String(s || '').replace(/\.(s|m|std)$/i, '').toUpperCase(); },
   key(sym, tf){ return this.base(sym) + '|' + tf; },
@@ -29,10 +29,15 @@ const Draws = {
   write(store, key, list){ let o = {}; try { o = JSON.parse(localStorage.getItem(store) || '{}') || {}; } catch(e){}
     for (const k of Object.keys(o)){ const i = k.lastIndexOf('|'); if (k !== key && this.key(k.slice(0, i), k.slice(i + 1)) === key) delete o[k]; }
     if (list.length) o[key] = list.slice(-80); else delete o[key]; try { localStorage.setItem(store, JSON.stringify(o)); } catch(e){} },
-  ms(key){ return this.read(this.KM, key); }, ls(key){ return this.read(this.KL, key); },
+  ms(key){ return this.read(this.KM, key); }, ls(key){ return this.read(this.KL, key); }, is(key){ return this.read(this.KI, key); }, saveI(key, L){ this.write(this.KI, key, L); },
+  count(key){ return this.ms(key).length + this.ls(key).length + this.is(key).length; },
   saveM(key, L){ this.write(this.KM, key, L); }, saveL(key, L){ this.write(this.KL, key, L); },
-  find(key, id){ const m = this.ms(key).find(x => x.id === id); if (m) return { type: 'm', o: m }; const l = this.ls(key).find(x => x.id === id); return l ? { type: 'l', o: l } : null; },
-  update(key, id, fn){ const M = this.ms(key), L = this.ls(key); let k = M.findIndex(x => x.id === id); if (k >= 0){ const r = fn(M[k]); if (r === null) M.splice(k, 1); this.saveM(key, M); return; } k = L.findIndex(x => x.id === id); if (k >= 0){ const r = fn(L[k]); if (r === null) L.splice(k, 1); this.saveL(key, L); } },
+  find(key, id){ const m = this.ms(key).find(x => x.id === id); if (m) return { type: 'm', o: m }; const l = this.ls(key).find(x => x.id === id); if (l) return { type: 'l', o: l }; const k = this.is(key).find(x => x.id === id); return k ? { type: 'i', o: k } : null; },
+  update(key, id, fn){ const M = this.ms(key), L = this.ls(key); let k = M.findIndex(x => x.id === id); if (k >= 0){ const r = fn(M[k]); if (r === null) M.splice(k, 1); this.saveM(key, M); return; } k = L.findIndex(x => x.id === id); if (k >= 0){ const r = fn(L[k]); if (r === null) L.splice(k, 1); this.saveL(key, L); return; } const I = this.is(key); k = I.findIndex(x => x.id === id); if (k >= 0){ const r = fn(I[k]); if (r === null) I.splice(k, 1); this.saveI(key, I); } },
+  /* ink keeps exact times between candles: a fractional candle index, both ways */
+  fi(g, t){ const i = g.idx(t), t0 = g.T(i), t1 = g.T(i + 1), sp = t1 > t0 ? t1 - t0 : (t0 - g.T(i - 1)) || 1; return i + (t - t0) / sp; },
+  tAt(g, x){ const f = g.F ? g.F(x) : g.I(x), i = Math.floor(f), t0 = g.T(i), t1 = g.T(i + 1), sp = t1 > t0 ? t1 - t0 : (t0 - g.T(i - 1)) || 1; return t0 + (f - i) * sp; },
+  px2(g, s){ return s.pts.map(q => [g.X(this.fi(g, q[0])), g.Y(q[1])]); },
 
   /* ---------- what a measurement says ---------- */
   info(g, m){ const i0 = g.idx(m.t0), i1 = g.idx(m.t1), d = m.p1 - m.p0; return { i0, i1, d, pct: d / m.p0 * 100, n: Math.abs(i1 - i0), sec: m.t1 - m.t0, money: g.pv ? d * g.pv : null }; },
@@ -40,6 +45,7 @@ const Draws = {
 
   /* ---------- drawing ---------- */
   draw(c, g, key){ const L = this.ls(key).filter(x => !x.off), M = this.ms(key).filter(x => !x.off), sel = this.sel && this.sel.key === key ? this.sel.id : null;
+    for (const k of this.is(key).filter(x => !x.off)) Ink.stroke(c, this.px2(g, k), k, k.id === sel); if (this.op && this.op.mode === 'ink' && this.op.key === key) Ink.stroke(c, this.px2(g, this.op.s), this.op.s);
     this.drawLines(c, g, L, sel); for (const m of M) this.drawM(c, g, m, m.id === sel); if (this.op && this.op.mode === 'new' && this.op.key === key) this.drawM(c, g, this.op.m, true, true); },
   pill(c, txt, x, y, col, align){ c.font = '700 10.5px JetBrains Mono, monospace'; const w = c.measureText(txt).width + 12, x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x; c.fillStyle = col; c.beginPath(); c.roundRect ? c.roundRect(x0, y - 9, w, 18, 6) : c.rect(x0, y - 9, w, 18); c.fill(); c.fillStyle = '#04121A'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(txt, x0 + 6, y); },
   handle(c, x, y, col){ c.fillStyle = '#060A12'; c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 5.5, 0, 6.3); c.fill(); c.stroke(); c.fillStyle = col; c.beginPath(); c.arc(x, y, 2, 0, 6.3); c.fill(); },
@@ -67,25 +73,30 @@ const Draws = {
     for (const m of this.ms(key).filter(q => !q.off)){ const r = this.info(g, m), x0 = g.X(r.i0), x1 = g.X(r.i1), y0 = g.Y(m.p0), y1 = g.Y(m.p1); if ((x - x0) ** 2 + (y - y0) ** 2 < 81) return { type: 'm', id: m.id, part: 'A' }; if ((x - x1) ** 2 + (y - y1) ** 2 < 81) return { type: 'm', id: m.id, part: 'B' };
       if (m.id === sel && x > Math.min(x0, x1) && x < Math.max(x0, x1) && y > Math.min(y0, y1) && y < Math.max(y0, y1)) return { type: 'm', id: m.id, part: 'body' };
       const L2 = (x1 - x0) ** 2 + (y1 - y0) ** 2, t = L2 ? Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (y - y0) * (y1 - y0)) / L2)) : 0, dx = x0 + t * (x1 - x0) - x, dy = y0 + t * (y1 - y0) - y; if (dx * dx + dy * dy < 36) return { type: 'm', id: m.id, part: 'body' }; }
+    for (const k of this.is(key).filter(q => !q.off).reverse()){ const P = this.px2(g, k), tol = Math.max(7, (k.pen === 'highlight' ? k.w * 3 : k.pen === 'marker' ? k.w * 1.3 : k.w / 2) + 4); for (let j = 1; j < P.length; j++){ const [x0, y0] = P[j - 1], [x1, y1] = P[j], L2 = (x1 - x0) ** 2 + (y1 - y0) ** 2, u = L2 ? Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (y - y0) * (y1 - y0)) / L2)) : 0; if ((x0 + u * (x1 - x0) - x) ** 2 + (y0 + u * (y1 - y0) - y) ** 2 < tol * tol) return { type: 'i', id: k.id, part: 'body' }; } }
     const L = this.ls(key).filter(q => !q.off); for (let k = L.length - 1; k >= 0; k--){ const l = L[k]; if (l.k === 'h' && Math.abs(g.Y(l.p) - y) < 7 && x < g.w) return { type: 'l', id: l.id, part: 'h' }; if (l.k === 'v' && Math.abs(g.X(g.idx(l.t)) - x) < 7 && y < g.h) return { type: 'l', id: l.id, part: 'v' }; }
     return null; },
   snap(g, key, x, y){ let i = g.I(x), p = g.P(y); for (const l of this.ls(key).filter(q => !q.off)){ if (l.k === 'h' && Math.abs(g.Y(l.p) - y) < 8) p = l.p; if (l.k === 'v'){ const k = g.idx(l.t); if (Math.abs(g.X(k) - x) < 8) i = k; } } return { i, p }; },
   /* a press on the chart: returns true when a drawing took it (the studio then does not pan) */
   down(g, key, tool, x, y){ if (x < 0 || y < 0 || x > g.w || y > g.h) return false; this.closeCard();
     if (tool === 'measure'){ const q = this.snap(g, key, x, y), t = g.T(q.i); this.op = { mode: 'new', key, m: { t0: t, p0: q.p, t1: t, p1: q.p } }; return true; }
+    if (tool === 'ink'){ const s = Ink.load(); this.op = { mode: 'ink', key, s: { pen: s.pen, c: s.c, w: s.w, tip: s.tip || 'round', pts: [[this.tAt(g, x), g.P(y)]] }, lx: x, ly: y }; return true; }
     if (tool === 'hl' || tool === 'vl'){ const L = this.ls(key), n = L.length, l = tool === 'hl' ? { id: this.uid(), k: 'h', p: g.P(y), c: this.COL[n % this.COL.length] } : { id: this.uid(), k: 'v', t: g.T(g.I(x)), c: this.COL[n % this.COL.length] }; L.push(l); this.saveL(key, L); this.sel = { key, id: l.id }; return true; }
     const h = this.hit(g, key, x, y); if (!h){ if (this.sel){ this.sel = null; } return false; }
     const f = this.find(key, h.id); this.sel = { key, id: h.id }; this.op = { mode: 'edit', key, h, x, y, orig: JSON.parse(JSON.stringify(f.o)), moved: false }; return true; },
   move(g, x, y){ const op = this.op; if (!op) return false;
     if (op.mode === 'new'){ const q = this.snap(g, op.key, x, y); op.m.t1 = g.T(q.i); op.m.p1 = q.p; return true; }
+    if (op.mode === 'ink'){ if (Math.hypot(x - op.lx, y - op.ly) > 2){ op.s.pts.push([this.tAt(g, x), g.P(y)]); op.lx = x; op.ly = y; } return true; }
     if (Math.abs(x - op.x) + Math.abs(y - op.y) > 3) op.moved = true; if (!op.moved) return true;
     const o = op.orig, h = op.h, di = g.I(x) - g.I(op.x), dp = g.P(y) - g.P(op.y);
-    this.update(op.key, h.id, d => { if (h.type === 'l'){ if (d.k === 'h') d.p = o.p + dp; else d.t = g.T(Math.max(0, g.idx(o.t) + di)); }
+    const dt = this.tAt(g, x) - this.tAt(g, op.x);
+    this.update(op.key, h.id, d => { if (h.type === 'i'){ d.pts = o.pts.map(q => [q[0] + dt, q[1] + dp]); return; } if (h.type === 'l'){ if (d.k === 'h') d.p = o.p + dp; else d.t = g.T(Math.max(0, g.idx(o.t) + di)); }
       else if (h.part === 'A'){ const q = this.snap(g, op.key, x, y); d.t0 = g.T(q.i); d.p0 = q.p; } else if (h.part === 'B'){ const q = this.snap(g, op.key, x, y); d.t1 = g.T(q.i); d.p1 = q.p; }
       else { d.t0 = g.T(Math.max(0, g.idx(o.t0) + di)); d.t1 = g.T(Math.max(0, g.idx(o.t1) + di)); d.p0 = o.p0 + dp; d.p1 = o.p1 + dp; } }); return true; },
   /* the press ends: a new measurement is kept; a click (no drag) on a drawing opens its card */
   up(host, g, x, y, onChange){ const op = this.op; if (!op) return false; this.op = null;
-    if (op.mode === 'new'){ const m = op.m; if (m.t0 !== m.t1 || Math.abs(m.p1 - m.p0) > 0){ const M = this.ms(op.key), id = this.uid(); M.push(Object.assign({ id, at: Date.now() }, m)); this.saveM(op.key, M); this.sel = { key: op.key, id }; } }
+    if (op.mode === 'ink'){ const I = this.is(op.key), id = this.uid(); I.push(Object.assign({ id, at: Date.now() }, op.s)); this.saveI(op.key, I); }
+    else if (op.mode === 'new'){ const m = op.m; if (m.t0 !== m.t1 || Math.abs(m.p1 - m.p0) > 0){ const M = this.ms(op.key), id = this.uid(); M.push(Object.assign({ id, at: Date.now() }, m)); this.saveM(op.key, M); this.sel = { key: op.key, id }; } }
     else if (!op.moved) this.card(host, op.key, op.h.id, x, y, onChange);
     if (onChange) onChange(); return true; },
   remove(key, id){ this.update(key, id, () => null); if (this.sel && this.sel.id === id) this.sel = null; this.closeCard(); },
@@ -94,9 +105,9 @@ const Draws = {
   /* ---------- the little card that edits a drawing ---------- */
   closeCard(){ const c = document.getElementById('dwCard'); if (c) c.remove(); },
   card(host, key, id, x, y, onChange){ this.closeCard(); const f = this.find(key, id); if (!f || !host) return; const o = f.o, el = document.createElement('div'); el.id = 'dwCard';
-    const what = f.type === 'm' ? 'Measurement' : o.k === 'h' ? 'Price line' : 'Time line';
+    const what = f.type === 'm' ? 'Measurement' : f.type === 'i' ? ((Ink.PENS.find(p => p[0] === o.pen) || [0, 'Pen'])[1] + ' stroke') : o.k === 'h' ? 'Price line' : 'Time line';
     el.innerHTML = '<div class="dwHead"><b>' + what + '</b><button type="button" data-dw="x" title="Close">✕</button></div><p>Drag it, or its ends, to move it.</p>' +
-      (f.type === 'l' ? '<div class="dwCols">' + this.COL.map(cl => '<button type="button" data-dw="c:' + cl + '" style="--c:' + cl + '" class="' + (o.c === cl ? 'on' : '') + '"></button>').join('') + '</div>' : '') +
+      (f.type !== 'm' ? '<div class="dwCols">' + this.COL.map(cl => '<button type="button" data-dw="c:' + cl + '" style="--c:' + cl + '" class="' + (o.c === cl ? 'on' : '') + '"></button>').join('') + '</div>' : '') +
       '<div class="dwAct"><button type="button" data-dw="hide">Hide from the chart</button><button type="button" data-dw="del" class="dn">Remove</button></div>';
     host.appendChild(el); const hr = host.getBoundingClientRect(); el.style.left = Math.max(6, Math.min(hr.width - 230, x + 14)) + 'px'; el.style.top = Math.max(6, Math.min(hr.height - 150, y - 20)) + 'px';
     el.addEventListener('mousedown', e => e.stopPropagation()); el.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-dw]'); if (!b) return; const k = b.dataset.dw;
@@ -104,10 +115,14 @@ const Draws = {
       if (onChange) onChange(); }); },
 
   /* ---------- a list of them, with show / hide and remove ---------- */
-  listHtml(g, key){ const L = this.ls(key), M = this.ms(key); if (!L.length && !M.length) return '<p class="dwNone">No drawings on this chart yet.</p>';
+  listHtml(g, key){ const L = this.ls(key), M = this.ms(key), I = this.is(key); if (!L.length && !M.length && !I.length) return '<p class="dwNone">No drawings on this chart yet.</p>';
     const row = (id, off, col, title, sub, go) => '<div class="dwRow' + (off ? ' off' : '') + '"><button type="button" class="dwGo" ' + (go != null ? 'data-dl="go:' + go + '"' : '') + ' style="--c:' + col + '"><b>' + title + '</b><span>' + sub + '</span></button><button type="button" class="dwEye" data-dl="eye:' + id + '" title="' + (off ? 'Show it on the chart again' : 'Hide it from the chart (it stays here)') + '">' + (off ? '◌' : '◉') + '</button><button type="button" class="dwDel" data-dl="del:' + id + '" title="Remove">✕</button></div>';
     return L.map(l => row(l.id, l.off, l.c, l.k === 'h' ? '― ' + g.px(l.p) : '| ' + g.date(l.t), l.k === 'h' ? 'price line' : 'time line', l.k === 'v' ? l.t : null)).join('') +
-      M.map(m => { const r = this.info(g, m); return row(m.id, m.off, r.d >= 0 ? '#3DDC97' : '#FF6B7A', this.sg(r.pct, 2) + '%', r.n + ' candles · ' + g.dur(r.sec), m.t0); }).join(''); },
+      M.map(m => { const r = this.info(g, m); return row(m.id, m.off, r.d >= 0 ? '#3DDC97' : '#FF6B7A', this.sg(r.pct, 2) + '%', r.n + ' candles · ' + g.dur(r.sec), m.t0); }).join('') +
+      I.map(k => row(k.id, k.off, k.c, '✎ ' + (Ink.PENS.find(p => p[0] === k.pen) || [0, 'Pen'])[1], k.pts.length + ' points · ' + g.date(k.pts[0][0]), k.pts[0][0])).join(''); },
+  /* clear everything on this chart, keeping a copy so it can be undone */
+  clearAll(key){ const bak = { m: this.ms(key), l: this.ls(key), i: this.is(key) }; this.saveM(key, []); this.saveL(key, []); this.saveI(key, []); this.sel = null; this.closeCard(); return bak; },
+  restore(key, bak){ if (!bak) return; this.saveM(key, bak.m); this.saveL(key, bak.l); this.saveI(key, bak.i); },
   listClick(e, key){ const b = e.target.closest('[data-dl]'); if (!b) return null; const [k, v] = [b.dataset.dl.slice(0, b.dataset.dl.indexOf(':')), b.dataset.dl.slice(b.dataset.dl.indexOf(':') + 1)];
     if (k === 'eye') this.toggle(key, v); else if (k === 'del') this.remove(key, v); return { k, v }; },
 };

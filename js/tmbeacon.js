@@ -15,7 +15,7 @@ const Beacon = {
     if (!host) return; let layer = host.querySelector(':scope > .bcnLayer');
     if (!layer){ layer = document.createElement('div'); layer.className = 'bcnLayer'; host.appendChild(layer); host._bcn = {};
       layer.addEventListener('click', e => { const t = e.target.closest('[data-bk]'); if (!t) return; const f = host._bcn[t.dataset.bk]; if (f){ e.stopPropagation(); f(); } }); }
-    layer.style.width = bounds.w + 'px'; layer.style.height = bounds.h + 'px';
+    layer.style.width = bounds.w + 'px'; layer.style.height = bounds.h + 'px'; layer.style.setProperty('--cw', Math.max(6, bounds.cw || 0) + 'px'); layer.classList.toggle('close', !!bounds.close);
     const keep = new Set();
     for (const it of items || []){ if (!isFinite(it.x) || !isFinite(it.y)) continue; keep.add(it.key);
       let el = layer.querySelector('[data-k="' + CSS.escape(it.key) + '"]');
