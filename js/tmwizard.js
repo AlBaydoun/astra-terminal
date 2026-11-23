@@ -91,8 +91,19 @@ const Wizard = {
   /* ---------- drawing ---------- */
   mount(){ const wrap = document.querySelector('#bot-bots .botsWrap'), body = document.getElementById('botBody'); if (!wrap || !body) return;
     let el = document.getElementById('tmWiz'); if (!el){ el = document.createElement('div'); el.id = 'tmWiz'; wrap.insertBefore(el, body); el.addEventListener('click', e => this.click(e)); el.addEventListener('change', e => { if (e.target.id === 'twMin'){ this.min = +e.target.value; this.paint(); } }); }
-    if (!this._wrapped && typeof Bots !== 'undefined'){ this._wrapped = true; const o = Bots.render.bind(Bots); Bots.render = (...a) => { const r = o(...a); if (document.documentElement.dataset.tmview === 'visual' && !this._busy){ clearTimeout(this._pt); this._pt = setTimeout(() => this.paint(), 60); } return r; }; }
-    this.paint(); },
+    if (!this._wrapped && typeof Bots !== 'undefined'){ this._wrapped = true; const o = Bots.render.bind(Bots); Bots.render = (...a) => { const r = o(...a); setTimeout(() => { try { this.chrome(); } catch(e){} }, 30); if (document.documentElement.dataset.tmview === 'visual' && !this._busy){ clearTimeout(this._pt); this._pt = setTimeout(() => this.paint(), 60); } return r; }; }
+    this.paint(); this.chrome(); },
+  /* the Deep Dive's head (tabs, menu, this wizard, the filter row) slides away while you scroll down and comes back at the top;
+     the net-results bar stays at the very top while it is pinned */
+  PKEY: 'astra_dd_pin',
+  chrome(){ const H = document.documentElement, body = document.querySelector('#bot-bots .botsWrap > #botBody') || document.getElementById('botBody'), wrap = document.querySelector('#bot-bots .botsWrap'); if (!body || !wrap) return;
+    let pin = true; try { pin = localStorage.getItem(this.PKEY) !== '0'; } catch(e){} H.classList.toggle('ddUnpinned', !pin);
+    if (!body._ddScroll){ body._ddScroll = true; let last = 0; body.addEventListener('scroll', () => { if (H.dataset.tmview !== 'visual') return; const y = body.scrollTop; if (y > 90 && y > last) H.classList.add('ddFold'); else if (y < 24) H.classList.remove('ddFold'); last = y; }, { passive: true }); }
+    if (!document.getElementById('ddUnfold')){ const u = document.createElement('button'); u.type = 'button'; u.id = 'ddUnfold'; u.title = 'Bring back the wizard and the filters'; u.innerHTML = '▲ Wizard'; wrap.appendChild(u); u.addEventListener('click', () => { H.classList.remove('ddFold'); body.scrollTo({ top: 0, behavior: 'smooth' }); }); }
+    const hero = body.querySelector('.exSec.exHeroSec'); if (hero && !hero.querySelector('.ddPin')){ const b = document.createElement('button'); b.type = 'button'; b.className = 'ddPin'; hero.appendChild(b);
+      b.addEventListener('click', e => { e.stopPropagation(); const on = H.classList.contains('ddUnpinned'); H.classList.toggle('ddUnpinned', !on); try { localStorage.setItem(this.PKEY, on ? '1' : '0'); } catch(er){} this.pinLabel(); }); }
+    this.pinLabel(); },
+  pinLabel(){ const un = document.documentElement.classList.contains('ddUnpinned'); document.querySelectorAll('.ddPin').forEach(b => { b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6ZM12 13v7"/></svg><span>' + (un ? 'Pin to the top' : 'Pinned') + '</span>'; b.classList.toggle('off', un); b.title = un ? 'Keep the results bar at the top while you scroll' : 'Let the results bar scroll away with the page'; }); },
   row(g, max, tick){ const i = this.ix.push({ dim: g.dim, k: g.k }) - 1, v = this.metric(g), w = max ? Math.min(100, Math.abs(v) / max * 100) : 0, few = g.n < 30;
     return '<div class="twRow' + (g.on ? '' : ' off') + '">' + (tick ? '<button type="button" class="twTick' + (g.on ? ' on' : '') + '" data-w="tog:' + i + '" title="' + (g.on ? 'Leave this out' : 'Put this back') + '"><i></i></button>' : '') +
       '<button type="button" class="twBar" data-w="' + (tick ? 'only' : 'look') + ':' + i + '" title="' + (tick ? 'Keep only ' : 'Open the trades of ') + this.esc(g.name) + '"><span class="twName">' + this.esc(g.name) + '</span><span class="twTrk"><u class="' + (v >= 0 ? 'up' : 'dn') + '" style="width:' + w.toFixed(1) + '%"></u></span>' +

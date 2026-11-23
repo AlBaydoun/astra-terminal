@@ -924,3 +924,22 @@ html[data-face="tm"] #sideTabs button[data-tab]:nth-child(n+10)::after { left: a
 .inkTips { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); align-items: center; gap: 4px; margin-bottom: 10px; } .inkTips > span { color: #9FB3D6; font-size: 11px; margin-right: 4px; }
 .inkTips button { display: grid; justify-items: center; gap: 1px; padding: 4px 2px; border-radius: 9px; border: 1px solid #1F2C48; background: rgba(255,255,255,.02); color: #C9D4EA; cursor: pointer; } .inkTips button:hover { border-color: rgba(79,216,247,.45); } .inkTips button.on { border-color: #4FD8F7; background: rgba(79,216,247,.1); }
 .inkTips img { width: 100%; height: 20px; object-fit: contain; } .inkTips b { font: 600 9.5px Inter, sans-serif; }
+
+/* ===== Deep Dive (Visual view): the head slides away on scroll; the results bar sits at the very top, pinned or not (js/tmwizard.js) ===== */
+html[data-face="tm"][data-tmview="visual"] #botBody .exWrap > .exCrumbs { position: static !important; margin-top: 0 !important; }
+html[data-face="tm"][data-tmview="visual"] #botBody .exSec.exHeroSec { position: sticky !important; top: 0 !important; z-index: 31; }
+html[data-face="tm"][data-tmview="visual"].ddFold #botBody .exSec.exHeroSec { background: rgba(8,13,26,.96) !important; box-shadow: 0 10px 24px rgba(0,0,0,.45) !important; backdrop-filter: blur(8px); border-radius: 0 0 14px 14px; }
+html[data-face="tm"][data-tmview="visual"].ddUnpinned #botBody .exSec.exHeroSec { position: relative !important; top: auto !important; }
+html[data-face="tm"][data-tmview="visual"] #botBody .exSec.exHeroSec { position: sticky; }
+.ddPin { position: absolute; top: 6px; right: 8px; z-index: 3; height: 24px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border-radius: 12px; border: 1px solid rgba(79,216,247,.45); background: rgba(79,216,247,.14); color: #4FD8F7; font: 600 10.5px Inter, sans-serif; cursor: pointer; transition: all .2s; }
+.ddPin svg { width: 12px; height: 12px; fill: rgba(79,216,247,.35); } .ddPin.off { border-color: #1F2C48; background: rgba(8,14,28,.7); color: #7C8BA8; } .ddPin.off svg { fill: none; transform: rotate(40deg); }
+html:not([data-face="tm"]) .ddPin, html:not([data-tmview="visual"]) .ddPin { display: none; }
+html[data-face="tm"][data-tmview="visual"] #tmWiz, html[data-face="tm"][data-tmview="visual"] #botNav, html[data-face="tm"][data-tmview="visual"] #botTabs, html[data-face="tm"][data-tmview="visual"] #wsToolbar { transition: max-height .35s cubic-bezier(.2,.8,.2,1), opacity .25s, margin .3s, padding .3s; }
+html[data-face="tm"][data-tmview="visual"] #tmWiz { max-height: 900px; } html[data-face="tm"][data-tmview="visual"] #botNav, html[data-face="tm"][data-tmview="visual"] #botTabs, html[data-face="tm"][data-tmview="visual"] #wsToolbar { max-height: 120px; }
+html[data-face="tm"][data-tmview="visual"].ddFold #tmWiz, html[data-face="tm"][data-tmview="visual"].ddFold #botNav, html[data-face="tm"][data-tmview="visual"].ddFold #botTabs, html[data-face="tm"][data-tmview="visual"].ddFold #wsToolbar { max-height: 0 !important; opacity: 0; overflow: hidden !important; margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; border-width: 0 !important; pointer-events: none; }
+#ddUnfold { display: none; }
+html[data-face="tm"][data-tmview="visual"].ddFold #ddUnfold { display: block; position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 40; height: 26px; padding: 0 14px; border-radius: 13px; border: 1px solid rgba(79,216,247,.5); background: rgba(8,14,28,.92); color: #4FD8F7; font: 700 11px Inter, sans-serif; cursor: pointer; box-shadow: 0 8px 20px rgba(0,0,0,.45); animation: tmPopIn .25s; }
+#bot-bots .botsWrap { position: relative; }
+
+/* Classic's floating 'Everything' button: inside the page's frame, not on its edge */
+html[data-face="tm"] #botBody .exHomeDock { padding-right: 22px; bottom: 18px; } html[data-face="tm"] #botBody .exHomeBtn { transform: translateY(calc(-100% - 6px)); border: 1px solid rgba(79,216,247,.5); background: rgba(8,14,28,.92); color: #4FD8F7; box-shadow: 0 8px 22px rgba(0,0,0,.5); backdrop-filter: blur(6px); }

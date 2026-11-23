@@ -123,7 +123,7 @@ const JMRange = {
           <div class="jmChips"><button type="button" class="jmLink" data-rgweek="work">Mon to Fri</button><button type="button" class="jmLink" data-rgweek="all">Every day</button></div>
         </div>
         <div class="jmGroup"><h4>Timeframes</h4><div class="jmChips jmTfs"></div></div>
-        <div class="jmGroup jmSigs"><div class="jmSigHead"><h4>Signals that opened the trades</h4><span class="jmSigCount"></span>
+        <div class="jmGroup jmSigs"><div class="jmSigHead"><button type="button" class="jmSigFold" data-rgsigfold="1" aria-expanded="true" title="Fold or unfold the list of signals"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><h4>Signals that opened the trades</h4></button><span class="jmSigCount"></span>
             <input type="search" class="jmSigQ" placeholder="Find a signal, e.g. TD9" autocomplete="off" aria-label="Find a signal">
             <button type="button" class="jmLink" data-rgsig="all">All</button><button type="button" class="jmLink" data-rgsig="none">None</button></div>
           <div class="jmSigList"></div></div>
@@ -205,7 +205,7 @@ const JMRange = {
     el.querySelectorAll('[data-rgdow]').forEach(b => { const x = r.dow.includes(+b.dataset.rgdow); b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     el.querySelectorAll('[data-rgbasis]').forEach(b => { const x = r.basis === b.dataset.rgbasis; b.classList.toggle('on', x); b.setAttribute('aria-pressed', x); });
     this.syncSliders(page, el, r);
-    this.sigList(page, el, r);
+    this.sigList(page, el, r); { let f = false; try { f = localStorage.getItem('astra_rg_sigfold_' + page) === '1'; } catch(x){} const box = el.querySelector('.jmSigs'); if (box){ box.classList.toggle('folded', f); const fb = box.querySelector('[data-rgsigfold]'); if (fb) fb.setAttribute('aria-expanded', String(!f)); } }
     this.hiddenNote(page, el, r);
     const tfs = [...new Set(all.map(t => t.tf || '?'))];
     tfs.sort((x, y) => { const p = this.TF_ORDER.indexOf(x), q = this.TF_ORDER.indexOf(y); return (p < 0 ? 99 : p) - (q < 0 ? 99 : q) || x.localeCompare(y); });
@@ -386,6 +386,7 @@ const JMRange = {
       if (b && b.dataset.knob) return;
       if (!b || b.disabled) return;
       if (b.dataset.rgfold){ this.setFold(page, el); return; }
+      if (b.dataset.rgsigfold){ const box = el.querySelector('.jmSigs'), f = !box.classList.contains('folded'); box.classList.toggle('folded', f); b.setAttribute('aria-expanded', String(!f)); try { localStorage.setItem('astra_rg_sigfold_' + page, f ? '1' : '0'); } catch(x){} return; }
       if (b.dataset.rgcal){ const pk = el.querySelector('.jmPicker'); pk.dataset.key = b.dataset.rgcal;
         const cur = this.read(el, b.dataset.rgcal); pk.value = cur ? cur.slice(0, 10) : '';
         try { pk.showPicker(); } catch(x){ pk.focus(); } return; }
@@ -441,6 +442,8 @@ const JMRange = {
       .jmRange{ --jmA:#39bda8; display:block; border:1px solid var(--border); border-radius:12px; background:var(--panel); font-size:12px; overflow:hidden; }
       .jmRange.on{ border-color:color-mix(in srgb, var(--jmA) 65%, transparent); }
       .jmHead{ display:flex; align-items:center; gap:12px; padding:9px 12px; cursor:pointer; min-height:40px; box-sizing:border-box; }
+      .jmSigFold{ display:inline-flex; align-items:center; gap:6px; padding:2px 6px 2px 2px; background:none; border:0; border-radius:6px; color:var(--text); font:inherit; cursor:pointer; } .jmSigFold:hover{ background:rgba(255,255,255,.05); } .jmSigFold h4{ margin:0; } .jmSigFold svg{ transition:transform .15s ease; color:var(--jmA); }
+      .jmSigs.folded .jmSigFold svg{ transform:rotate(-90deg); } .jmSigs.folded .jmSigList, .jmSigs.folded .jmSigQ, .jmSigs.folded [data-rgsig]{ display:none !important; }
       .jmFold{ display:inline-flex; align-items:center; gap:7px; padding:3px 6px 3px 2px; background:none; border:0; border-radius:6px; color:var(--text); font:inherit; cursor:pointer; }
       .jmFold b{ font-weight:600; font-size:12.5px; } .jmFold svg{ transition:transform .15s ease; color:var(--jmA); }
       .jmRange.folded .jmFold svg{ transform:rotate(-90deg); }
