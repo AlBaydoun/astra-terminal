@@ -943,3 +943,17 @@ html[data-face="tm"][data-tmview="visual"].ddFold #ddUnfold { display: block; po
 
 /* Classic's floating 'Everything' button: inside the page's frame, not on its edge */
 html[data-face="tm"] #botBody .exHomeDock { padding-right: 22px; bottom: 18px; } html[data-face="tm"] #botBody .exHomeBtn { transform: translateY(calc(-100% - 6px)); border: 1px solid rgba(79,216,247,.5); background: rgba(8,14,28,.92); color: #4FD8F7; box-shadow: 0 8px 22px rgba(0,0,0,.5); backdrop-filter: blur(6px); }
+
+/* ===== the wizard waits out of the way; one button opens it over the Deep Dive (js/tmwizard.js) ===== */
+html[data-face="tm"][data-tmview="visual"] #bot-bots .botsWrap > #tmWiz { position: absolute !important; z-index: 60; top: 46px; left: 50%; width: min(1240px, calc(100% - 40px)); max-height: calc(100% - 70px) !important; overflow: auto !important; margin: 0 !important; transform: translate(-50%, -10px) scale(.98); opacity: 0; pointer-events: none; border-radius: 16px; border: 1px solid rgba(79,216,247,.3); background: linear-gradient(180deg, rgba(14,22,42,.99), rgba(8,13,26,.99)); box-shadow: 0 30px 80px rgba(0,0,0,.65); transition: opacity .22s, transform .28s cubic-bezier(.2,.8,.2,1) !important; }
+html[data-face="tm"][data-tmview="visual"].ddWiz #bot-bots .botsWrap > #tmWiz { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+html[data-face="tm"][data-tmview="visual"].ddFold #tmWiz { max-height: calc(100% - 70px) !important; }
+#ddWizBack, #ddWizBtn, #ddWizClose { display: none; }
+html[data-face="tm"][data-tmview="visual"] #ddWizBtn { display: inline-flex; position: absolute; z-index: 45; top: 8px; right: 14px; height: 30px; align-items: center; gap: 7px; padding: 0 13px; border-radius: 15px; border: 1px solid rgba(167,139,250,.55); background: linear-gradient(135deg, rgba(167,139,250,.22), rgba(79,216,247,.16)); color: #E6EEFF; font: 700 11.5px Inter, sans-serif; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35); transition: transform .15s, box-shadow .2s; }
+html[data-face="tm"][data-tmview="visual"] #ddWizBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(167,139,250,.35); } #ddWizBtn svg { width: 15px; height: 15px; color: #C4B5FD; } #ddWizBtn.on { background: #A78BFA; color: #120A2A; border-color: #A78BFA; } #ddWizBtn.on svg { color: #120A2A; }
+html[data-face="tm"][data-tmview="visual"].ddWiz #ddWizBack { display: block; position: absolute; inset: 0; z-index: 55; background: rgba(3,6,14,.5); backdrop-filter: blur(3px); animation: tmFade .2s; }
+html[data-face="tm"][data-tmview="visual"].ddWiz #ddWizClose { display: grid; place-items: center; position: absolute; z-index: 61; top: 54px; right: calc(50% - min(620px, 50% - 20px) + 10px); width: 28px; height: 28px; border-radius: 9px; border: 1px solid #1F2C48; background: rgba(8,14,28,.9); color: #9FB3D6; cursor: pointer; } #ddWizClose:hover { color: #FF6B7A; border-color: rgba(255,107,122,.5); }
+html[data-face="tm"][data-tmview="visual"].ddFold #ddWizBtn { top: 8px; }
+
+#tmViewSwitch #ddWizBtn { position: static !important; height: 26px !important; margin-right: 4px; box-shadow: none !important; } html:not([data-tmview="visual"]) #tmViewSwitch #ddWizBtn { display: none !important; }
+html[data-face="tm"][data-tmview="visual"] #tmWiz .twViews { display: none; }

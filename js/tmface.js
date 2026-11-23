@@ -150,7 +150,7 @@ const Face = window.Face = {
     const stage = $('tmStage'), frame = $('tmFrame'), nat = $('tmNative'), inf = $('tmInfo'), bp = $('bottomPanel'), view = r.info ? this.viewOf(r.id) : '', info = view === 'info' && typeof Info !== 'undefined';
     H.dataset.tmview = r.info && !info ? (view === 'info' ? 'classic' : view) : ''; $('tmViewSwitch').hidden = true;
     if (r.kind === 'chart'){ H.dataset.tmroom = 'chart'; stage.hidden = true; if (bp && !quiet) bp.classList.add('collapsed'); setTimeout(() => window.dispatchEvent(new Event('resize')), 40); }
-    else if ((r.kind === 'tab' || r.kind === 'bot') && !info){ H.dataset.tmroom = 'panel'; stage.hidden = true; $('tmViewSwitch').hidden = !r.info || view === 'visual'; if (r.info) this.viewSeg(r, view);
+    else if ((r.kind === 'tab' || r.kind === 'bot') && !info){ H.dataset.tmroom = 'panel'; stage.hidden = true; $('tmViewSwitch').hidden = !r.info; if (r.info) this.viewSeg(r, view);
       if (view === 'visual' && typeof Wizard !== 'undefined') setTimeout(() => Wizard.mount(), 200); this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
       if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
