@@ -23,7 +23,7 @@ try { if (!isPanel && localStorage.getItem(KEY) === 'tm') H.dataset.face = 'tm';
 
 const ICON = {
   chart: 'M3 3v18h18M7 15l4-5 3 3 5-7', deep: 'M11 4a7 7 0 1 0 4.9 12l4.6 4.5M8.5 13v-2.5M11 13V8M13.5 13v-1.5', live: 'M2 12h4l3-8 4 16 3-8h6',
-  livedive: 'M2 11h3l2-6 4 12 2-6h2M18 15a3 3 0 1 0 .01 0M20.2 20.2 22 22', dash: 'M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z', autopsy: 'M3 10a9 9 0 1 1 2 6M3 4v6h6M12 8v4l3 2',
+  livedive: 'M2 11h3l2-6 4 12 2-6h2M18 15a3 3 0 1 0 .01 0M20.2 20.2 22 22', dash: 'M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z', autopsy: 'M3 10a9 9 0 1 1 2 6M3 4v6h6M12 8v4l3 2', inspect: 'M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM21 21l-6-6M7 10h6M10 7v6',
   home: 'M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M3 12c0-2.5 4-4.5 9-4.5s9 2 9 4.5-4 4.5-9 4.5-9-2-9-4.5z', markets: 'M7 4v16M5 8h4v7H5zM17 3v18M15 6h4v9h-4z',
   lab: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9', bots: 'M8 4h8a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM9 10v2M15 10v2M9 16h6',
   news: 'M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5', more: 'M5 5h.01M12 5h.01M19 5h.01M5 12h.01M12 12h.01M19 12h.01M5 19h.01M12 19h.01M19 19h.01',
@@ -40,6 +40,7 @@ const Face = window.Face = {
     { id: 'livedive', label: 'Live Dive', kind: 'bot', bot: 'livedive', info: 'livedive', visual: true, tip: 'Live Deep Dive: real trades, sliced' },
     { id: 'dash', label: 'Dashboard', kind: 'bot', bot: 'dash', info: 'dash', tip: 'Every bot at a glance' },
     { id: 'autopsy', label: 'Replay', kind: 'native', tip: 'Replay studio: one trade candle by candle, who opened it, why, and what was going on around it' },
+    { id: 'inspect', label: 'Inspect', kind: 'native', tip: 'Inspect any chart: measure, test an entry on any candle, which signals would have worked, replay' },
     { sep: true },
     { id: 'home', label: 'Command', kind: 'frame', hash: 'command', tip: 'Market map, account and autopilot' },
     { id: 'markets', label: 'Markets', kind: 'frame', hash: 'markets', tip: 'Radar and the chart studio' },
@@ -66,13 +67,13 @@ const Face = window.Face = {
   build(){
     if (this.built) return; this.built = true;
     const dock = document.createElement('nav'); dock.id = 'tmDock'; dock.setAttribute('aria-label', 'Rooms');
-    dock.innerHTML = '<div class="tmLogo" title="Timurila"><i></i><i></i><b></b></div>' +
+    dock.innerHTML = '<div class="tmLogo" role="button" tabindex="0" title="Reload the terminal (a clean start, same as the ASTRA logo)"><i></i><i></i><b></b></div>' +
       this.ROOMS.map(r => r.sep ? '<span class="tmSep"></span>' : '<button type="button" data-room="' + r.id + '" title="' + esc(r.tip) + '">' + svg(ICON[r.id]) + '<span>' + r.label + '</span><em hidden></em></button>').join('') +
       '<span class="tmGrow"></span><button type="button" id="tmMore" title="Everything: pages, panels, buttons, instruments (Ctrl+K)">' + svg(ICON.more, 2.6) + '<span>More</span></button>' +
       '<button type="button" id="tmClassic" title="Back to the Classic look. Nothing else changes.">Classic</button>';
     document.body.appendChild(dock);
-    dock.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.room) this.go(b.dataset.room); else if (b.id === 'tmMore') this.palette(true); else if (b.id === 'tmClassic') this.set(false); });
-    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div><div id="tmInfo" hidden></div><div id="tmFail" hidden></div>'; document.body.appendChild(stage);
+    dock.addEventListener('click', e => { if (e.target.closest('.tmLogo')){ location.href = location.pathname; return; } const b = e.target.closest('button'); if (!b) return; if (b.dataset.room) this.go(b.dataset.room); else if (b.id === 'tmMore') this.palette(true); else if (b.id === 'tmClassic') this.set(false); });
+    const stage = document.createElement('div'); stage.id = 'tmStage'; stage.hidden = true; stage.innerHTML = '<iframe id="tmFrame" title="Timurila" hidden></iframe><div id="tmNative" hidden></div><div id="tmInspect" hidden></div><div id="tmInfo" hidden></div><div id="tmFail" hidden></div>'; document.body.appendChild(stage);
     /* on a Classic page that also has an infographic view: the way back to it */
     const vs = document.createElement('div'); vs.id = 'tmViewSwitch'; vs.hidden = true; vs.title = 'Three views of this page'; vs.addEventListener('click', e => { const b = e.target.closest('button[data-tmview]'); if (b) this.view(this.room, b.dataset.tmview); }); document.body.appendChild(vs);
     const pal = document.createElement('div'); pal.id = 'tmPal'; pal.hidden = true; pal.innerHTML = '<div class="tmPalBox" role="dialog" aria-label="Find anything"><input id="tmPalIn" type="text" placeholder="Find a page, a bot, a button or an instrument…" autocomplete="off" spellcheck="false"><div id="tmPalList"></div><p>↑ ↓ to move · Enter to open · Esc to close</p></div>'; document.body.appendChild(pal);
@@ -116,7 +117,16 @@ const Face = window.Face = {
       if (!$('tmLayersHead')){ const h = document.createElement('div'); h.id = 'tmLayersHead'; strip.prepend(h); h.addEventListener('click', e => this.layersClick(e)); }
       if (!this._obs){ this._obs = new MutationObserver(() => { clearTimeout(this._lt); this._lt = setTimeout(() => this.layersSync(), 120); }); this._obs.observe(strip, { subtree: true, attributes: true, attributeFilter: ['class'] }); } }
     this.candleLabel(); this.layersSync(); this.sideNames();
+    this.expandBtn();
   },
+  /* one button on the chart: the chart takes the whole screen (maximised and the window in full screen); again, or Esc, comes back */
+  expandBtn(){ const host = $('mainWrap'); if (!host || $('tmExpand')) return; if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'tmExpand'; b.title = 'Chart in full screen (Esc comes back)';
+    const paint = () => { const on = document.documentElement.dataset.chartmax === '1'; b.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>'; b.title = on ? 'Back to the normal view (Esc)' : 'Chart in full screen (Esc comes back)'; };
+    b.addEventListener('click', () => { const on = document.documentElement.dataset.chartmax === '1'; if (typeof App !== 'undefined' && App.setMax) App.setMax(!on);
+      try { if (!on && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (on && document.fullscreenElement) document.exitFullscreen(); } catch(e){} setTimeout(paint, 80); });
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.documentElement.dataset.chartmax === '1' && typeof App !== 'undefined' && App.setMax) App.setMax(false); setTimeout(paint, 80); });
+    new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-chartmax'] }); paint(); host.appendChild(b); },
   SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Time heatmap', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
   sideNames(){ const st = $('sideTabs'); if (!st) return; const set = () => { st.querySelectorAll('[data-tab]').forEach(b => { b.dataset.tml = this.SIDE[b.dataset.tab] || (b.textContent || '').trim(); }); const a = st.querySelector('[data-tab].active'); st.dataset.tml = a ? a.dataset.tml : ''; };
     set(); if (!this._sideObs){ this._sideObs = new MutationObserver(set); this._sideObs.observe(st, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true }); } },
@@ -144,7 +154,9 @@ const Face = window.Face = {
       if (view === 'visual' && typeof Wizard !== 'undefined') setTimeout(() => Wizard.mount(), 200); this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
       if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
-      $('tmFail').hidden = true;
+      $('tmFail').hidden = true; const ins = $('tmInspect'); if (ins) ins.hidden = r.id !== 'inspect';
+      if (r.id === 'inspect' && typeof Inspect !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = true; Inspect.show(ins, this._inspectWith || {}); this._inspectWith = null; }
+      else
       if (info){ frame.hidden = true; nat.hidden = true; inf.hidden = false; Info.open(inf, r.info); }
       else if (r.kind === 'frame'){ nat.hidden = true; inf.hidden = true; frame.hidden = false; const want = 'timurila/index.html?embed=1#' + r.hash;
         const fail = $('tmFail'); fail.hidden = true;
@@ -336,6 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof Explorer !== 'undefined' && Explorer.replay && !Explorer._tmWrapped){ Explorer._tmWrapped = true; const or = Explorer.replay; Explorer.replay = function(bot, entryTime, exitTime, sym){ if (toStudio(bot, entryTime, sym, this !== Explorer)) return; return or.apply(this, arguments); }; }
     /* the Live Dive has a Replay button of its own, for real trades */
     if (typeof LiveDive !== 'undefined' && Object.prototype.hasOwnProperty.call(LiveDive, 'replay') && !LiveDive._tmReplay){ LiveDive._tmReplay = true; const lr = LiveDive.replay; LiveDive.replay = function(bot, entryTime, exitTime, sym){ let id = null; try { const x = this.all().find(x => x.bot === bot && x.entryTime === entryTime && x.sym === sym); if (x && x.ticket != null) id = 'l:' + x.ticket; } catch(e){} if (toStudio(bot, entryTime, sym, true, id)) return; return lr.apply(this, arguments); }; }
+    document.addEventListener('click', e => { if (!Face.on()) return; const b = e.target.closest && e.target.closest('#chartReviewBtn, #tradeReviewBtn'); if (!b || (typeof Inspect !== 'undefined' && Inspect._pass) || Face._classicReplay) return;
+      if (b.id === 'chartReviewBtn' && typeof Inspect !== 'undefined'){ e.preventDefault(); e.stopImmediatePropagation(); Face._inspectWith = { sym: STORE.symbol, tf: STORE.tf }; Face.go('inspect'); }
+      else if (b.id === 'tradeReviewBtn' && typeof Replay !== 'undefined'){ e.preventDefault(); e.stopImmediatePropagation(); Face.go('autopsy'); } }, true);
     if (typeof Shortcuts !== 'undefined' && Shortcuts.obs && !Shortcuts._tmObs){ Shortcuts._tmObs = true; const oo = Shortcuts.obs.bind(Shortcuts); Shortcuts.obs = function(name){ if (name === 'replay' && Face.on() && typeof Replay !== 'undefined') return Face.go('autopsy'); return oo.apply(null, arguments); }; }
     if (typeof Shortcuts !== 'undefined' && Shortcuts.tab && !Shortcuts._tmWrapped){ Shortcuts._tmWrapped = true; const ot = Shortcuts.tab.bind(Shortcuts); Shortcuts.tab = function(name){ if (Face.on()) return Face.panel(name); return ot.apply(null, arguments); }; }
   } catch(e){ console.warn('Face: could not follow Classic navigation', e); }

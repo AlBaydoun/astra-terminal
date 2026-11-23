@@ -223,7 +223,7 @@ const Replay = {
     const b = e.target.closest('[data-r]'); if (!b) return; const i = b.dataset.r.indexOf(':'), k = b.dataset.r.slice(0, i), v = b.dataset.r.slice(i + 1), t = this.t, V = this.V;
     if (k === 'sel') this.select(v);
     else if (k === 'f'){ const j = v.indexOf('='); Autopsy.filter[v.slice(0, j)] = v.slice(j + 1); this.refilter(); }
-    else if (k === 'classic'){ const x = document.getElementById('tradeReviewBtn'); if (x) x.click(); }
+    else if (k === 'classic'){ const x = document.getElementById('tradeReviewBtn'); if (x){ Face._classicReplay = true; try { x.click(); } finally { Face._classicReplay = false; } } }
     else if (!t) return;
     else if (k === 'play'){ this.playing ? this.pause() : this.play(); }
     else if (k === 'step') this.step(+v);

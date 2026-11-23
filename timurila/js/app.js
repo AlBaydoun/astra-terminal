@@ -30,4 +30,5 @@ const App = {
     document.title = 'Timurila · ' + this.room[0].toUpperCase() + this.room.slice(1);
   },
 };
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => { App.init();
+  const logo = document.querySelector('.brand .logo'); if (logo && !/[?&]embed=1/.test(location.search)){ logo.style.cursor = 'pointer'; logo.title = 'Reload Timurila (a clean start)'; logo.addEventListener('click', () => { location.href = location.pathname; }); } });

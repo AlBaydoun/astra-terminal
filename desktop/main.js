@@ -74,6 +74,7 @@ function makeWindow(url, key, opts){
     backgroundColor: '#070b18',
     autoHideMenuBar: !!opts.child,
     title: 'ASTRA',
+    icon: path.join(__dirname, 'icon.ico'),   // the orbit logo on the window and the taskbar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
