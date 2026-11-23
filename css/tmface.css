@@ -750,3 +750,21 @@ html[data-face="tm"] #sideTabs button[data-tab]:nth-child(n+10)::after { left: a
 .tsNEmpty button { margin-left: 6px; border: 0; background: none; color: #4FD8F7; cursor: pointer; font: inherit; text-decoration: underline; }
 html.tsNewsTab #tsNews { display: none !important; }
 #tsHSum .up { color: #3DDC97; } #tsHSum .dn { color: #FF6B7A; }
+
+/* ===== side panel: pinned or auto-hide (js/tmsidex.js) — only in the new look ===== */
+#tsPin { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border-radius: 7px; border: 1px solid rgba(126,156,224,.25); background: rgba(8,14,28,.6); color: #4FD8F7; cursor: pointer; transition: color .2s, transform .25s cubic-bezier(.2,.8,.2,1), background .2s; }
+#tsPin svg { width: 13px; height: 13px; fill: rgba(79,216,247,.35); } #tsPin:hover { background: rgba(79,216,247,.12); }
+#tsPin.auto { color: #7C8BA8; transform: rotate(40deg); } #tsPin.auto svg { fill: none; }
+html[data-face="tm"].tsSideAuto #main, html[data-face="tm"].tsSideAuto #main.sideMin { grid-template-columns: var(--toolsW, 44px) minmax(0, 1fr) 0px !important; column-gap: 0; }
+html[data-face="tm"].tsSideAuto #main.toolsMin { grid-template-columns: 14px minmax(0, 1fr) 0px !important; }
+html[data-face="tm"].tsSideAuto #main.toolsWide { grid-template-columns: var(--toolsW, 150px) minmax(0, 1fr) 0px !important; }
+html[data-face="tm"].tsSideAuto #main > #chartArea, html[data-face="tm"].tsSideAuto #main > #chartGrid { margin-right: 6px; }
+html[data-face="tm"].tsSideAuto #sidebar { position: fixed; right: 10px; top: var(--tsSideTop, 92px); bottom: var(--tsSideBot, 36px); width: var(--sideW, 300px); z-index: 70; transform: translateX(calc(100% + 16px)); opacity: .0; pointer-events: none; transition: transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s; box-shadow: -24px 0 60px rgba(0,0,0,.55); background: rgba(10,16,32,.97); }
+html[data-face="tm"].tsSideAuto.tsSideOpen #sidebar { transform: none; opacity: 1; pointer-events: auto; }
+#tsSideHandle { display: none; }
+html[data-face="tm"][data-tmroom="chart"].tsSideAuto #tsSideHandle { display: block; position: fixed; right: 0; top: var(--tsSideTop, 92px); bottom: var(--tsSideBot, 36px); width: 12px; z-index: 69; cursor: pointer; }
+#tsSideHandle i { position: absolute; right: 3px; top: 12%; bottom: 12%; width: 3px; border-radius: 2px; background: linear-gradient(180deg, transparent, #4FD8F7, transparent); opacity: .45; transition: opacity .2s, width .2s; animation: tsEdge 3s ease-in-out infinite; }
+#tsSideHandle span { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 16px; height: 44px; display: grid; place-items: center; border-radius: 8px 0 0 8px; background: rgba(79,216,247,.18); color: #4FD8F7; font-size: 9px; opacity: .7; }
+#tsSideHandle:hover i { opacity: 1; width: 4px; } @keyframes tsEdge { 50% { opacity: .85; } }
+html.tsSideOpen #tsSideHandle { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { html[data-face="tm"].tsSideAuto #sidebar, #tsSideHandle i { transition: none; animation: none; } }

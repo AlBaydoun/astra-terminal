@@ -34,7 +34,27 @@ const SidePanels = {
     pn.addEventListener('click', e => { const f = e.target.closest('[data-nf]'); if (f){ this.nf = f.dataset.nf; this.newsTab(); } });
     const tip = document.createElement('div'); tip.id = 'tsHTip'; tip.hidden = true; document.body.appendChild(tip);
     try { BUS.on('symbol', () => setTimeout(() => this.sync(), 700)); } catch(e){}
-    setInterval(() => this.sync(), 10000); this.initClock(); this.sync(); },
+    setInterval(() => this.sync(), 10000); this.initClock(); this.initAuto(); this.sync(); },
+
+  /* ---------- pinned, or hidden until you reach for it ---------- */
+  AKEY: 'astra_side_auto',
+  PIN: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6ZM12 13v7"/></svg>',
+  initAuto(){ const ctl = document.querySelector('#sideTabs .sideCtl'), sb = this.$('sidebar'); if (!sb || this.$('tsPin')) return;
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'tsPin'; b.className = 'tsOnlyFace'; b.innerHTML = this.PIN; (ctl || this.$('sideTabs')).prepend(b);
+    b.addEventListener('click', e => { e.stopPropagation(); this.setAuto(!this.auto); });
+    const h = document.createElement('div'); h.id = 'tsSideHandle'; h.className = 'tsOnlyFace'; h.title = 'The side panel: move the mouse here'; h.innerHTML = '<i></i><span>◀</span>'; document.body.appendChild(h);
+    h.addEventListener('mouseenter', () => this.peek(true)); h.addEventListener('click', () => this.peek(true));
+    sb.addEventListener('mouseenter', () => { clearTimeout(this._hideT); }); sb.addEventListener('mouseleave', () => this.later());
+    document.addEventListener('mousemove', e => { if (this.auto && !this.open && e.clientX >= window.innerWidth - 6 && document.documentElement.dataset.tmroom === 'chart') this.peek(true); }, { passive: true });
+    window.addEventListener('resize', () => { if (this.auto) this.place(); });
+    let on = false; try { on = localStorage.getItem(this.AKEY) === '1'; } catch(e){} this.setAuto(on, true); },
+  setAuto(on, quiet){ this.auto = on; try { localStorage.setItem(this.AKEY, on ? '1' : '0'); } catch(e){} const H = document.documentElement; H.classList.toggle('tsSideAuto', on); this.peek(false);
+    const b = this.$('tsPin'); if (b){ b.classList.toggle('auto', on); b.title = on ? 'Auto-hide is on: the panel slides in when the mouse reaches the right edge. Click to pin it again.' : 'Pinned. Click to auto-hide the panel and give the chart the full width.'; }
+    if (on) this.place(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60); if (!quiet && typeof toast === 'function') toast(on ? 'Side panel: auto-hide. Move the mouse to the right edge to bring it in.' : 'Side panel: pinned', 'info'); },
+  /* the panel floats over the chart, from the top of the work area to its foot */
+  place(){ const m = this.$('main'); if (!m) return; const r = m.getBoundingClientRect(), H = document.documentElement.style; H.setProperty('--tsSideTop', (r.top + 10) + 'px'); H.setProperty('--tsSideBot', Math.max(8, window.innerHeight - r.bottom + 10) + 'px'); },
+  peek(on){ if (on && !this.auto) return; clearTimeout(this._hideT); this.open = on; if (on) this.place(); document.documentElement.classList.toggle('tsSideOpen', !!on); if (on) setTimeout(() => this.sync(), 50); },
+  later(){ if (!this.auto) return; clearTimeout(this._hideT); this._hideT = setTimeout(() => { const sb = this.$('sidebar'), a = document.activeElement; if (sb && (sb.matches(':hover') || (a && sb.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)))) return this.later(); this.peek(false); }, 450); },
   open(sym){ try { if (typeof Face !== 'undefined' && Face.room !== 'chart') Face.go('chart'); typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.openChart(sym) : App.setSymbol(sym); } catch(e){} },
   active(id){ const p = this.$('tab-' + id); return !!p && p.classList.contains('active') && p.offsetParent !== null; },
   sync(){ const nOn = this.active('tsnews'); document.documentElement.classList.toggle('tsNewsTab', nOn); if (this.active('tsheat')) this.heat(); if (nOn) this.newsTab(); },
