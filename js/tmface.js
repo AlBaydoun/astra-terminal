@@ -16,6 +16,8 @@
 (function(){
 'use strict';
 const H = document.documentElement, KEY = 'astra_face';
+/* the window title says "JustMarkets Terminal" while no price is showing (set in js/app.js): it is the Markets Terminal now */
+{ const fix = () => { if (document.title.indexOf('JustMarkets Terminal') >= 0) document.title = document.title.replace('JustMarkets Terminal', 'Markets Terminal'); }, t = document.querySelector('title'); if (t) new MutationObserver(fix).observe(t, { childList: true, characterData: true, subtree: true }); fix(); }
 /* before the first paint, so nothing flashes. A torn-off panel window keeps the Classic look. */
 const isPanel = !!new URLSearchParams(location.search).get('panel');
 /* the Classic look can be switched off in View → Settings: then ASTRA always opens in this look */
