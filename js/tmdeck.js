@@ -10,11 +10,15 @@
      manual .... Ticket · Rules · Auto · Orders · Results · Notes (your paper desk; not a sequence)
      open ...... Trades · Summary · Notes. The trades are a wall of small cards; press one and it
                  opens wide with its own controls (stop, target, trailing, reduce or close)
+     scanner ... Setups · Watching · Notes. The table's rows are tiles with the score as a ring; press
+                 one for every check behind it. Timeframe is chips, the minimum score a slider
+     confluenceScanner ... Board · Rules · Notes. A tile an instrument with its five checks as bars
 
    This file DRAWS and ARRANGES only. Every control is still Classic's own element inside the page
    body the studio moved here (BotStudio.embed): a station is made by showing and hiding those
    elements (a data attribute and a class, read by the stylesheet), never by copying or re-wiring
-   them. Nothing here calls a function that arms a bot, changes a limit, or sends, closes or changes
+   them. On the two scanners, which have no money function at all, a list of choices is drawn as chips
+   that set the page's own field (see seg below). Nothing here calls a function that arms a bot, changes a limit, or sends, closes or changes
    an order, paper or real. */
 'use strict';
 const LiveDeck = window.LiveDeck = {
@@ -35,10 +39,18 @@ const LiveDeck = window.LiveDeck = {
       { id: 'orders', n: 'Orders', icon: '⏳', title: 'Waiting and open', text: 'Your waiting entry orders and the paper trades that are open now.', parts: ['pending', 'positions'] },
       { id: 'results', n: 'Results', icon: '📊', title: 'How you have done', text: 'Your numbers, the running result and every closed paper trade.', parts: ['stats'], sel: ['.botGrid'], rest: true },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes and the paper / real switch', text: 'Your notes on this desk, and the way over to the real-money ticket.', parts: ['notes', 'links'] } ] },
-    open: { key: 'astra_deck_open', eyebrow: 'OPEN TRADES', focus: { card: '.otCard', key: 'ot' }, stations: [
+    open: { key: 'astra_deck_open', eyebrow: 'OPEN TRADES', focus: { card: '.otCard', key: 'ot', head: '.otHead', skip: '.wsPriceRail' }, stations: [
       { id: 'trades', n: 'Trades', icon: '🃏', title: 'Every open trade', text: 'One card a trade: what it is, where the price stands between its stop and its target, and what it is worth now. Press a card to open its controls: stop and target, trailing stop, reduce or close.', parts: ['sort', 'filter', 'list'], rest: true },
       { id: 'summary', n: 'Summary', icon: '📋', title: 'The summary', text: 'The numbers of everything open, every trade on one line, and the real positions on your account.', parts: ['stats', 'table', 'real'] },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this page and how adjusting a bot’s trade works.', parts: ['notes', 'intro', 'note'] } ] },
+    scanner: { key: 'astra_deck_scanner', eyebrow: 'MARKET SCANNER', dress: 'dressScanner', focus: { card: '.scTable tr[data-sym]', key: 'sym', head: 'td:not(.dkMore)' }, stations: [
+      { id: 'setups', n: 'Setups', icon: '⚡', title: 'Ready now', text: 'Every instrument that passes all of the scanner’s checks at this moment, one tile each. Press a tile for every check behind its score. The scanner ranks and explains; it never opens a trade.', parts: ['controls', 'active'] },
+      { id: 'watching', n: 'Watching', icon: '👁', title: 'Not ready yet', text: 'Everything else it looked at, highest score first (the page lists the top 60). Press a tile to see which checks it passed and which it is still missing.', parts: ['controls', 'watching'], rest: true },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on the scanner.', parts: ['notes', 'note'] } ] },
+    confluenceScanner: { key: 'astra_deck_cfs', eyebrow: 'CONFLUENCE SCANNER', dress: 'dressConfluence', focus: { card: '#cfScanRows tr[data-dkk]', key: 'dkk', head: 'td:not(.dkMore)' }, stations: [
+      { id: 'board', n: 'Board', icon: '🧲', title: 'Every instrument, five checks', text: 'One tile an instrument: its signal, the five checks as five bars, its state and what it is waiting for. Press a tile for the reading behind each check.', parts: ['controls', 'status', 'find', 'table'], rest: true },
+      { id: 'rules', n: 'Rules', icon: '📐', title: 'How it scans and ranks', text: 'What the scanner reads, how often, and how it orders what it finds.', parts: ['explain'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this scanner.', parts: ['notes'] } ] },
   },
   sel: {},
   esc(s){ return TmSettings.esc(s); },
@@ -57,28 +69,67 @@ const LiveDeck = window.LiveDeck = {
       /* a wall of cards: press one (not one of its controls) and it opens wide; press its top again to put it back */
       document.addEventListener('click', e => { const C = this.cfg(); if (!this.on || !C || !C.focus || !e.target.closest) return; const card = e.target.closest('#suFullHost ' + C.focus.card); if (!card) return; const open = card.classList.contains('dkSel');
         if (e.target.closest('button, input, select, textarea, a, label')) return;   /* a control keeps its own job */
-        if (open && !e.target.closest('.otHead')) return;                             /* an open card closes from its top only */
-        if (!open && e.target.closest('.wsPriceRail')) return;                        /* dragging a level is not a press */
-        this.sel[this.page] = open ? '' : card.dataset[C.focus.key]; this.applyFocus();
-        if (!open) setTimeout(() => { const c = this.body() && this.body().querySelector(C.focus.card + '.dkSel'), m = document.getElementById('suMain'), h = this.head(); if (c && m) m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - (h ? h.offsetHeight : 0) - 6; }, 40); });
+        if (open && C.focus.head && !e.target.closest(C.focus.head)) return;          /* an open card closes from its top or its summary only */
+        if (!open && C.focus.skip && e.target.closest(C.focus.skip)) return;          /* dragging a level is not a press */
+        this.sel[this.page] = open ? '' : card.dataset[C.focus.key]; this.applyFocus(); const b0 = () => this.body();
+        if (!open) setTimeout(() => { const c = this.body() && this.body().querySelector(C.focus.card + '.dkSel'), m = document.getElementById('suMain'), h = this.head(); if (!c || !m) return; let box = c.parentElement; while (box && box !== b0() && !(box.scrollHeight > box.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+          if (box && box !== b0()) box.scrollTop += c.getBoundingClientRect().top - box.getBoundingClientRect().top - 6; else m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - (h ? h.offsetHeight : 0) - 16; }, 40); });
       /* Classic draws its page again from time to time: the stations are put back on it at once */
       if (typeof Bots !== 'undefined' && !Bots._dkWrapped){ Bots._dkWrapped = true; const o = Bots.render.bind(Bots); Bots.render = (...a) => { const r = o(...a); try { if (this.on && this.body()) this.apply(); } catch(e){} return r; }; } }
-    if (C.focus && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (this._moT) return; this._moT = requestAnimationFrame(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
+    if (C.focus && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (this._moT) return; this._moT = setTimeout(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }, 30); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
     if (!h._ro && 'ResizeObserver' in window){ h._ro = new ResizeObserver(() => this.measure()); h._ro.observe(h); }
-    this.paint(); clearInterval(this.timer); this.timer = setInterval(() => { if (this.on && this.body() && !document.hidden) this.paint(); else if (this.on && !this.body()) this.unmount(); }, 1500); },
-  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
-  set(id){ const C = this.cfg(); if (!C) return; this.st = id; try { localStorage.setItem(C.key, id); } catch(e){} this._sig = ''; this.paint(); const f = document.getElementById('suFull'); if (f) TmSettings.scrollTo(document.getElementById('suMain'), f); },
+    this.paint(); this.fresh(); clearInterval(this.timer); this.timer = setInterval(() => { if (this.on && this.body() && !document.hidden) this.paint(); else if (this.on && !this.body()) this.unmount(); }, 1500); },
+  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
+  set(id){ const C = this.cfg(); if (!C) return; this.st = id; try { localStorage.setItem(C.key, id); } catch(e){} this._sig = ''; this.paint(); this.fresh(); const f = document.getElementById('suFull'); if (f) TmSettings.scrollTo(document.getElementById('suMain'), f); },
 
-  /* which of the page's own parts belong to which station (pages laid out by BotLayout parts) */
+  /* the tiles of a station rise once when it opens, not each time the page redraws itself */
+  fresh(){ const b = this.body(); if (!b) return; b.classList.remove('dkFresh'); void b.offsetWidth; b.classList.add('dkFresh'); clearTimeout(this._fr); this._fr = setTimeout(() => b.classList.remove('dkFresh'), 1100); },
+
+  /* which of the page's own parts belong to which station (pages laid out by BotLayout parts; a part may sit in several) */
   apply(){ const b = this.body(), C = this.cfg(); if (!b || !C) return; if (b.dataset.deck !== this.st) b.dataset.deck = this.st; if (b.dataset.deckpage !== this.page) b.dataset.deckpage = this.page; if (C.css) return;
     const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart]')].filter(p => !p.parentElement.closest('.blPart'));
-    for (const p of parts){ const s = C.stations.find(x => (x.parts || []).includes(p.dataset.blpart)), v = s ? s.id : rest; if (p.dataset.dkst !== v) p.dataset.dkst = v; }
+    for (const p of parts){ const v = C.stations.filter(x => (x.parts || []).includes(p.dataset.blpart)).map(x => x.id).join(' ') || rest; if (p.dataset.dkst !== v) p.dataset.dkst = v; }
     for (const s of C.stations) for (const q of s.sel || []) b.querySelectorAll(q).forEach(el => { if (!el.closest('.blPart')) el.dataset.dkst = s.id; });
-    b.querySelectorAll('[data-dkst]').forEach(el => { const on = this.st === 'all' || el.dataset.dkst === this.st; if (el.classList.contains('dkOn') !== on) el.classList.toggle('dkOn', on); }); this.applyFocus(); },
+    b.querySelectorAll('[data-dkst]').forEach(el => { const on = this.st === 'all' || el.dataset.dkst.split(' ').includes(this.st); if (el.classList.contains('dkOn') !== on) el.classList.toggle('dkOn', on); }); if (C.dress){ try { this[C.dress](b); } catch(e){ console.warn('deck dress', e); } } this.applyFocus(); },
   applyFocus(){ const b = this.body(), C = this.cfg(); if (!b || !C || !C.focus) return; const k = this.sel[this.page] || ''; b.querySelectorAll(C.focus.card).forEach(c => { const on = !!k && c.dataset[C.focus.key] === k; if (c.classList.contains('dkSel') !== on) c.classList.toggle('dkSel', on); }); },
 
+  /* ---------- dressing a page's own rows ----------
+     A row of the page's table is drawn as a tile. What the stylesheet cannot work out by itself is read from the scan
+     (never written) and hung on the row: its side, a score to draw as a ring, and one extra cell with the checks
+     behind it. Everything added carries the class dkAdd and is taken off again when the page leaves the studio. */
+  cell(cls, html){ const td = document.createElement('td'); td.className = cls + ' dkAdd'; td.innerHTML = html; return td; },
+  gauge(label, val, pct, unit){ return Number.isFinite(val) ? '<span><label>' + label + '</label><b>' + (+val.toFixed(2)) + (unit || '') + '</b><i><u style="--w:' + Math.max(3, Math.min(100, pct)).toFixed(0) + '%"></u></i></span>' : ''; },
+  /* a short list of choices drawn as chips. A press sets the page's own field and fires that field's own change event,
+     exactly as choosing from the list would. Used on the two scanners only (which timeframe, which rows to show):
+     never on a page that can arm a bot, change a limit or touch an order. */
+  seg(sel){ if (!sel || sel.classList.contains('dkHid')) return; const seg = document.createElement('span'); seg.className = 'dkSeg dkAdd'; seg.innerHTML = [...sel.options].map(o => '<button type="button" class="' + (o.selected ? 'on' : '') + '" data-v="' + this.esc(o.value) + '">' + this.esc(o.textContent) + '</button>').join('');
+    seg.addEventListener('click', e => { const t = e.target.closest('[data-v]'); if (!t || sel.value === t.dataset.v) return; sel.value = t.dataset.v; seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === t)); sel.dispatchEvent(new Event('change', { bubbles: true })); }); sel.after(seg); sel.classList.add('dkHid'); },
+  dressScanner(b){ const rows = (typeof Bots !== 'undefined' && Bots.scan && Bots.scan.rows) || []; let by = null, i = 0;
+    b.querySelectorAll('.scTable tr[data-sym]').forEach(tr => { const n = i++; if (tr.querySelector('.dkMore')) return; by = by || new Map(rows.map(r => [r.sym, r])); const r = by.get(tr.dataset.sym); if (!r) return; const m = r.meta || {};
+      tr.style.setProperty('--sc', Math.max(0, Math.min(100, r.score || 0)).toFixed(0)); tr.style.setProperty('--i', n); tr.classList.add(r.dir > 0 ? 'dkB' : r.dir < 0 ? 'dkS' : 'dkN'); if (r.active) tr.classList.add('dkAct');
+      tr.appendChild(this.cell('dkMore', '<div class="dkGauges">' + this.gauge('RSI', m.rsi, m.rsi) + this.gauge('ADX', m.adx, m.adx * 2) + this.gauge('VOLUME', m.volRatio, m.volRatio * 50, '×') + this.gauge('ATR', m.atrPct, m.atrPct / 3 * 100, '%') + '</div><ul class="dkChecks">' + (r.reasons || []).map(x => '<li class="ok">' + this.esc(x) + '</li>').join('') + (r.failed || []).map(x => '<li class="no">' + this.esc(x) + '</li>').join('') + '</ul>')); });
+    const ctl = b.querySelector('.blPart[data-blpart="controls"] .botCtl'); if (!ctl || ctl.querySelector('.dkAdd')) return;
+    this.seg(ctl.querySelector('select[data-cfg="tf"]'));
+    /* the minimum score as a slider beside its own number field: letting go of it is the same as typing the number */
+    const num = ctl.querySelector('input[data-cfg="minScore"]'); if (num){ const rg = document.createElement('input'); rg.type = 'range'; rg.min = 0; rg.max = 100; rg.step = 1; rg.value = num.value; rg.className = 'dkRange dkAdd'; rg.setAttribute('aria-label', 'Minimum score'); rg.style.setProperty('--v', num.value + '%');
+      rg.addEventListener('input', () => { num.value = rg.value; rg.style.setProperty('--v', rg.value + '%'); }); rg.addEventListener('change', () => { num.value = rg.value; num.dispatchEvent(new Event('change', { bubbles: true })); }); num.before(rg); } },
+  dressConfluence(b){ const S = typeof ConfluenceScanner !== 'undefined' ? ConfluenceScanner : null; if (!S) return; let by = null, i = 0;
+    b.querySelectorAll('#cfScanRows tr').forEach(tr => { const n = i++; if (tr.dataset.dkk) return; const btn = tr.querySelector('[data-cf-pair]'); if (!btn) return; by = by || new Map((S.rows || []).map(r => [r.sym, r])); const r = by.get(btn.dataset.cfPair); tr.dataset.dkk = btn.dataset.cfPair; tr.style.setProperty('--i', n); if (!r) return; const sg = r.signal || {}, ck = sg.checks || [];
+      tr.classList.add(sg.dir > 0 ? 'dkB' : sg.dir < 0 ? 'dkS' : 'dkN', 'dkSt' + String(r.status || '').replace(/[^A-Z]/g, '')); if (!sg.dir) tr.classList.add('dkNoLv');
+      tr.appendChild(this.cell('dkPips', ck.map(x => '<i class="' + (x.ok ? 'ok' : 'no') + '" title="' + this.esc(x.name + ': ' + x.value) + '"></i>').join('')));
+      tr.appendChild(this.cell('dkMore', (ck.length ? '<ul class="dkChecks five">' + ck.map(x => '<li class="' + (x.ok ? 'ok' : 'no') + '"><b>' + this.esc(x.name) + '</b><span>' + this.esc(x.value) + '</span></li>').join('') + '</ul>' : '<div class="dkNone">No reading came for this instrument on the last scan.</div>') +
+        '<div class="dkGauges">' + this.gauge('ADX', r.adx, r.adx * 2) + this.gauge('SCORE', sg.score, sg.score) + this.gauge('COST ÷ ATR', r.costRatio, r.costRatio * 200) + '</div>')); });
+    this.seg(b.querySelector('#cfScanFilter'));
+    /* the long explanation, one line a rule */
+    const ex = b.querySelector('.blPart[data-blpart="explain"] .botNote'); if (ex && !ex.classList.contains('dkHid')){ const ul = document.createElement('ul'); ul.className = 'dkRules dkAdd'; ul.innerHTML = (ex.textContent || '').split(/(?<=\.)\s+/).map(x => x.trim()).filter(Boolean).map(x => '<li>' + this.esc(x) + '</li>').join(''); ex.after(ul); ex.classList.add('dkHid'); } },
+
   /* ---------- where each station stands: read, never written ---------- */
-  facts(){ return this.page === 'live' ? this.factsLive() : this.page === 'manual' ? this.factsManual() : this.page === 'open' ? this.factsOpen() : {}; },
+  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence' }[this.page]; return f ? this[f]() : {}; },
+  factsScanner(){ const s = (typeof Bots !== 'undefined' && Bots.scan) || {}, rows = s.rows || [], act = rows.filter(r => r.active); let cfg = {}; try { cfg = Bots.cfg('scanner') || {}; } catch(e){}
+    return { _label: s.busy ? 'scanning…' : rows.length ? (s.universe || rows.length) + ' instruments' + (cfg.tf ? ' · ' + cfg.tf : '') + (cfg.minScore != null ? ' · score ' + cfg.minScore + ' and up' : '') : 'not scanned yet',
+      setups: { t: act.length ? act.filter(r => r.dir > 0).length + ' buy · ' + act.filter(r => r.dir < 0).length + ' sell' : 'none right now' }, watching: { t: (rows.length - act.length) + ' not ready' }, notes: { t: 'yours' } }; },
+  factsConfluence(){ const S = typeof ConfluenceScanner !== 'undefined' ? ConfluenceScanner : { rows: [] }, rows = S.rows || [], n = k => rows.filter(r => r.status === k).length; let on = false; try { on = !!ConfluenceBot.config().scannerOn; } catch(e){}
+    return { _label: (on ? 'automatic · on' : 'paused') + (S.pending ? ' · scanning ' + S.done + ' of ' + S.total : ''), board: { t: n('READY') + ' ready · ' + n('SETUP') + ' setup' + (n('SETUP') === 1 ? '' : 's') + ' · ' + rows.length + ' read' }, rules: { t: '15-minute chart' }, notes: { t: 'yours' } }; },
   factsOpen(){ let n = 0, fl = 0, up = 0; try { for (const p of Pages.openPaper()){ n++; fl += p.unreal || 0; if (p.unreal > 0) up++; } } catch(e){} let real = 0; try { real = (Pages._pos || []).length; } catch(e){}
     return { _label: n + ' open', trades: { t: up + ' ahead · ' + (n - up) + ' behind' }, summary: { t: 'floating ' + (fl >= 0 ? '+' : '−') + TmSettings.num(Math.abs(fl)) + (real ? ' · ' + real + ' real' : '') }, notes: { t: 'yours' } }; },
   factsLive(){ const b = this.body(), q = s => b && b.querySelector(s), txt = el => el ? (el.textContent || '').trim().replace(/\s+/g, ' ') : '', gate = k => { const g = q('.ldGate[data-ldgate="' + k + '"]'); return { on: !!g && g.classList.contains('on'), next: !!g && g.classList.contains('next'), s: txt(g && g.querySelector('span')) }; };

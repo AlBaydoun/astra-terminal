@@ -53,7 +53,12 @@ const BotStudio = window.BotStudio = {
     const id = this.id, ok = id === 'permissions' || (typeof BOT_BY_ID !== 'undefined' && !!BOT_BY_ID[id]); sec.hidden = !ok; if (!ok){ this.release(); this._shown = ''; return; }
     const deck = () => { try { if (typeof LiveDeck !== 'undefined') LiveDeck.sync(id); } catch(e){ console.warn('deck', e); } };
     if (body.parentElement !== host){ this._home = { parent: body.parentElement, next: body.nextSibling }; host.appendChild(body); }
+    if (!Bots._suFollow){ Bots._suFollow = true; const o = Bots.render.bind(Bots); Bots.render = (...a) => { const r = o(...a); try { BotStudio.follow(); } catch(e){} return r; }; }
     if (this._shown !== id || Bots.active !== id){ this._shown = id; Bots.active = id; try { if (Bots.renderNav) Bots.renderNav(); Bots.render(); } catch(e){ console.warn('studio embed', e); } } deck(); },
+  /* a button of the page itself can open another page (the scanner's "Open Confluence bot"): the studio goes with it,
+     so the pictures and the stations on screen always belong to the page under them */
+  follow(){ const here = () => { const b = document.getElementById('botBody'), h = document.getElementById('suFullHost'); return !!(b && h && h.contains(b)); }; if (this._fw || !here() || Bots.active === this.id) return; this._fw = true;
+    setTimeout(() => { this._fw = false; const id = Bots.active; if (!here() || id === this.id) return; const rm = id === 'botsettings' ? 'settings' : this.ROOMS[id]; if (rm) Face.go(rm); else if (this.has(id)) this.pick(id); }, 0); },
   release(){ try { if (typeof LiveDeck !== 'undefined' && LiveDeck.on) LiveDeck.unmount(); } catch(e){}
     const body = document.getElementById('botBody'), h = this._home || {}, st = document.getElementById('tmStudio'); this._shown = ''; if (!body || !st || !st.contains(body)) return;
     /* back where it came from; if that place is gone, back into Classic's own Bots panel: it is never left inside the studio */
