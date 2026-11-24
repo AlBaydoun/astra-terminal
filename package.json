@@ -9,6 +9,6 @@
     "desktop": "electron ."
   },
   "devDependencies": {
-    "electron": "^32.3.3"
+    "electron": "^45.4.1"
   }
 }

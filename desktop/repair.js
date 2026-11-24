@@ -20,6 +20,23 @@ const exe = path.join(dist, 'electron.exe');
 
 function ok(){ return fs.existsSync(exe) && fs.statSync(exe).size > 1000000; }
 
+/* An older desktop shell than this project asks for (an update arrived with git): bring it up to
+   date now, while ASTRA is closed. If it cannot be done (no internet, a locked file), the shell
+   that is there keeps working and this is tried again next time. */
+try {
+  const want = String((JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies || {}).electron || '').replace(/^[^0-9]*/, '');
+  const have = fs.existsSync(path.join(elDir, 'package.json')) ? JSON.parse(fs.readFileSync(path.join(elDir, 'package.json'), 'utf8')).version : '';
+  const major = v => parseInt(String(v).split('.')[0], 10) || 0;
+  if (want && have && major(have) < major(want)){
+    console.log('Updating the desktop shell from Electron ' + have + ' to ' + want + ' (security fixes). One time only...');
+    try {
+      execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+      if (!ok()) execFileSync(process.execPath, [path.join(elDir, 'install.js')], { cwd: root, stdio: 'inherit' });
+      console.log(ok() ? 'Desktop shell updated.' : 'The update is not complete yet; unpacking it below...');
+    } catch (e){ console.log('The update could not finish now (' + (e && e.message ? e.message.split(String.fromCharCode(10))[0] : e) + '). ASTRA starts with the shell it has.'); }
+  }
+} catch (e){ /* a damaged package.json: leave the shell as it is */ }
+
 if (ok()){
   console.log('Desktop shell is ready.');
   process.exit(0);
