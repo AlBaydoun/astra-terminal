@@ -31,6 +31,7 @@ const ICON = {
   home: 'M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M3 12c0-2.5 4-4.5 9-4.5s9 2 9 4.5-4 4.5-9 4.5-9-2-9-4.5z', markets: 'M7 4v16M5 8h4v7H5zM17 3v18M15 6h4v9h-4z',
   lab: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9', bots: 'M8 4h8a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4zM9 10v2M15 10v2M9 16h6',
   news: 'M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M8 9h5M8 13h5', more: 'M5 5h.01M12 5h.01M19 5h.01M5 12h.01M12 12h.01M19 12h.01M5 19h.01M12 19h.01M19 19h.01',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   layers: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5', tools: 'M14 6a4 4 0 0 0 5 5l-9 9a2.1 2.1 0 0 1-3-3zM5 5l3 3', view: 'M3 5h18v12H3zM8 21h8M12 17v4', candles: 'M7 4v16M5 8h4v7H5zM17 3v18M15 6h4v9h-4z',
 };
 const svg = (d, w) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 1.7) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>';
@@ -51,6 +52,8 @@ const Face = window.Face = {
     { id: 'lab', label: 'Evidence', kind: 'frame', hash: 'lab', tip: 'What has been tested, and how it scored' },
     { id: 'bots', label: 'All bots', kind: 'tab', tab: 'bots', tip: 'Every bot and page' },
     { id: 'news', label: 'News', kind: 'tab', tab: 'news', tip: 'News and alerts' },
+    { id: 'settings', label: 'Settings', kind: 'native', tip: 'Settings: bots on / off, look and motion, connections, safety, storage, shortcuts' },
+    { id: 'studio', label: 'Bot studio', kind: 'native', dock: false, tip: 'Every page and bot of All bots, in the new look' },
   ],
   room: 'chart', moved: [], built: false,
   on(){ return H.dataset.face === 'tm'; },
@@ -72,14 +75,15 @@ const Face = window.Face = {
   setClassic(allowed){ try { localStorage.setItem(CKEY, allowed ? '0' : '1'); } catch(e){} H.classList.toggle('tmNoClassic', !allowed); if (!allowed) try { localStorage.setItem(KEY, 'tm'); } catch(e){}
     this.paintSettings(); if (typeof toast === 'function') toast(allowed ? 'The Classic look is available again (F12 or the Classic button).' : 'The Classic look is switched off: ASTRA always opens in this look.', 'info'); },
   paintSettings(){ const box = $('tmSettings'); if (!box) return; const off = classicOff();
-    box.innerHTML = '<h4>Settings</h4><div class="tmSet"><div><b>Classic look</b><small>' + (off ? 'Off: ASTRA always opens in this look. F12, the Classic button and the menu no longer go back. Every function stays here.' : 'On: F12 or the Classic button switches to the old look.') + '</small></div><span class="tmSetSeg"><button type="button" data-set="classic:1" class="' + (off ? '' : 'on') + '">On</button><button type="button" data-set="classic:0" class="' + (off ? 'on' : '') + '">Off</button></span></div>'; },
+    box.innerHTML = '<h4>Settings</h4><div class="tmSet"><div><b>Classic look</b><small>' + (off ? 'Off: ASTRA always opens in this look. F12, the Classic button and the menu no longer go back. Every function stays here.' : 'On: F12 or the Classic button switches to the old look.') + '</small></div><span class="tmSetSeg"><button type="button" data-set="classic:1" class="' + (off ? '' : 'on') + '">On</button><button type="button" data-set="classic:0" class="' + (off ? 'on' : '') + '">Off</button></span></div>' +
+      '<button type="button" class="tmSetRoomBtn" data-set="room"><b>All settings</b><small>Bots on / off · look · connections · safety · storage · shortcuts</small><i>→</i></button>'; },
 
   /* ---------- the dock, the stage, the palette (made once, shown by the stylesheet) ---------- */
   build(){
     if (this.built) return; this.built = true;
     const dock = document.createElement('nav'); dock.id = 'tmDock'; dock.setAttribute('aria-label', 'Rooms');
     dock.innerHTML = '<div class="tmLogo" role="button" tabindex="0" title="Reload the terminal (a clean start, same as the ASTRA logo)"><i></i><i></i><b></b></div>' +
-      this.ROOMS.map(r => r.sep ? '<span class="tmSep"></span>' : '<button type="button" data-room="' + r.id + '" title="' + esc(r.tip) + '">' + svg(ICON[r.id]) + '<span>' + r.label + '</span><em hidden></em></button>').join('') +
+      this.ROOMS.filter(r => r.dock !== false).map(r => r.sep ? '<span class="tmSep"></span>' : '<button type="button" data-room="' + r.id + '" title="' + esc(r.tip) + '">' + svg(ICON[r.id]) + '<span>' + r.label + '</span><em hidden></em></button>').join('') +
       '<span class="tmGrow"></span><button type="button" id="tmMore" title="Everything: pages, panels, buttons, instruments (Ctrl+K)">' + svg(ICON.more, 2.6) + '<span>More</span></button>' +
       '<button type="button" id="tmClassic" title="Back to the Classic look. Nothing else changes.">Classic</button>';
     document.body.appendChild(dock);
@@ -121,7 +125,7 @@ const Face = window.Face = {
     tools.innerHTML = '<h4>Tools</h4>'; view.innerHTML = '<h4>View</h4>';
     for (const [id, label] of [['alertBtn', 'New price alert'], ['replayBtn', 'Bar replay'], ['cmpBtn', 'Compare another instrument'], ['mktBtn', 'Markets: what I watch'], ['layoutsBtn', 'Saved workspaces'], ['chartReviewBtn', 'Inspect or replay this chart']]) this.move($(id), tools, label);
     for (const [id, label] of [['layoutSeg', 'Charts on screen'], ['winBtn', 'Open a panel in its own window'], ['maxBtn', 'Maximise the chart'], ['shotBtn', 'Screenshot the chart'], ['themeBtn', 'Light or dark'], ['fsBtn', 'Full screen']]) this.move($(id), view, label);
-    if (!$('tmSettings')){ const st = document.createElement('div'); st.id = 'tmSettings'; view.appendChild(st); st.addEventListener('click', e => { const b = e.target.closest('[data-set]'); if (!b) return; e.stopPropagation(); this.setClassic(b.dataset.set === 'classic:1'); }); } else view.appendChild($('tmSettings'));
+    if (!$('tmSettings')){ const st = document.createElement('div'); st.id = 'tmSettings'; view.appendChild(st); st.addEventListener('click', e => { const b = e.target.closest('[data-set]'); if (!b) return; e.stopPropagation(); if (b.dataset.set === 'room'){ this.closePops(); this.go('settings'); } else this.setClassic(b.dataset.set === 'classic:1'); }); } else view.appendChild($('tmSettings'));
     this.paintSettings();
     /* the chart strip becomes the Layers panel; the manual BUY / SELL buttons stay in sight on the top bar */
     const strip = $('chartLabelBar'), acts = strip && strip.querySelector('.chartTradeActions');
@@ -167,8 +171,11 @@ const Face = window.Face = {
       if (view === 'visual' && typeof Wizard !== 'undefined') setTimeout(() => Wizard.mount(), 200); this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
       if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
-      $('tmFail').hidden = true; const ins = $('tmInspect'); if (ins) ins.hidden = r.id !== 'inspect';
-      if (r.id === 'inspect' && typeof Inspect !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = true; Inspect.show(ins, this._inspectWith || {}); this._inspectWith = null; }
+      $('tmFail').hidden = true; const ins = $('tmInspect'); if (ins) ins.hidden = r.id !== 'inspect'; const sr = $('tmSetRoom'); if (sr) sr.hidden = r.id !== 'settings';
+      const su = $('tmStudio'); if (su) su.hidden = r.id !== 'studio';
+      if (r.id === 'settings' && typeof TmSettings !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = true; TmSettings.show(stage); }
+      else if (r.id === 'studio' && typeof BotStudio !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = true; BotStudio.show(stage, this._studioBot); this._studioBot = ''; }
+      else if (r.id === 'inspect' && typeof Inspect !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = true; Inspect.show(ins, this._inspectWith || {}); this._inspectWith = null; }
       else
       if (info){ frame.hidden = true; nat.hidden = true; inf.hidden = false; Info.open(inf, r.info); }
       else if (r.kind === 'frame'){ nat.hidden = true; inf.hidden = true; frame.hidden = false; const want = 'timurila/index.html?embed=1#' + r.hash;
@@ -182,6 +189,8 @@ const Face = window.Face = {
       else { frame.hidden = true; inf.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => { if (Autopsy.want){ const w = Autopsy.want; Autopsy.want = null; Autopsy.filter = { src: 'all', bot: '', out: 'all' }; Autopsy.select(w); } else Autopsy.paint(); }); } } }
   },
   panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
+  /* a strategy bot opens in its studio; the Classic page stays one click away from there */
+  studio(id){ if (!this.on()) return; this._studioBot = id || ''; this.go('studio'); },
   bot(id){ this.panel('bots'); setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + id + '"]'); if (b) b.click(); }, 80); },
   badges(){ if (!this.on()) return; try { const b = document.querySelector('#tmDock [data-room="live"] em'); if (b && typeof Live !== 'undefined' && Live.book){ const n = (Live.book.open || []).length, d = typeof Live.dayPnl === 'function' ? Live.dayPnl() : 0; b.hidden = !n && !d; b.textContent = n ? String(n) : ''; b.className = d > 0 ? 'up' : d < 0 ? 'dn' : ''; b.title = n + ' live position' + (n === 1 ? '' : 's') + ' open'; } } catch(e){} },
 
@@ -346,14 +355,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (isPanel) return;
   /* F12 switches the look (Classic's own shortcuts already use F1 to F10). Handled here as well as in the desktop menu,
      and stopped here, so the two can never both fire and cancel each other out. */
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#botNav [data-bot]'); if (!b || !Face.on() || Face._raw || e.altKey || typeof BotStudio === 'undefined') return; const id = b.dataset.bot, rm = id === 'botsettings' ? 'settings' : BotStudio.ROOMS[id]; if (!rm && !BotStudio.has(id)) return; e.preventDefault(); e.stopPropagation(); if (rm) Face.go(rm); else Face.studio(id); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'F12' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey){ e.preventDefault(); e.stopPropagation(); Face.toggle(); } }, true);
   /* Classic's own ways of moving about (its shortcut keys, the account pill, a click on a ticker) keep working in the new
      look: when Classic opens a page, the face shows that page; when Classic opens a chart, the face goes to the chart. */
   try {
-    const MAP = { explorer: 'deep', livedive: 'livedive', liveManual: 'live', dash: 'dash' };
+    const MAP = { explorer: 'deep', livedive: 'livedive', liveManual: 'live', dash: 'dash', botsettings: 'settings' };
     if (typeof WorkspaceUI !== 'undefined' && WorkspaceUI.openBot && !WorkspaceUI._tmWrapped){ WorkspaceUI._tmWrapped = true;
       const ob = WorkspaceUI.openBot.bind(WorkspaceUI), oc = WorkspaceUI.openChart.bind(WorkspaceUI);
-      WorkspaceUI.openBot = function(id){ const r = ob.apply(null, arguments); try { if (Face.on() && !Face._busy){ Face._busy = true; if (MAP[id]){ const rm = Face.ROOMS.find(x => x.id === MAP[id]), cur = H.dataset.tmview; if (cur === 'visual' && rm.visual) Face.view(MAP[id], 'visual'); else if (cur === 'classic' && rm.info) Face.view(MAP[id], 'classic'); else Face.go(MAP[id]); } else { Face.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmStage').hidden = true; $('tmViewSwitch').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); const bp = $('bottomPanel'); if (bp) bp.classList.remove('collapsed'); } Face._busy = false; } } catch(e){ Face._busy = false; } return r; };
+      WorkspaceUI.openBot = function(id){ if (Face.on() && !Face._raw && typeof BotStudio !== 'undefined' && BotStudio.has(id)){ Face.studio(id); return; } const r = ob.apply(null, arguments); try { if (Face.on() && !Face._busy){ Face._busy = true; if (MAP[id]){ const rm = Face.ROOMS.find(x => x.id === MAP[id]), cur = H.dataset.tmview; if (cur === 'visual' && rm.visual) Face.view(MAP[id], 'visual'); else if (cur === 'classic' && rm.info) Face.view(MAP[id], 'classic'); else Face.go(MAP[id]); } else { Face.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmStage').hidden = true; $('tmViewSwitch').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); const bp = $('bottomPanel'); if (bp) bp.classList.remove('collapsed'); } Face._busy = false; } } catch(e){ Face._busy = false; } return r; };
       WorkspaceUI.openChart = function(){ try { if (Face.on() && Face.room !== 'chart') Face.go('chart'); } catch(e){} return oc.apply(null, arguments); };
     }
     /* Classic's "Replay" buttons (the Deep Dive's trade list, F3) open the Replay studio in the new look */
