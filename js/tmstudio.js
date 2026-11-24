@@ -28,7 +28,7 @@ const BotStudio = window.BotStudio = {
     const src = (Bots.ordered ? Bots.ordered(BOTS) : BOTS).filter(b => !Bots.disabled(b.id) && !hid.includes(b.id));
     for (const b of src){ const V = typeof Pages !== 'undefined' && Pages.VIEWS[b.id];
       out.push({ id: b.id, name: TmSettings.name(b), group: typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.group(b) : 'Strategy bots', real: !!b.live, f: facts.get(b.id) || null, kind: V ? 'page' : this.ROOMS[b.id] ? 'room' : facts.has(b.id) ? 'bot' : 'classic', icon: V ? V.icon : ({ dash: '▦', explorer: '🪆', livedive: '🪆', liveManual: '●' })[b.id] || '◇' }); }
-    if (!hid.includes('permissions')) out.push({ id: 'permissions', name: 'Instrument permissions', group: 'Settings & safety', kind: 'classic', icon: '🔐' });
+    if (!hid.includes('permissions')) out.push({ id: 'permissions', name: 'Instrument permissions', group: 'Settings & safety', kind: 'page', icon: '🔐' });
     out.push({ id: 'botsettings', name: 'Bots on / off', group: 'Settings & safety', kind: 'settings', icon: '⚙' });
     return out; },
   list(){ return TmSettings.bots().filter(f => this.isStrategy(f.id)); },
@@ -37,11 +37,26 @@ const BotStudio = window.BotStudio = {
 
   async show(stage, id){ let h = document.getElementById('tmStudio'); if (!h){ h = document.createElement('div'); h.id = 'tmStudio'; stage.appendChild(h); h.addEventListener('click', e => this.click(e)); h.addEventListener('change', e => { const s = e.target.closest('[data-u^="power:"]'); if (s) this.power(s.dataset.u.slice(6), s); }); h.addEventListener('input', e => { if (e.target.id === 'suFind'){ this.q = e.target.value; this.filterRail(); } }); }
     h.hidden = false; this.host = h; this._railShown = false; const list = this.list(); const ok = x => !!x && ((typeof Pages !== 'undefined' && !!Pages.VIEWS[x]) || list.some(f => f.id === x)); this.id = ok(id) ? id : ok(this.id) ? this.id : (list.find(f => f.state !== 'off') || list[0] || {}).id || '';
-    h.innerHTML = '<div class="suWrap"><aside class="suRail" id="suRail"></aside><main class="suMain" id="suMain"><div class="suLoad"><i></i>Reading the trades…</div></main></div>'; this.paintRail();
+    this.release();   /* the page body must be out of the studio before its frame is drawn again */
+    h.innerHTML = '<div class="suWrap"><aside class="suRail" id="suRail"></aside><main class="suMain" id="suMain"><div class="suView" id="suView"><div class="suLoad"><i></i>Reading the trades…</div></div><section class="suFull" id="suFull" hidden><header class="suFullH"><i>⌘</i><div><b>All controls</b><span>the page itself: every button, form, switch and typed confirmation it has</span></div></header><div id="suFullHost"></div></section></main></div>'; this._shown = ''; this.paintRail();
     if (typeof Autopsy !== 'undefined' && !(Autopsy.trades || []).length){ try { await Autopsy.collect(); } catch(e){} }
-    this._sig = ''; this.paint();
+    this._sig = ''; this.paint(); this.embed();
     clearInterval(this.timer); this.timer = setInterval(() => { if (this.host && this.host.isConnected && !this.host.hidden && this.host.offsetParent !== null && !document.hidden){ this.paintRail(); this.paint(); } }, 8000); },
-  pick(id){ this.id = id; this._sig = ''; this._railShown = true; this.paintRail(); this.paint(); const m = document.getElementById('suMain'); if (m) m.scrollTop = 0; },
+  pick(id){ this.id = id; this._sig = ''; this._railShown = true; this.paintRail(); this.paint(); this.embed(); const m = document.getElementById('suMain'); if (m) m.scrollTop = 0; },
+
+  /* ---------- every function of the page ----------
+     Classic's own page body (#botBody) is MOVED under the pictures, never copied or rewritten: every button, form,
+     switch and typed gate is the same element with the same code it has always had. Arming a bot, the limits, STOP
+     EVERYTHING, the paper ticket, training, studies: all of it works here exactly as on the Classic page, because it IS
+     that page. It is put back where it came from the moment you leave the studio. */
+  embed(){ const host = document.getElementById('suFullHost'), sec = document.getElementById('suFull'), body = document.getElementById('botBody'); if (!host || !sec || !body || typeof Bots === 'undefined') return;
+    const id = this.id, ok = id === 'permissions' || (typeof BOT_BY_ID !== 'undefined' && !!BOT_BY_ID[id]); sec.hidden = !ok; if (!ok){ this.release(); this._shown = ''; return; }
+    if (body.parentElement !== host){ this._home = { parent: body.parentElement, next: body.nextSibling }; host.appendChild(body); }
+    if (this._shown !== id || Bots.active !== id){ this._shown = id; Bots.active = id; try { if (Bots.renderNav) Bots.renderNav(); Bots.render(); } catch(e){ console.warn('studio embed', e); } } },
+  release(){ const body = document.getElementById('botBody'), h = this._home || {}, st = document.getElementById('tmStudio'); this._shown = ''; if (!body || !st || !st.contains(body)) return;
+    /* back where it came from; if that place is gone, back into Classic's own Bots panel: it is never left inside the studio */
+    const home = h.parent && h.parent.isConnected && !st.contains(h.parent) ? h.parent : document.querySelector('#bot-bots .botsWrap'); if (!home) return;
+    try { home.insertBefore(body, h.next && h.next.parentNode === home ? h.next : null); } catch(e){ home.appendChild(body); } },
 
   /* ---------- the rail: All bots, as in the menu ---------- */
   paintRail(){ const r = document.getElementById('suRail'); if (!r) return; const list = this.list(), E = this.entries(), keep = r.querySelector('#suFind'), focus = keep && document.activeElement === keep;
@@ -59,7 +74,7 @@ const BotStudio = window.BotStudio = {
   group(list, key){ const m = new Map(); for (const t of list){ const k = key(t); if (k == null) continue; let g = m.get(k); if (!g) m.set(k, g = { k, n: 0, w: 0, net: 0 }); g.n++; if (t.pnl > 0) g.w++; g.net += t.pnl; } return [...m.values()]; },
   reason(t){ return typeof Info !== 'undefined' ? Info.reasonOf(t) : 'Other'; },
 
-  paint(){ const main = document.getElementById('suMain'); if (!main) return;
+  paint(){ const main = document.getElementById('suView'); if (!main) return;
     if (typeof Pages !== 'undefined' && Pages.VIEWS[this.id]){ Pages.paint(this.id, main, this._sig !== 'page:' + this.id); this._sig = 'page:' + this.id; return; }
     const f = this.list().find(x => x.id === this.id);
     if (!f){ main.innerHTML = '<div class="suEmpty big">Pick a bot on the left.</div>'; return; }
@@ -75,7 +90,7 @@ const BotStudio = window.BotStudio = {
         '<p>' + this.esc(g.tagline || 'A paper bot that trades by its own rules.') + '</p><div class="suTags"><span class="suPill ' + f.state + '"><i></i>' + TmSettings.LABEL[f.state] + '</span>' + (f.live ? '<span class="suPill armed ' + f.live + '">' + (f.live === 'live' ? 'armed · LIVE' : 'armed · shadow') + '</span>' : '') + (g.tags || []).map(t => '<span>' + this.esc(t) + '</span>').join('') + '</div></div></div>' +
         '<div class="suCtl"><label class="crSw big" title="' + (off ? 'Switch this bot on' : 'Switch this bot off: it leaves every list; its record is kept') + '"><input type="checkbox" data-u="power:' + id + '"' + (off ? '' : ' checked') + '><i></i></label><span class="suCtlL">' + (off ? 'Off' : 'On') + '</span>' +
           (off ? '' : '<button type="button" class="crBtn' + (f.state === 'paused' ? ' am' : '') + '" data-u="pause:' + id + '">' + (f.state === 'paused' ? '▶ Resume' : '❚❚ Pause') + '</button>') + (f.state === 'locked' ? '<button type="button" class="crBtn dn" data-u="reset:' + id + '">↺ Reset to ' + this.num(f.start) + '</button>' : '') +
-          '<button type="button" class="crBtn ghost" data-guide="' + id + '">How it works</button>' + (off ? '' : '<button type="button" class="crBtn" data-u="classic:' + id + '" title="Its full Classic page: every setting, the ledger, the notes">Settings &amp; ledger ↗</button>') + '<button type="button" class="crBtn go" data-u="dive:' + id + '">Deep Dive →</button></div></section>' +
+          '<button type="button" class="crBtn ghost" data-guide="' + id + '">How it works</button>' + (off ? '' : '<button type="button" class="crBtn" data-u="full:1" title="Every setting, the ledger and the notes, below">Settings &amp; ledger ↓</button>') + '<button type="button" class="crBtn go" data-u="dive:' + id + '">Deep Dive →</button></div></section>' +
       /* how it has done */
       '<section class="suKpis">' + kpi('NET RESULT · PAPER', '<span data-count="' + Math.abs(Math.round(S.net)) + '" data-pre="' + (S.net >= 0 ? '+' : '−') + '">' + (S.net >= 0 ? '+' : '−') + '0</span>', 'equity ' + this.num(f.eq) + ' · ' + (ch >= 0 ? '+' : '−') + Math.abs(f.start ? ch / f.start * 100 : 0).toFixed(1) + '%', 'wide ' + this.cls(S.net), TmSettings.spark(f.curve, 200, 46, null, 'k' + f.id)) +
         kpi('WON', S.n ? Math.round(S.wr) + '%' : '–', S.w + ' of ' + S.n + ' trades', '', TmSettings.ring(S.wr, S.wr >= 50 ? '#3DDC97' : '#FFB648', 54)) +
@@ -87,7 +102,7 @@ const BotStudio = window.BotStudio = {
       '<section class="suRow two"><div class="suCard"><h3>Running result<small>every closed trade · red = time under an earlier high</small></h3><canvas id="suCurve" class="suCv"></canvas></div>' +
         '<div class="suCard suHow"><h3>How it trades<small>from its guide</small></h3>' + (this.art(g) ? '<div class="suArt">' + this.art(g) + '</div>' : '') + '<div class="suSteps">' + ((g.steps || []).map((s, i) => '<div class="suStep" style="--i:' + i + '"><i>' + this.esc(s[0]) + '</i><div><b>' + this.esc(s[1]) + '</b><span>' + this.esc(s[2]) + '</span></div></div>').join('') || '<div class="suEmpty">No guide written for this bot yet. Its Classic page has every rule.</div>') + '</div></div></section>' +
       /* 3D */
-      '<section class="suRow two"><div class="suCard"><h3>When it earns<small>weekday by hour · towers up = gains, down = losses · drag to turn · click a tower</small></h3><div class="suScene"><canvas id="suCity"></canvas><div class="suTip" id="suCityTip"></div></div></div>' +
+      '<section class="suRow two"><div class="suCard"><h3>When it earns<small>weekday by hour, your computer’s clock · green earned, red lost, stronger = more · the bars on top are each hour’s total · click a square</small></h3>' + this.heat(T, f.id) + '</div>' +
         '<div class="suCard"><h3>Where it earns<small>one sphere per instrument · right = wins more often · up = earns more a trade · click one</small></h3><div class="suScene"><canvas id="suGalaxy"></canvas><div class="suTip" id="suGalTip"></div></div></div></section>' +
       /* spread, exits, sides */
       '<section class="suRow three"><div class="suCard"><h3>Size of wins and losses<small>' + (T.some(t => t.r != null) ? 'in R' : 'in money') + '</small></h3><canvas id="suHist" class="suCv"></canvas></div>' +
@@ -100,10 +115,18 @@ const BotStudio = window.BotStudio = {
       '<section class="suRow two"><div class="suCard"><h3>Open now<small>' + open.length + ' position' + (open.length === 1 ? '' : 's') + ' · the dot is the price between stop and target · click to open the chart</small></h3><div class="suOpen">' + (open.length ? open.map(p => { const lo = Math.min(p.sl, p.tp), hi = Math.max(p.sl, p.tp); return '<button type="button" class="suPos" data-u="chart:' + this.esc(p.sym) + '"><div><b>' + this.esc(this.sym(p.sym)) + '</b><i class="' + (p.dir > 0 ? 'up' : 'dn') + '">' + (p.dir > 0 ? '▲ buy' : '▼ sell') + '</i><em class="' + this.cls(p.unreal) + '">' + this.sg(p.unreal || 0, 0) + '</em></div>' + (typeof Info !== 'undefined' && p.sl > 0 && p.tp > 0 ? Info.track(lo, hi, p.last || p.entry, p.entry, p.dir) : '') + '<span>in at ' + this.esc(p.entry != null ? +(+p.entry).toPrecision(6) : '–') + ' · ' + this.esc(p.tf || '') + '</span></button>'; }).join('') : '<div class="suEmpty">Nothing open.</div>') + '</div></div>' +
         '<div class="suCard"><h3>What it learned<small>its own notes after a loss</small></h3><div class="suLessons">' + (lessons.length ? lessons.map(l => '<div><small>' + new Date(l.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + '</small><span>' + this.esc(l.text) + '</span></div>').join('') : '<div class="suEmpty">No lesson yet.</div>') + '</div>' +
           (g.honest ? '<p class="suHonest"><b>Honestly:</b> ' + this.esc(g.honest) + '</p>' : '') + '</div></section>' +
-      '<p class="suFoot">Paper results: past trades of this bot, not a promise. Its settings are changed on its Classic page; nothing here arms it for real money.</p>';
+      '<p class="suFoot">Paper results: past trades of this bot, not a promise. Its settings, its ledger, its notes and every button of its page are below, in All controls.</p>';
     this.draw(f, T); TmSettings.animate(main); },
 
   /* ---------- the drawings ---------- */
+  /* when it earns: weekday by hour as a flat grid of squares */
+  heat(T, botId){ if (!T.length) return '<div class="suEmpty">No closed trade yet.</div>'; const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], H24 = [...Array(24).keys()], v = DOW.map(() => new Array(24).fill(0)), n = DOW.map(() => new Array(24).fill(0)), hh = c => String(c).padStart(2, '0');
+    for (const t of T){ const d = new Date(t.t0), r = (d.getDay() + 6) % 7, c = d.getHours(); v[r][c] += t.pnl; n[r][c]++; }
+    const max = Math.max(1e-9, ...v.flat().map(Math.abs)), rowT = v.map(r => r.reduce((x, y) => x + y, 0)), colT = H24.map(c => v.reduce((x, r) => x + r[c], 0)), cm = Math.max(1e-9, ...colT.map(Math.abs));
+    const cell = (r, c) => { const x = v[r][c], k = n[r][c]; if (!k) return '<i></i>'; return '<button type="button" style="--i:' + (r + c) + ';background:rgba(' + (x >= 0 ? '61,220,151' : '255,107,122') + ',' + (0.22 + 0.78 * Math.abs(x) / max).toFixed(2) + ')" data-u="' + this.esc('drill:' + JSON.stringify({ src: 'paper', bot: botId, dow: String((r + 1) % 7), hour: String(c) })) + '" title="' + DOW[r] + ' ' + hh(c) + ':00 · ' + k + ' trade' + (k === 1 ? '' : 's') + ' · ' + this.sg(x, 0) + '"></button>'; };
+    return '<div class="suHeat"><div class="suHeatCols"><span></span>' + colT.map((x, c) => '<u title="' + hh(c) + ':00 · ' + this.sg(x, 0) + '"><s class="' + this.cls(x) + '" style="--h:' + (Math.abs(x) / cm * 100).toFixed(0) + '%"></s></u>').join('') + '<span></span></div>' +
+      DOW.map((d, r) => '<div class="suHeatRow"><span>' + d + '</span>' + H24.map(c => cell(r, c)).join('') + '<em class="' + this.cls(rowT[r]) + '">' + (rowT[r] ? this.sg(rowT[r], 0) : '') + '</em></div>').join('') +
+      '<div class="suHeatHours"><span></span>' + H24.map(c => '<b>' + (c % 3 === 0 ? hh(c) : '') + '</b>').join('') + '<span></span></div></div>'; },
   donut(gs, n){ if (!n) return '<div class="suEmpty">No closed trade yet.</div>'; const col = { Target: '#3DDC97', 'Trailing stop': '#4FD8F7', 'Breakeven stop': '#A78BFA', Stop: '#FF6B7A', 'Time limit': '#7C8BA8', 'Closed by hand': '#FFB648', Other: '#5D6C8A' }, R = 46, C = 2 * Math.PI * R; let acc = 0;
     return '<div class="suDonut"><svg viewBox="0 0 120 120">' + gs.map(g => { const len = g.n / n * C, s = '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="' + (col[g.k] || '#5D6C8A') + '" stroke-width="16" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-acc).toFixed(2) + '" class="seg"><title>' + this.esc(g.k) + ': ' + g.n + '</title></circle>'; acc += len; return s; }).join('') + '<text x="60" y="58" text-anchor="middle" class="n">' + n + '</text><text x="60" y="74" text-anchor="middle" class="l">trades</text></svg>' +
       '<div class="suLegend">' + gs.map(g => '<span><i style="background:' + (col[g.k] || '#5D6C8A') + '"></i>' + this.esc(g.k) + '<b>' + Math.round(g.n / n * 100) + '%</b><em class="' + this.cls(g.net) + '">' + this.sg(g.net, 0) + '</em></span>').join('') + '</div></div>'; },
@@ -115,12 +138,6 @@ const BotStudio = window.BotStudio = {
   draw(f, T){ const S = this.stat(T);
     if (typeof Info !== 'undefined'){ const cv = document.getElementById('suCurve'); if (cv) Info.curve(cv, Info.thin(S.curve, 400), 230); const hv = document.getElementById('suHist'); if (hv) Info.hist(hv, T, 170); }
     if (typeof Tm3D === 'undefined') return;
-    /* weekday by hour */
-    const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], v = DOW.map(() => new Array(24).fill(0)), n = DOW.map(() => new Array(24).fill(0));
-    for (const t of T){ const d = new Date(t.t0), r = (d.getDay() + 6) % 7, c = d.getHours(); v[r][c] += t.pnl; n[r][c]++; }
-    const city = document.getElementById('suCity'); if (city) Tm3D.city(city, { rows: DOW, cols: [...Array(24).keys()].map(x => String(x).padStart(2, '0')), colStep: 3, v, n,
-      onPick: it => { if (typeof Info === 'undefined') return; Info.f = { src: 'paper', period: 'all', bot: f.id, sym: '', tf: '', dir: '', reason: '', dow: String((DOW.indexOf(it.row) + 1) % 7), hour: String(+it.col), day: '' }; Face.view('deep', 'info'); },
-      tip: (it, x, y) => this.tip(document.getElementById('suCityTip'), it ? '<b>' + it.row + ' ' + it.col + ':00</b><span>' + it.n + ' trades</span><span class="' + this.cls(it.val) + '">' + this.sg(it.val, 0) + '</span>' : '', x, y) });
     /* instruments */
     const gs = this.group(T, t => this.sym(t.sym)).filter(g => g.n >= 1), maxAvg = Math.max(1e-9, ...gs.map(g => Math.abs(g.net / g.n))), maxN = Math.max(2, ...gs.map(g => g.n)), top = new Set(gs.slice().sort((a, b) => b.n - a.n).slice(0, 8).map(g => g.k));
     const gal = document.getElementById('suGalaxy'); if (gal) Tm3D.galaxy(gal, { axes: { x: 'wins more often →', y: 'earns more a trade ↑', z: 'more trades', zero: 0 },
@@ -143,6 +160,9 @@ const BotStudio = window.BotStudio = {
     else if (k === 'chart'){ Face.go('chart'); try { typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.openChart(v) : App.setSymbol(v); } catch(x){} }
     else if (k === 'settings'){ Face.go('settings'); }
     else if (k === 'room'){ Face.go(v); }
+    else if (k === 'full'){ const f = document.getElementById('suFull'); if (f && !f.hidden) TmSettings.scrollTo(document.getElementById('suMain'), f); }
     else if (typeof Pages !== 'undefined') Pages.click(k, v);
   },
 };
+/* whatever way the studio is left (a room, a Classic shortcut, the Classic look), the page body goes back to Classic's panel */
+try { new MutationObserver(() => { try { if (typeof Face === 'undefined' || Face.room !== 'studio' || !Face.on()) BotStudio.release(); } catch(e){} }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tmroom', 'data-face'] }); } catch(e){}

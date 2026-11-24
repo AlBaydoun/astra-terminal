@@ -25,6 +25,8 @@ const TmSettings = window.TmSettings = {
   name(b){ return typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.name(b) : String(b.name || b.id); },
   ready(){ return typeof Bots !== 'undefined' && typeof BOTS !== 'undefined' && typeof BotEngine !== 'undefined'; },
   calm(){ try { return localStorage.getItem('astra_calm') === '1'; } catch(e){ return false; } },
+  /* scroll a section to the top of its scroller: smoothly where the browser does that, and straight there if it does not */
+  scrollTo(box, el){ if (!box || !el) return; const top = Math.max(0, el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 8), from = box.scrollTop; if (this.calm()){ box.scrollTop = top; return; } try { box.scrollTo({ top, behavior: 'smooth' }); } catch(e){ box.scrollTop = top; } setTimeout(() => { if (box.scrollTop === from && Math.abs(top - from) > 4) box.scrollTop = top; }, 450); },
   COL: { running: '#3DDC97', paused: '#FFB648', locked: '#FF6B7A', off: '#5D6C8A' },
   LABEL: { running: 'Running', paused: 'Paused', locked: 'Locked', off: 'Switched off' },
   ABOUT: { running: 'On and trading on paper', paused: 'Paused by you: opens nothing new', locked: 'Paper account under its minimum: reset it to trade again', off: 'Switched off: gone from every list, record kept' },
@@ -212,7 +214,7 @@ const TmSettings = window.TmSettings = {
     const done = Bots.setDisabled(id, !off) !== false; if (done && typeof toast === 'function') toast(off ? 'Switched on: the bot is back, exactly as it was.' : 'Switched off: the bot is out of every list. Its record is kept.', 'ok');
     this._offCache = {}; setTimeout(() => this.paint(true), off ? 0 : 260); },
   click(e){ const b = e.target.closest('[data-s]'); if (!b || !this.host.contains(b) || b.matches('input')) return; const i = b.dataset.s.indexOf(':'), k = b.dataset.s.slice(0, i), v = b.dataset.s.slice(i + 1), redraw = () => { this._offCache = {}; this.paint(true); };
-    if (k === 'go'){ const s = this.host.querySelector('#' + v); if (s) s.scrollIntoView({ behavior: this.calm() ? 'auto' : 'smooth', block: 'start' }); this.mark(v); }
+    if (k === 'go'){ this.scrollTo(this.host, this.host.querySelector('#' + v)); this.mark(v); }
     else if (k === 'filter'){ this.filter = v; this._sig = ''; this.paint(); this.host.querySelectorAll('.crTile').forEach(t => t.classList.toggle('on', t.dataset.s === 'filter:' + v)); }
     else if (k === 'offfold'){ this.offOpen = !this.offOpen; this._sig = ''; this.paint(); }
     else if (k === 'open'){ if (!Bots.disabled(v) && typeof Face !== 'undefined') Face.studio(v); }

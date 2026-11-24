@@ -63,6 +63,7 @@ const Face = window.Face = {
     if (isPanel) return;
     if (!on && classicOff()){ if (typeof toast === 'function') toast('The Classic look is switched off. To use it again: View → Settings → Classic look → On.', 'info'); return; }
     try { localStorage.setItem(KEY, on ? 'tm' : 'classic'); } catch(e){}
+    if (!on && typeof BotStudio !== 'undefined') BotStudio.release();
     if (on){ H.dataset.face = 'tm'; this.build(); this.arrange(); this.go(localStorage.getItem('astra_face_room') || 'chart', true); }
     else { this.closePops(); this.restore(); delete H.dataset.face; delete H.dataset.tmroom; delete H.dataset.tmlayers; delete H.dataset.tmview; const st = $('tmStage'); if (st) st.hidden = true; if ($('tmViewSwitch')) $('tmViewSwitch').hidden = true;
       const bp = $('bottomPanel'); if (bp && this._wasCollapsed != null) bp.classList.toggle('collapsed', this._wasCollapsed); }
@@ -161,7 +162,7 @@ const Face = window.Face = {
     bp.classList.remove('collapsed'); if (!b.classList.contains('active')) b.click(); bp.classList.remove('collapsed');
     if (tab === 'heatmap') try { Heat.show(); } catch(e){} },
   go(id, quiet){
-    if (!this.on()) return; const r = this.ROOMS.find(x => x.id === id) || this.ROOMS[0]; this.room = r.id; this.closePops(); this.measure();
+    if (!this.on()) return; const r = this.ROOMS.find(x => x.id === id) || this.ROOMS[0]; this.room = r.id; if (r.id !== 'studio' && typeof BotStudio !== 'undefined') BotStudio.release(); this.closePops(); this.measure();
     try { localStorage.setItem('astra_face_room', r.kind === 'chart' || r.kind === 'bot' ? r.id : 'chart'); } catch(e){}
     document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.toggle('on', b.dataset.room === r.id));
     const stage = $('tmStage'), frame = $('tmFrame'), nat = $('tmNative'), inf = $('tmInfo'), bp = $('bottomPanel'), view = r.info ? this.viewOf(r.id) : '', info = view === 'info' && typeof Info !== 'undefined';
@@ -169,7 +170,7 @@ const Face = window.Face = {
     if (r.kind === 'chart'){ H.dataset.tmroom = 'chart'; stage.hidden = true; if (bp && !quiet) bp.classList.add('collapsed'); setTimeout(() => window.dispatchEvent(new Event('resize')), 40); }
     else if ((r.kind === 'tab' || r.kind === 'bot') && !info){ H.dataset.tmroom = 'panel'; stage.hidden = true; $('tmViewSwitch').hidden = !r.info; if (r.info) this.viewSeg(r, view);
       if (view === 'visual' && typeof Wizard !== 'undefined') setTimeout(() => Wizard.mount(), 200); this.openTab(r.kind === 'bot' ? 'bots' : r.tab);
-      if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')) b.click(); }, 80); }
+      if (r.bot) setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + r.bot + '"]'); if (b && !b.classList.contains('active')){ this._raw = true; try { b.click(); } finally { this._raw = false; } } }, 80); }
     else { H.dataset.tmroom = 'stage'; stage.hidden = false; stage.classList.remove('in'); void stage.offsetWidth; stage.classList.add('in');
       $('tmFail').hidden = true; const ins = $('tmInspect'); if (ins) ins.hidden = r.id !== 'inspect'; const sr = $('tmSetRoom'); if (sr) sr.hidden = r.id !== 'settings';
       const su = $('tmStudio'); if (su) su.hidden = r.id !== 'studio';
@@ -188,7 +189,7 @@ const Face = window.Face = {
       else if (typeof Replay !== 'undefined' && typeof Autopsy !== 'undefined'){ frame.hidden = true; inf.hidden = true; nat.hidden = false; Replay.show(nat); }
       else { frame.hidden = true; inf.hidden = true; nat.hidden = false; if (typeof Autopsy !== 'undefined'){ if (!nat.dataset.open){ nat.dataset.open = '1'; Autopsy.open(nat); } else Autopsy.collect().then(() => { if (Autopsy.want){ const w = Autopsy.want; Autopsy.want = null; Autopsy.filter = { src: 'all', bot: '', out: 'all' }; Autopsy.select(w); } else Autopsy.paint(); }); } } }
   },
-  panel(tab){ if (!this.on()) return; this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
+  panel(tab){ if (!this.on()) return; if (typeof BotStudio !== 'undefined') BotStudio.release(); this.room = ''; H.dataset.tmroom = 'panel'; H.dataset.tmview = ''; $('tmViewSwitch').hidden = true; $('tmStage').hidden = true; document.querySelectorAll('#tmDock [data-room]').forEach(b => b.classList.remove('on')); this.openTab(tab); },
   /* a strategy bot opens in its studio; the Classic page stays one click away from there */
   studio(id){ if (!this.on()) return; this._studioBot = id || ''; this.go('studio'); },
   bot(id){ this.panel('bots'); setTimeout(() => { const b = document.querySelector('#botNav [data-bot="' + id + '"]'); if (b) b.click(); }, 80); },
