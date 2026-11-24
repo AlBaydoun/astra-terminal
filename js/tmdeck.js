@@ -13,6 +13,8 @@
      scanner ... Setups · Watching · Notes. The table's rows are tiles with the score as a ring; press
                  one for every check behind it. Timeframe is chips, the minimum score a slider
      confluenceScanner ... Board · Rules · Notes. A tile an instrument with its five checks as bars
+     brain ..... Teach · Report · Lab · Autopilot · Notes. Its buttons are cards that say what each does
+     fit ....... Study · Markets · Plan · Table · History · Notes. The three buttons are steps 1, 2, 3
 
    This file DRAWS and ARRANGES only. Every control is still Classic's own element inside the page
    body the studio moved here (BotStudio.embed): a station is made by showing and hiding those
@@ -51,6 +53,19 @@ const LiveDeck = window.LiveDeck = {
       { id: 'board', n: 'Board', icon: '🧲', title: 'Every instrument, five checks', text: 'One tile an instrument: its signal, the five checks as five bars, its state and what it is waiting for. Press a tile for the reading behind each check.', parts: ['controls', 'status', 'find', 'table'], rest: true },
       { id: 'rules', n: 'Rules', icon: '📐', title: 'How it scans and ranks', text: 'What the scanner reads, how often, and how it orders what it finds.', parts: ['explain'] },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this scanner.', parts: ['notes'] } ] },
+    brain: { key: 'astra_deck_brain', eyebrow: 'MASTER BRAIN', dress: 'dressBrain', stations: [
+      { id: 'teach', n: 'Teach', icon: '🎓', title: 'Feed it and train it', text: 'Where it stands, what it has to learn from, and the buttons that teach it. It can only refuse or shrink a paper trade; it never invents one.', parts: ['state', 'controls', 'needs', 'counts', 'coverage'], rest: true },
+      { id: 'report', n: 'Report', icon: '🎯', title: 'Its honest score', text: 'How it did on trades it had never seen, whether its percentages mean anything, and what it has learned to weigh.', parts: ['score', 'calib', 'weights', 'log', 'warn'], empty: 'It has not been trained yet, so there is no score to show. It needs enough finished trades first; then press Train now in the Teach station.' },
+      { id: 'lab', n: 'Lab', icon: '🧪', title: 'The Strategy Lab', text: 'The bots the brain built itself. Each one was tested across several instruments, published only if it cleared every guard, and is retired when it stops holding up.', parts: ['lab'], empty: 'The lab opens once the brain has been trained.' },
+      { id: 'auto', n: 'Autopilot', icon: '⏰', title: 'What runs by itself', text: 'The schedule for measuring, retraining and researching, and where the brain stands between a signal and real money. Arming a bot for real money is never automatic.', parts: ['auto', 'live'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on the brain.', parts: ['notes'] } ] },
+    fit: { key: 'astra_deck_fit', eyebrow: 'MARKET FIT', stations: [
+      { id: 'study', n: 'Study', icon: '🔬', title: 'Run the study', text: 'Three steps, in order: measure every strategy on every market and timeframe, test the winners again on each half of the history, then point the bots at what held up.', sel: ['.fitWrap > .botCtl', '.fitWrap > .lvBanner', '.fitWrap > .botNote.warn'] },
+      { id: 'markets', n: 'Markets', icon: '🌍', title: 'Market by market', text: 'One card a market: which strategy held up there, or how close the best one came.', sel: ['.fitWrap > .fitCards'] },
+      { id: 'plan', n: 'Plan', icon: '🧭', title: 'What applying would change', text: 'Read this before pressing Apply to the bots: which bots it would point where, and which it would pause.', sel: ['.fitWrap > .botH:has(+ .botNote + .fitPlan)', '.fitWrap > .botNote:has(+ .fitPlan)', '.fitWrap > .fitPlan'], empty: 'There is no plan yet. Run the whole grid first, in the Study station.' },
+      { id: 'table', n: 'Table', icon: '☰', title: 'Every combination', text: 'Every strategy on every market and timeframe it was measured on. Press a heading to sort.', sel: ['.fitWrap > .botH:has(+ .dashScroll:not(.short))', '.fitWrap > .dashScroll:not(.short)'] },
+      { id: 'history', n: 'History', icon: '🕘', title: 'Study after study', text: 'The same combination measured on different days. What keeps holding is worth more than one good figure.', sel: ['.fitWrap > .botH:has(+ .botNote + .dashScroll.short)', '.fitWrap > .botNote:has(+ .dashScroll.short)', '.fitWrap > .dashScroll.short', '.fitWrap > .botNote:not(.warn):has(+ .botH + .dashScroll:not(.short))'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this study.', sel: ['.bnWrap'] } ] },
   },
   sel: {},
   esc(s){ return TmSettings.esc(s); },
@@ -87,10 +102,10 @@ const LiveDeck = window.LiveDeck = {
 
   /* which of the page's own parts belong to which station (pages laid out by BotLayout parts; a part may sit in several) */
   apply(){ const b = this.body(), C = this.cfg(); if (!b || !C) return; if (b.dataset.deck !== this.st) b.dataset.deck = this.st; if (b.dataset.deckpage !== this.page) b.dataset.deckpage = this.page; if (C.css) return;
-    const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart]')].filter(p => !p.parentElement.closest('.blPart'));
+    const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart], .blCell[data-blpart]')].filter(p => !p.parentElement.closest('.blPart, .blCell'));
     for (const p of parts){ const v = C.stations.filter(x => (x.parts || []).includes(p.dataset.blpart)).map(x => x.id).join(' ') || rest; if (p.dataset.dkst !== v) p.dataset.dkst = v; }
     for (const s of C.stations) for (const q of s.sel || []) b.querySelectorAll(q).forEach(el => { if (!el.closest('.blPart')) el.dataset.dkst = s.id; });
-    b.querySelectorAll('[data-dkst]').forEach(el => { const on = this.st === 'all' || el.dataset.dkst.split(' ').includes(this.st); if (el.classList.contains('dkOn') !== on) el.classList.toggle('dkOn', on); }); if (C.dress){ try { this[C.dress](b); } catch(e){ console.warn('deck dress', e); } } this.applyFocus(); },
+    b.querySelectorAll('[data-dkst]').forEach(el => { const on = this.st === 'all' || el.dataset.dkst.split(' ').includes(this.st); if (el.classList.contains('dkOn') !== on) el.classList.toggle('dkOn', on); }); if (C.dress){ try { this[C.dress](b); } catch(e){ console.warn('deck dress', e); } } this.emptyNote(b, C); this.applyFocus(); },
   applyFocus(){ const b = this.body(), C = this.cfg(); if (!b || !C || !C.focus) return; const k = this.sel[this.page] || ''; b.querySelectorAll(C.focus.card).forEach(c => { const on = !!k && c.dataset[C.focus.key] === k; if (c.classList.contains('dkSel') !== on) c.classList.toggle('dkSel', on); }); },
 
   /* ---------- dressing a page's own rows ----------
@@ -123,8 +138,24 @@ const LiveDeck = window.LiveDeck = {
     /* the long explanation, one line a rule */
     const ex = b.querySelector('.blPart[data-blpart="explain"] .botNote'); if (ex && !ex.classList.contains('dkHid')){ const ul = document.createElement('ul'); ul.className = 'dkRules dkAdd'; ul.innerHTML = (ex.textContent || '').split(/(?<=\.)\s+/).map(x => x.trim()).filter(Boolean).map(x => '<li>' + this.esc(x) + '</li>').join(''); ex.after(ul); ex.classList.add('dkHid'); } },
 
+  /* Master Brain's report: a band on each calibration row (what it predicted, where those trades really landed) and a
+     bar on each weight. Read from the trained model, never written. */
+  dressBrain(b){ let S = null; try { S = MasterBrain.state || MasterBrain.load(); } catch(e){ return; } const m = S && S.metrics; if (!m) return;
+    const add = (row, cls, html, title) => { if (!row || row.querySelector('.dkAdd')) return; const el = document.createElement('i'); el.className = cls + ' dkAdd'; if (title) el.title = title; el.innerHTML = html; row.appendChild(el); };
+    const cal = b.querySelectorAll('[data-blpart="calib"] .botRow'); (m.calib || []).forEach((c, i) => add(cal[i], 'dkCal', '<u style="left:' + (c.lo * 100).toFixed(0) + '%;width:' + ((c.hi - c.lo) * 100).toFixed(0) + '%"></u>' + (c.actual != null ? '<em style="left:' + Math.max(0, Math.min(100, c.actual)).toFixed(0) + '%"></em>' : ''), 'The band is what it predicted; the mark is how often those trades really won'));
+    let tw = []; try { tw = MasterBrain.topWeights(12) || []; } catch(e){} const mw = Math.max(1e-9, ...tw.map(x => Math.abs(x.w))), wr = b.querySelectorAll('[data-blpart="weights"] .botRow');
+    tw.forEach((x, i) => add(wr[i], 'dkWt', '<u class="' + (x.w > 0 ? 'up' : 'dn') + '" style="--w:' + (Math.abs(x.w) / mw * 50).toFixed(1) + '%"></u>')); },
+  /* a station with nothing in it yet says so, instead of showing an empty page */
+  emptyNote(b, C){ const s = C.stations.find(x => x.id === this.st), none = !!s && !b.querySelector('[data-dkst].dkOn'); let el = b.querySelector(':scope > .dkEmpty'); if (!none){ if (el) el.remove(); return; }
+    const t = s.empty || 'Nothing to show here yet.'; if (!el){ el = document.createElement('div'); el.className = 'dkEmpty dkAdd'; b.appendChild(el); } if (el.dataset.t !== s.id + t){ el.dataset.t = s.id + t; el.innerHTML = '<i>' + s.icon + '</i><b>' + this.esc(s.title) + '</b><span>' + this.esc(t) + '</span>'; } },
+
   /* ---------- where each station stands: read, never written ---------- */
-  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence' }[this.page]; return f ? this[f]() : {}; },
+  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit' }[this.page]; return f ? this[f]() : {}; },
+  factsBrain(){ let S = {}, label = ''; try { S = MasterBrain.state || MasterBrain.load(); label = String(MasterBrain.status().label || '').toLowerCase(); } catch(e){} const m = S.metrics, b = this.body(), n = (S.samples || []).length, tg = b && b.querySelector('[data-act="autotoggle"]'), lab = b ? b.querySelectorAll('.labCard').length : 0;
+    return { _label: label, teach: { t: n + ' example' + (n === 1 ? '' : 's') }, report: { t: m && m.val ? m.val.acc.toFixed(0) + '% right on new trades' : 'not trained yet' }, lab: { t: m ? lab + ' bot' + (lab === 1 ? '' : 's') + ' published' : 'after training' }, auto: { t: tg ? (/off/i.test(tg.textContent) ? 'on' : 'off') : 'after training' }, notes: { t: 'yours' } }; },
+  factsFit(){ const b = this.body(), q = s => b ? b.querySelectorAll(s).length : 0, txt = s => { const e = b && b.querySelector(s); return e ? (e.textContent || '').trim().replace(/\s+/g, ' ') : ''; };
+    const rows = q('.fitWrap > .dashScroll:not(.short) tbody tr[class*="fit-"]'), held = (txt('.fitWrap > .lvBanner b').match(/^\d+/) || ['0'])[0], keep = q('.fitPlanCard.good'), stop = +((txt('.fitPlanCard.bad b').match(/^\d+/) || ['0'])[0]), hist = q('.fitWrap > .dashScroll.short tbody tr');
+    return { _label: rows ? held + ' of ' + rows + ' held up' : 'not measured yet', study: { t: rows ? 'measured' : 'not run yet' }, markets: { t: q('.fitCard') + ' markets' }, plan: { t: keep || stop ? keep + ' to keep · ' + stop + ' to pause' : 'nothing yet' }, table: { t: rows + ' combination' + (rows === 1 ? '' : 's') }, history: { t: hist ? hist + ' tracked' : 'needs two studies' }, notes: { t: 'yours' } }; },
   factsScanner(){ const s = (typeof Bots !== 'undefined' && Bots.scan) || {}, rows = s.rows || [], act = rows.filter(r => r.active); let cfg = {}; try { cfg = Bots.cfg('scanner') || {}; } catch(e){}
     return { _label: s.busy ? 'scanning…' : rows.length ? (s.universe || rows.length) + ' instruments' + (cfg.tf ? ' · ' + cfg.tf : '') + (cfg.minScore != null ? ' · score ' + cfg.minScore + ' and up' : '') : 'not scanned yet',
       setups: { t: act.length ? act.filter(r => r.dir > 0).length + ' buy · ' + act.filter(r => r.dir < 0).length + ' sell' : 'none right now' }, watching: { t: (rows.length - act.length) + ' not ready' }, notes: { t: 'yours' } }; },
