@@ -65,6 +65,8 @@ const ChartPlus = window.ChartPlus = {
       if (e.key === 'Escape'){ if (this.$('tmStudioView')){ this.studio(false); e.stopPropagation(); } else if (this.mode){ this.setMode(''); e.stopPropagation(); } else if (this.zoomed){ this.unzoom(); e.stopPropagation(); } else if (this.clean){ this.setClean(false); e.stopPropagation(); } } }, true);
     new MutationObserver(() => { if (!this.room()){ this.studio(false); if (this.mode) this.setMode(''); } this.later(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tmroom', 'data-face', 'data-chartmax'] });
     this.layersOrder(); this.sideOrder(); this.sideTip(); this.zoomPresses(); this.viewOpts(); this.firstTab();
+    /* the side panel closed with its ✕: a tab on the right edge brings it back */
+    if (!this.$('cpSideBack')){ const sb = document.createElement('button'); sb.type = 'button'; sb.id = 'cpSideBack'; sb.title = 'Open the side panel again'; sb.innerHTML = '<b>◂</b><span>SIDE PANEL</span>'; document.body.appendChild(sb); sb.addEventListener('click', () => { try { SideWindow.action('restore'); } catch(e){} }); }
     this.later(); return true; },
 
   /* ---------- the position lines: hidden or shown; while hidden they cannot be pressed or dragged either ---------- */
