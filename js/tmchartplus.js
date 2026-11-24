@@ -31,6 +31,7 @@ const ChartPlus = window.ChartPlus = {
     pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z"/><path d="M14 7l3 3"/></svg>',
     entry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M8 7h8v10H8zM4 8h3M4 12h3M4 16h3"/></svg>',
     lines: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h18M3 12h18" stroke-dasharray="3 3"/><path d="M3 17h18"/></svg>',
+    clean: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 6v12M12 4v16M17 8v8"/><path d="M5.5 9h3M10.5 7h3M15.5 10h3"/></svg>',
     studio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 9v11M11 14l2-2 2 3 2-2"/></svg>' },
 
   init(){ if (this._init) return; const bar = this.$('tmMarkBar'), host = this.$('mainWrap'); if (!bar || !host || typeof Draw === 'undefined' || typeof Chart === 'undefined') return false; this._init = true;
@@ -42,6 +43,7 @@ const ChartPlus = window.ChartPlus = {
     mk('tmEntryBtn', this.ICON.entry, 'From entry', 'Press a candle: what an entry at its top, middle or bottom would have done. Esc ends it.');
     mk('tmStudioBtn', this.ICON.studio, 'Studio view', 'This chart in the Markets studio: its layers, scenes and zoom');
     mk('tmLinesBtn', this.ICON.lines, 'Lines', 'Make the entry, stop and target lines invisible; their labels on the left stay');
+    mk('tmCleanBtn', this.ICON.clean, 'Clean', 'Only the candles: every indicator, label, drawing, line and panel is hidden until you press again (Esc too)');
     this.posLines();
     bar.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
       if (b.id === 'tmPenBtn') this.setMode(this.mode === 'pen' ? '' : 'pen');
@@ -49,6 +51,7 @@ const ChartPlus = window.ChartPlus = {
       else if (b.id === 'tmEntryBtn') this.setMode(this.mode === 'entry' ? '' : 'entry');
       else if (b.id === 'tmStudioBtn') this.studio(true);
       else if (b.id === 'tmLinesBtn') this.setLines(!this.linesHidden());
+      else if (b.id === 'tmCleanBtn') this.setClean(!this.clean);
       else if (b.id === 'tmMagicBtn' && this.mode) this.setMode(''); });
     /* the layer for pen strokes and the From-entry marks */
     const cv = document.createElement('canvas'); cv.id = 'tmPenCv'; host.appendChild(cv); this.cv = cv;
@@ -57,9 +60,9 @@ const ChartPlus = window.ChartPlus = {
     if (!Draw._cpWrapped){ Draw._cpWrapped = true; const o = Draw.redraw.bind(Draw); Draw.redraw = (...a) => { const r = o(...a); this.later(); return r; }; }
     setInterval(() => this.later(), 1000);
     window.addEventListener('resize', () => this.later());
-    try { BUS.on('symbol', () => { this.probe = null; this.closeCard(); this.studio(false); this.later(); }); BUS.on('tf', () => { this.probe = null; this.closeCard(); this.later(); }); } catch(e){}
+    try { BUS.on('symbol', () => { this.probe = null; this.closeCard(); this.studio(false); this.zoomed = null; this.banner(); this.later(); }); BUS.on('tf', () => { this.probe = null; this.closeCard(); this.later(); }); } catch(e){}
     document.addEventListener('keydown', e => { if (!this.on() || !this.room() || e.ctrlKey || e.metaKey || e.altKey) return; const t = (e.target && e.target.tagName) || ''; if (/INPUT|TEXTAREA|SELECT/.test(t) || (e.target && e.target.isContentEditable)) return;
-      if (e.key === 'Escape'){ if (this.$('tmStudioView')){ this.studio(false); e.stopPropagation(); } else if (this.mode){ this.setMode(''); e.stopPropagation(); } } }, true);
+      if (e.key === 'Escape'){ if (this.$('tmStudioView')){ this.studio(false); e.stopPropagation(); } else if (this.mode){ this.setMode(''); e.stopPropagation(); } else if (this.zoomed){ this.unzoom(); e.stopPropagation(); } else if (this.clean){ this.setClean(false); e.stopPropagation(); } } }, true);
     new MutationObserver(() => { if (!this.room()){ this.studio(false); if (this.mode) this.setMode(''); } this.later(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tmroom', 'data-face', 'data-chartmax'] });
     this.layersOrder(); this.sideOrder(); this.sideTip(); this.zoomPresses(); this.viewOpts(); this.firstTab();
     this.later(); return true; },
@@ -135,13 +138,27 @@ const ChartPlus = window.ChartPlus = {
       const cash = price => { try { const v = (price - p.entry) * p.dir * p.qty * BotEngine.cashRate(p, true); return isFinite(v) ? ' · ' + (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) : ''; } catch(e){ return ''; } };
       const col = r.live ? '#FFB648' : '#4FD8F7', dx = k * 0;
       (this._entryAt = this._entryAt || {})['pe' + id] = { t: p.entryTime };
-      items.push({ key: 'pe' + id, kind: 'entry', x: xE, y: g.Y(p.entry), color: col, noLevel: true, mini: many, tag: (r.live ? 'REAL · ' : 'ENTRY · ') + side, sub: this.px(p.entry) + (lots != null ? ' · ' + (+lots).toFixed(2) + ' lots' : ''), title: 'Entry · ' + side + ' ' + this.px(p.entry) });
+      const note = this.noteOf(p);
+      items.push({ key: 'pe' + id, kind: 'entry', x: xE, y: g.Y(p.entry), color: col, noLevel: true, mini: many, tag: (r.live ? 'REAL · ' : 'ENTRY · ') + side + (note ? ' · 📝' : ''), sub: this.px(p.entry) + (lots != null ? ' · ' + (+lots).toFixed(2) + ' lots' : ''), title: 'Entry · ' + side + ' ' + this.px(p.entry) + (note ? '\n📝 ' + note : '') + '\nPress: zoom in on this candle' });
       if (p.tp > 0) items.push({ key: 'pt' + id, kind: 'target', x: xF + dx, y: g.Y(p.tp), color: '#3DDC97', noLevel: true, mini: many, edge: 'TARGET', tag: 'TARGET', sub: this.px(p.tp) + cash(p.tp), title: 'Target ' + this.px(p.tp) });
       if (p.sl > 0) items.push({ key: 'ps' + id, kind: 'stop', x: xF + dx, y: g.Y(p.sl), color: '#FF6B7A', noLevel: true, mini: many, edge: 'STOP', tag: 'STOP', sub: this.px(p.sl) + cash(p.sl), title: 'Stop ' + this.px(p.sl) }); });
     const cw = Math.max(2, g.X(n - 1) - g.X(n - 2));
     Beacon.render(host, items, { w: g.w, h: g.h, cw });
     const layer = host.querySelector(':scope > .bcnLayer'); if (layer) layer.classList.add('passive'); },
 
+  /* your own words, without the notes the ticket adds when it fits a trade to your budgets */
+  noteOf(p){ return String((p && p.note) || '').split(' · ').filter(x => x && !/^(Size|Stop|Target|Lots|Funds|Fitted|Moved|Raised|Lowered|Auto)/i.test(x.trim())).join(' · ').trim(); },
+  /* ---------- only the candles ---------- */
+  clean: false,
+  setClean(on){ this.clean = !!on; const H = document.documentElement; H.classList.toggle('cpClean', this.clean); const b = this.$('tmCleanBtn'); if (b) b.classList.toggle('on', this.clean);
+    if (this.clean){ this._hid = new Set(); this._panes = []; this.cleanApply(); clearInterval(this._cleanT); this._cleanT = setInterval(() => { if (this.clean) this.cleanApply(); }, 1000); }
+    else { clearInterval(this._cleanT); for (const s of this._hid || []) try { s.applyOptions({ visible: true }); } catch(e){} this._hid = null; for (const el of this._panes || []) el.style.display = ''; this._panes = null; try { Chart.renderPatternMarkers(); } catch(e){} }
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 60); this.later(); },
+  cleanApply(){ const hide = s => { if (!s || this._hid.has(s)) return; try { s.applyOptions({ visible: false }); this._hid.add(s); } catch(e){} };
+    for (const k of Object.keys(Chart.series || {})) hide(Chart.series[k] && Chart.series[k].s);
+    for (const k of Object.keys(Chart.cmpSeries || {})) hide(Chart.cmpSeries[k]);
+    for (const k of Object.keys(Chart.panes || {})){ const el = Chart.panes[k] && Chart.panes[k].el; if (el && el.style.display !== 'none'){ el.style.display = 'none'; this._panes.push(el); window.dispatchEvent(new Event('resize')); } }
+    const ps = Chart.priceSeries; if (ps && !ps._cpClean){ ps._cpClean = true; const o = ps.setMarkers.bind(ps); ps.setMarkers = m => o(this.clean ? [] : m); } try { if (ps) ps.setMarkers([]); } catch(e){} },
   /* ---------- presses on the chart while the pen or From entry is in hand ---------- */
   SKIP: 'button, input, select, textarea, a, #tmMarkBar, #drawBar, #legend, #indLegend, .posPanel, #tmExpand, #dwCard, #cpCard, #inkMenu, .paneCtl',
   inPlot(e){ const host = this.$('mainWrap'); if (!host || !this.mode || !this.on() || !this.room()) return null; if (e.target && e.target.closest && (e.target.closest(this.SKIP) || !host.contains(e.target))) return null;
@@ -198,10 +215,22 @@ const ChartPlus = window.ChartPlus = {
   zoomPresses(){ const core = e => e.target && e.target.closest && e.target.closest('#mainWrap > .bcnLayer .bcn.entry > .bcnCore, #mainWrap > .bcnLayer .bcn.entry > .bcnTag');
     for (const ev of ['pointerdown', 'mousedown', 'mouseup', 'pointerup']) window.addEventListener(ev, e => { if (core(e) && this.on()){ e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     window.addEventListener('click', e => { const c = core(e); if (!c || !this.on()) return; e.preventDefault(); e.stopImmediatePropagation(); const k = c.parentElement.dataset.k, a = (this._entryAt || {})[k]; if (!a) return;
-      const raw = typeof Autopsy !== 'undefined' && Autopsy.raw ? Autopsy.raw({ sym: STORE.symbol }, a.t) : Math.floor(a.t / 1000) + 7200; this.studio(true, raw); }, true);
+      const raw = typeof Autopsy !== 'undefined' && Autopsy.raw ? Autopsy.raw({ sym: STORE.symbol }, a.t) : Math.floor(a.t / 1000) + 7200; this.zoomAt(this.idx(raw)); }, true);
     window.addEventListener('dblclick', e => { if (!this.on() || !this.room() || this.mode) return; const host = this.$('mainWrap'); if (!host || !host.contains(e.target) || (e.target.closest && e.target.closest(this.SKIP + ', .bcnLayer'))) return;
       const r = host.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = this.g(); if (!g || x < 0 || y < 0 || x > g.w || y > g.h) return;
-      const i = Math.max(0, Math.min(Chart.raw.length - 1, g.I(x))); e.preventDefault(); e.stopImmediatePropagation(); this.studio(true, Chart.raw[i].rawTime); }, true); },
+      const i = Math.max(0, Math.min(Chart.raw.length - 1, g.I(x))); e.preventDefault(); e.stopImmediatePropagation(); if (this.zoomed) this.unzoom(); else this.zoomAt(i); }, true); },
+  /* the chart itself zooms in on one candle and puts on the studio look (zones, channel, bounces and breaks, average), as the
+     Markets room shows a chart; a double-click (or Esc, or the banner) puts the chart back as it was */
+  zoomAt(i){ const R = Chart.raw; if (!R || !R[i] || !Chart.main) return; const ts = Chart.main.timeScale();
+    if (!this.zoomed){ let on = false; try { on = !!Studio.overlay.cfg().on; } catch(e){} this.zoomed = { range: ts.getVisibleLogicalRange(), studio: on }; }
+    try { if (typeof Studio !== 'undefined' && Studio.overlay && !Studio.overlay.cfg().on) Studio.overlay.toggle(); } catch(e){}
+    ts.setVisibleLogicalRange({ from: i - 34, to: i + 18 }); this.zoomed.i = i; this.banner(); this.later(); },
+  unzoom(){ const z = this.zoomed; if (!z) return; this.zoomed = null; try { if (z.range) Chart.main.timeScale().setVisibleLogicalRange(z.range); } catch(e){}
+    try { if (typeof Studio !== 'undefined' && Studio.overlay && !z.studio && Studio.overlay.cfg().on) Studio.overlay.toggle(); } catch(e){} this.banner(); this.later(); },
+  banner(){ const host = this.$('mainWrap'); let b = this.$('cpZoomBar'); if (!this.zoomed){ if (b) b.remove(); return; } if (!host) return;
+    if (!b){ b = document.createElement('div'); b.id = 'cpZoomBar'; host.appendChild(b); b.addEventListener('click', e => { if (e.target.closest('[data-cz]')) this.unzoom(); }); b.addEventListener('mousedown', e => e.stopPropagation()); }
+    const k = Chart.raw[this.zoomed.i]; b.innerHTML = '<b>Zoomed in</b><span>' + (k ? this.date(k.rawTime, true) : '') + ' · in the studio look</span><button type="button" data-cz="1">Back to the full chart ✕</button>'; },
+
   /* the studio's chart, centred on a moment and zoomed in */
   focusStudio(M, t){ const C = M && M.chart, R = C && C.raw; if (!R || !R.length || !t) return false; const tt = b => b.time != null ? b.time : b.t; let i = R.length - 1; for (let k = R.length - 1; k >= 0; k--){ if (tt(R[k]) <= t){ i = k; break; } }
     if (tt(R[0]) > t) return false; C.step = 22; C.off = C.clampOff(R.length - 1 + C.FUT - i - (C.plotW / 2 - C.step / 2) / C.step); C.mark = i; C.draw(); return true; },
@@ -258,7 +287,8 @@ const ChartPlus = window.ChartPlus = {
   paintOpts(){ const box = this.$('cpViewOpts'); if (!box) return; const H = document.documentElement;
     box.innerHTML = '<h4>Side panel</h4>' + this.OPTS.map(o => { const on = !H.classList.contains(o[0]); return '<button type="button" class="cpOpt' + (on ? ' on' : '') + '" data-cpopt="' + o[0] + '"><i></i><span><b>' + o[2] + '</b><small>' + o[3] + '</small></span><em>' + (on ? 'on' : 'off') + '</em></button>'; }).join(''); },
   /* ---------- the side tab you put first opens with the chart (unless you starred another with a right-click) ---------- */
-  firstTab(){ setTimeout(() => { try { if (!this.on()) return; const c = typeof lsGet === 'function' ? (lsGet('astra_taborder', {}) || {}) : {}; if (c.side && c.side.def) return; const b = document.querySelector('#sideTabs button[data-tab]'); if (b && !b.classList.contains('active')) b.click(); } catch(e){} }, 9500); },
+  firstTab(){ const st = this.$('sideTabs'); if (st) st.addEventListener('click', e => { if (e.target.closest && e.target.closest('button[data-tab]')) this._picked = true; }, true);
+    setTimeout(() => { try { if (!this.on() || this._picked) return; const c = typeof lsGet === 'function' ? (lsGet('astra_taborder', {}) || {}) : {}; if (c.side && c.side.def) return; const b = document.querySelector('#sideTabs button[data-tab]'); if (b && !b.classList.contains('active')) b.click(); } catch(e){} }, 4200); },
   /* ---------- the names of the side tabs, in front of everything ---------- */
   sideTip(){ const st = this.$('sideTabs'); if (!st || this.$('cpTabTip')) return; const tip = document.createElement('div'); tip.id = 'cpTabTip'; tip.hidden = true; document.body.appendChild(tip);
     st.addEventListener('mouseover', e => { const b = e.target.closest && e.target.closest('button[data-tab]'); if (!b || !this.on()) return; const t = b.dataset.tml || (b.textContent || '').trim(); if (!t) return; tip.textContent = t; tip.hidden = false;

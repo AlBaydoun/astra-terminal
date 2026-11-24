@@ -43,7 +43,7 @@ const SideTrade = window.SideTrade = {
     this.bots(); return true; },
 
   active(){ const p = this.$('tab-tstrade'); return !!p && p.classList.contains('active') && p.offsetParent !== null; },
-  show(){ const st = this.$('sideTabs'), b = st && st.querySelector('[data-tab="tstrade"]'); if (!b) return;
+  show(){ const st = this.$('sideTabs'), b = st && st.querySelector('[data-tab="tstrade"]'); if (!b) return; if (typeof ChartPlus !== 'undefined') ChartPlus._picked = true;
     st.querySelectorAll('button[data-tab]').forEach(x => x.classList.toggle('active', x === b)); document.querySelectorAll('#sidebar .sidePanel').forEach(p => p.classList.toggle('active', p.id === 'tab-tstrade'));
     try { if (typeof Face !== 'undefined') Face.sideNames(); } catch(e){} this.sync(); this.cards(true); },
   click(e){ const b = e.target.closest('[data-tr]'); if (b){ const k = b.dataset.tr;
@@ -53,10 +53,20 @@ const SideTrade = window.SideTrade = {
       else if (k.startsWith('scope:')){ this.scope = k.slice(6); this.filter(); }
       else if (k.startsWith('kind:')){ this.kind = k.slice(5); try { localStorage.setItem('astra_trade_kind', this.kind); } catch(x){} this.cards(true); }
       return; }
-    /* a card opens when you press it (not one of its controls), and closes from its top */
-    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail')) return;
-    const k = card.dataset.ot, isOpen = card.classList.contains('trOpen'); if (isOpen && !e.target.closest('.otHead')) return;
-    if (isOpen) this.open.delete(k); else this.open.add(k); card.classList.toggle('trOpen', !isOpen); },
+    /* ▾ opens a card's controls; a press anywhere else on it shows the trade on the chart, as the chart's own list does */
+    const more = e.target.closest('#tsTradeCards .trMore'); if (more){ const card = more.closest('.otCard'), k = card.dataset.ot, isOpen = card.classList.contains('trOpen'); if (isOpen) this.open.delete(k); else this.open.add(k); card.classList.toggle('trOpen', !isOpen); return; }
+    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection')) return; this.focus(card.dataset.ot); },
+  focus(k){ if (typeof PosLines === 'undefined' || !k) return; const i = k.indexOf(':'), bot = k.slice(0, i), id = /^T/.test(k.slice(i + 1)) ? k.slice(i + 1) : +k.slice(i + 1); const row = OpenTrades.all().find(r => r.bot + ':' + r.p.id === k); if (!row) return;
+    const here = this.base(STORE.symbol) === this.base(row.p.sym);
+    if (!here){ PosLines.show(bot, id); setTimeout(() => { try { if (PosLines.rows().length > 1) PosLines.toggleSolo(k); } catch(e){} this.dress(); }, 1500); return; }
+    if (PosLines.rows().length > 1) PosLines.toggleSolo(k); else { PosLines.focus = k; try { Draw.redraw(); } catch(e){} setTimeout(() => { if (PosLines.focus === k){ PosLines.focus = null; try { Draw.redraw(); } catch(e){} } }, 8000); }
+    this.dress(); },
+  /* each card gets its ▾, the note written with the trade, and a mark when it is the one singled out on the chart */
+  dress(){ const host = this.$('tsTradeCards'); if (!host) return; let rows = null, solo = null; try { solo = PosLines.soloKey(); } catch(e){}
+    host.querySelectorAll('.otCard').forEach(c => { if (!c.querySelector(':scope > .trMore')){ const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target, trailing stop, reduce or close'; b.textContent = '▾'; c.appendChild(b); }
+      rows = rows || new Map(OpenTrades.all().map(r => [r.bot + ':' + r.p.id, r])); const r = rows.get(c.dataset.ot), note = r && typeof ChartPlus !== 'undefined' ? ChartPlus.noteOf(r.p) : '';
+      let n = c.querySelector(':scope > .trNote'); if (note){ if (!n){ n = document.createElement('div'); n.className = 'trNote'; c.querySelector('.otHead').after(n); } if (n.textContent !== '📝 ' + note) n.textContent = '📝 ' + note; } else if (n) n.remove();
+      c.classList.toggle('trSolo', !!solo && solo === c.dataset.ot); }); },
 
   /* ---------- the ticket ---------- */
   ticket(sym, dir, tf){ if (!sym) return; const body = this.$('botBody'), host = this.$('tsTradeHost'), box = this.$('trTicket'); if (!body || !host || typeof Bots === 'undefined') return;
@@ -93,7 +103,7 @@ const SideTrade = window.SideTrade = {
     this.refresh(); },
   refresh(){ if (this.kind === 'live'){ this.live(false); return; } const host = this.$('tsTradeCards'); if (!host || !host.querySelector('.otList')) return; const o = OpenTrades.scope;
     OpenTrades.scope = () => ({ host, bot: null }); try { OpenTrades.refresh(); } catch(e){ console.warn('side cards', e); } finally { OpenTrades.scope = o; }
-    host.querySelectorAll('.otCard').forEach(c => { if (this.open.has(c.dataset.ot) !== c.classList.contains('trOpen')) c.classList.toggle('trOpen', this.open.has(c.dataset.ot)); }); this.filter(); },
+    host.querySelectorAll('.otCard').forEach(c => { if (this.open.has(c.dataset.ot) !== c.classList.contains('trOpen')) c.classList.toggle('trOpen', this.open.has(c.dataset.ot)); }); this.dress(); this.filter(); },
   base(s){ return String(s || '').replace(/\.(s|m|std)$/i, '').toUpperCase(); },
   filter(){ const here = this.base(STORE.symbol); if (this.kind === 'live'){ const lv = this.$('tsLiveCards'); let rows = []; try { rows = LiveDesk.chartRows(); } catch(e){} const symOf = {}; for (const r of rows) symOf[String(r.ticket != null ? r.ticket : r.p && r.p.id)] = r.p && r.p.sym;
       let n = 0, all = 0; if (lv) lv.querySelectorAll('[data-ldpos]').forEach(c => { const mine = this.base(symOf[c.dataset.ldpos]) === here, show = this.scope === 'all' || mine; all++; if (show) n++; if (c.hidden === show) c.hidden = !show; });
