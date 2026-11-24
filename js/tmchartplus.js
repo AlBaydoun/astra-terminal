@@ -30,6 +30,7 @@ const ChartPlus = window.ChartPlus = {
   ICON: {
     pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z"/><path d="M14 7l3 3"/></svg>',
     entry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M8 7h8v10H8zM4 8h3M4 12h3M4 16h3"/></svg>',
+    lines: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h18M3 12h18" stroke-dasharray="3 3"/><path d="M3 17h18"/></svg>',
     studio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 9v11M11 14l2-2 2 3 2-2"/></svg>' },
 
   init(){ if (this._init) return; const bar = this.$('tmMarkBar'), host = this.$('mainWrap'); if (!bar || !host || typeof Draw === 'undefined' || typeof Chart === 'undefined') return false; this._init = true;
@@ -40,11 +41,14 @@ const ChartPlus = window.ChartPlus = {
     const car = document.createElement('button'); car.type = 'button'; car.id = 'tmPenCar'; car.title = 'Choose the pen, its colour, tip and thickness'; car.textContent = '▾'; bar.appendChild(car);
     mk('tmEntryBtn', this.ICON.entry, 'From entry', 'Press a candle: what an entry at its top, middle or bottom would have done. Esc ends it.');
     mk('tmStudioBtn', this.ICON.studio, 'Studio view', 'This chart in the Markets studio: its layers, scenes and zoom');
+    mk('tmLinesBtn', this.ICON.lines, 'Lines', 'Make the entry, stop and target lines invisible; their labels on the left stay');
+    this.posLines();
     bar.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
       if (b.id === 'tmPenBtn') this.setMode(this.mode === 'pen' ? '' : 'pen');
       else if (b.id === 'tmPenCar'){ if (typeof Ink !== 'undefined') Ink.menu(b, cur => { if (Ink.isMagic(cur.pen)){ this.setMode(''); const m = this.$('tmMagicBtn'); if (m && !m.classList.contains('on')) m.click(); } else this.setMode('pen'); }); }
       else if (b.id === 'tmEntryBtn') this.setMode(this.mode === 'entry' ? '' : 'entry');
       else if (b.id === 'tmStudioBtn') this.studio(true);
+      else if (b.id === 'tmLinesBtn') this.setLines(!this.linesHidden());
       else if (b.id === 'tmMagicBtn' && this.mode) this.setMode(''); });
     /* the layer for pen strokes and the From-entry marks */
     const cv = document.createElement('canvas'); cv.id = 'tmPenCv'; host.appendChild(cv); this.cv = cv;
@@ -57,9 +61,33 @@ const ChartPlus = window.ChartPlus = {
     document.addEventListener('keydown', e => { if (!this.on() || !this.room() || e.ctrlKey || e.metaKey || e.altKey) return; const t = (e.target && e.target.tagName) || ''; if (/INPUT|TEXTAREA|SELECT/.test(t) || (e.target && e.target.isContentEditable)) return;
       if (e.key === 'Escape'){ if (this.$('tmStudioView')){ this.studio(false); e.stopPropagation(); } else if (this.mode){ this.setMode(''); e.stopPropagation(); } } }, true);
     new MutationObserver(() => { if (!this.room()){ this.studio(false); if (this.mode) this.setMode(''); } this.later(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tmroom', 'data-face', 'data-chartmax'] });
-    this.layersOrder(); this.sideOrder(); this.sideTip();
+    this.layersOrder(); this.sideOrder(); this.sideTip(); this.zoomPresses(); this.viewOpts(); this.firstTab();
     this.later(); return true; },
 
+  /* ---------- the position lines: hidden or shown; while hidden they cannot be pressed or dragged either ---------- */
+  LNKEY: 'astra_poslines_hidden',
+  linesHidden(){ try { return this.on() && localStorage.getItem(this.LNKEY) === '1'; } catch(e){ return false; } },
+  setLines(hide){ try { localStorage.setItem(this.LNKEY, hide ? '1' : ''); } catch(e){} this.linesBtn(); try { Draw.redraw(); } catch(e){} if (typeof toast === 'function') toast(hide ? 'Position lines invisible: their labels stay (drag a label to move a stop or a target). Press Lines to bring them back.' : 'Position lines visible again', 'info'); },
+  linesBtn(){ const b = this.$('tmLinesBtn'), h = this.linesHidden(); if (b){ b.classList.toggle('off', h); b.title = h ? 'The position lines are invisible (labels kept): press to bring them back' : 'Make the entry, stop and target lines invisible; their labels on the left stay'; } },
+  posLines(){ if (typeof PosLines === 'undefined' || PosLines._cpWrap) return; PosLines._cpWrap = true; const P = PosLines, draw = P.draw.bind(P), label = P.label.bind(P), hit = P.hit.bind(P), shift = P.serverShift.bind(P);
+    /* the labels are written down as they are drawn, so a press on one can still find its line */
+    P.label = (ctx, x, y, text, color, below) => { const b = label(ctx, x, y, text, color, below); try { (P._cpLbl = P._cpLbl || []).push({ x: b.x, y: b.y, w: b.w, h: b.h, ly: y, text: String(text || '') }); } catch(e){} return b; };
+    /* invisible lines: the chart's own drawing goes through a stand-in that leaves out the long lines and the shaded zones */
+    P.draw = ctx => { P._cpLbl = []; if (!this.linesHidden()) return draw(ctx); return draw(this.noLines(ctx)); };
+    P.hit = (x, y) => { if (!this.linesHidden()) return hit(x, y); const b = (P._cpLbl || []).find(q => /^(SL|TP) /.test(q.text) && x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h); return b ? hit(x, b.ly) : null; };
+    /* the broker's clock for a date, as the Replay uses it: learning it from the newest candle comes out an hour short in
+       the second half of every hour on a 1-hour chart, which drew a position one hour away from where it opened */
+    P.serverShift = () => { if (this.on() && typeof Autopsy !== 'undefined' && Autopsy.shift){ try { return Autopsy.shift(STORE.symbol); } catch(e){} } return shift(); };
+    this.linesBtn(); },
+  /* a stand-in for the canvas: a stroke that is one straight line across most of the chart is not drawn, nor a faint shaded zone */
+  noLines(ctx){ const pts = [], W = (Draw.cssW || 1000) * 0.6;
+    return new Proxy(ctx, { get: (t, k) => {
+        if (k === 'beginPath') return () => { pts.length = 0; t.beginPath(); };
+        if (k === 'moveTo' || k === 'lineTo') return (x, y) => { pts.push([x, y]); t[k](x, y); };
+        if (k === 'stroke') return (...a) => { if (pts.length === 2 && Math.abs(pts[0][1] - pts[1][1]) < 0.6 && Math.abs(pts[1][0] - pts[0][0]) > W) return; t.stroke(...a); };
+        if (k === 'fillRect') return (x, y, w, h) => { if (/,\s*0?\.1\)\s*$/.test(String(t.fillStyle))) return; t.fillRect(x, y, w, h); };
+        const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; },
+      set: (t, k, v) => { t[k] = v; return true; } }); },
   setMode(m){ this.mode = m; const p = this.$('tmPenBtn'), en = this.$('tmEntryBtn'); if (p) p.classList.toggle('on', m === 'pen'); if (en) en.classList.toggle('on', m === 'entry');
     if (m){ const mg = this.$('tmMagicBtn'); if (mg && mg.classList.contains('on')) mg.click(); if (m === 'pen' && typeof Ink !== 'undefined' && Ink.isMagic()){ Ink.load().pen = 'pen'; Ink.save(); } }
     const host = this.$('mainWrap'); if (host){ host.classList.toggle('cpPen', m === 'pen'); host.classList.toggle('cpEntry', m === 'entry'); }
@@ -103,9 +131,10 @@ const ChartPlus = window.ChartPlus = {
   beacons(){ const host = this.$('mainWrap'); if (!host || typeof Beacon === 'undefined') return; const g = this.on() && this.room() && typeof PosLines !== 'undefined' && PosLines.on ? this.g() : null;
     if (!g){ Beacon.clear(host); return; } let rows = []; try { rows = PosLines.shownRows(); } catch(e){} const n = Chart.raw.length, xF = g.X(n - 1 + this.AHEAD), many = rows.length > 3, items = [];
     rows.forEach((r, k) => { const p = r.p; if (!p || !(p.entry > 0)) return; const id = r.bot + ':' + p.id, side = p.dir > 0 ? 'BUY' : 'SELL', lots = p.lots != null ? p.lots : p.qty;
-      let xE = NaN; try { const t = Math.floor(p.entryTime / 1000) + PosLines.serverShift() + (typeof TZ_OFF !== 'undefined' ? TZ_OFF : 0), l = Draw.logicalFor(t); if (l != null){ const a = Math.floor(l), xa = g.X(a), xb = g.X(a + 1); xE = xa + (xb - xa) * (l - a); } } catch(e){}
+      let xE = NaN; try { const t = Math.floor(p.entryTime / 1000) + PosLines.serverShift() + (typeof TZ_OFF !== 'undefined' ? TZ_OFF : 0), l = Draw.logicalFor(t); if (l != null) xE = g.X(Math.floor(l + 1e-6)); } catch(e){}
       const cash = price => { try { const v = (price - p.entry) * p.dir * p.qty * BotEngine.cashRate(p, true); return isFinite(v) ? ' · ' + (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) : ''; } catch(e){ return ''; } };
       const col = r.live ? '#FFB648' : '#4FD8F7', dx = k * 0;
+      (this._entryAt = this._entryAt || {})['pe' + id] = { t: p.entryTime };
       items.push({ key: 'pe' + id, kind: 'entry', x: xE, y: g.Y(p.entry), color: col, noLevel: true, mini: many, tag: (r.live ? 'REAL · ' : 'ENTRY · ') + side, sub: this.px(p.entry) + (lots != null ? ' · ' + (+lots).toFixed(2) + ' lots' : ''), title: 'Entry · ' + side + ' ' + this.px(p.entry) });
       if (p.tp > 0) items.push({ key: 'pt' + id, kind: 'target', x: xF + dx, y: g.Y(p.tp), color: '#3DDC97', noLevel: true, mini: many, edge: 'TARGET', tag: 'TARGET', sub: this.px(p.tp) + cash(p.tp), title: 'Target ' + this.px(p.tp) });
       if (p.sl > 0) items.push({ key: 'ps' + id, kind: 'stop', x: xF + dx, y: g.Y(p.sl), color: '#FF6B7A', noLevel: true, mini: many, edge: 'STOP', tag: 'STOP', sub: this.px(p.sl) + cash(p.sl), title: 'Stop ' + this.px(p.sl) }); });
@@ -165,18 +194,31 @@ const ChartPlus = window.ChartPlus = {
       '<p class="cpMuted">Stop and target are measured from each entry with the rule above; a candle that touches both counts as the stop. "Won" is how often the same rule reached the target first from every candle where the signal fired on this chart. Money shows when the broker gives the value of a lot' + (pv ? '' : ' (not for this instrument)') + '. Press another candle to test it.</p>' +
       '<button type="button" class="cpDone" data-cp="off">Done</button>'; },
 
+  /* ---------- a press on an entry point, or a double-click on a candle: the studio, zoomed on that moment ---------- */
+  zoomPresses(){ const core = e => e.target && e.target.closest && e.target.closest('#mainWrap > .bcnLayer .bcn.entry > .bcnCore, #mainWrap > .bcnLayer .bcn.entry > .bcnTag');
+    for (const ev of ['pointerdown', 'mousedown', 'mouseup', 'pointerup']) window.addEventListener(ev, e => { if (core(e) && this.on()){ e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+    window.addEventListener('click', e => { const c = core(e); if (!c || !this.on()) return; e.preventDefault(); e.stopImmediatePropagation(); const k = c.parentElement.dataset.k, a = (this._entryAt || {})[k]; if (!a) return;
+      const raw = typeof Autopsy !== 'undefined' && Autopsy.raw ? Autopsy.raw({ sym: STORE.symbol }, a.t) : Math.floor(a.t / 1000) + 7200; this.studio(true, raw); }, true);
+    window.addEventListener('dblclick', e => { if (!this.on() || !this.room() || this.mode) return; const host = this.$('mainWrap'); if (!host || !host.contains(e.target) || (e.target.closest && e.target.closest(this.SKIP + ', .bcnLayer'))) return;
+      const r = host.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, g = this.g(); if (!g || x < 0 || y < 0 || x > g.w || y > g.h) return;
+      const i = Math.max(0, Math.min(Chart.raw.length - 1, g.I(x))); e.preventDefault(); e.stopImmediatePropagation(); this.studio(true, Chart.raw[i].rawTime); }, true); },
+  /* the studio's chart, centred on a moment and zoomed in */
+  focusStudio(M, t){ const C = M && M.chart, R = C && C.raw; if (!R || !R.length || !t) return false; const tt = b => b.time != null ? b.time : b.t; let i = R.length - 1; for (let k = R.length - 1; k >= 0; k--){ if (tt(R[k]) <= t){ i = k; break; } }
+    if (tt(R[0]) > t) return false; C.step = 22; C.off = C.clampOff(R.length - 1 + C.FUT - i - (C.plotW / 2 - C.step / 2) / C.step); C.mark = i; C.draw(); return true; },
   /* ---------- the Markets studio, over the chart ---------- */
-  studio(open){ const old = this.$('tmStudioView'); if (!open){ if (old){ old.remove(); const b = this.$('tmStudioBtn'); if (b) b.classList.remove('on'); } return; } if (old) return;
+  studio(open, at){ const old = this.$('tmStudioView'); if (old && open && at){ this.studio(false); return this.studio(true, at); } if (!open){ if (old){ old.remove(); const b = this.$('tmStudioBtn'); if (b) b.classList.remove('on'); } return; } if (old) return;
     let sym = STORE.symbol; try { if (typeof Feed !== 'undefined' && Feed.brokerName) sym = Feed.brokerName(STORE.symbol) || sym; } catch(e){}
     const tf = { '1m': '15m', '5m': '15m', '15m': '15m', '30m': '1h', '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1d' }[STORE.tf] || '1h';
     try { localStorage.setItem('timurila_sym', JSON.stringify(sym)); localStorage.setItem('timurila_tf', JSON.stringify(tf)); } catch(e){}
     const el = document.createElement('div'); el.id = 'tmStudioView';
-    el.innerHTML = '<div class="svHead"><b>Studio view</b><span>' + this.esc(sym) + ' · ' + this.esc(tf) + (tf !== STORE.tf ? ' (the studio has 15m, 1h, 4h and 1d)' : '') + ' · the Markets chart studio: layers, scenes and zoom</span><button type="button" data-sv="x">Back to the live chart ✕</button></div><iframe title="Markets studio" src="timurila/index.html?embed=1&studio=1#markets"></iframe>';
+    el.innerHTML = '<div class="svHead"><b>Studio view</b><span>' + this.esc(sym) + ' · ' + this.esc(tf) + (at ? ' · zoomed on ' + this.esc(this.date(at, true)) : '') + (tf !== STORE.tf ? ' (the studio has 15m, 1h, 4h and 1d)' : '') + ' · the Markets chart studio: layers, scenes and zoom</span><button type="button" data-sv="x">Back to the live chart ✕</button></div><iframe title="Markets studio" src="timurila/index.html?embed=1&studio=1#markets"></iframe>';
     document.body.appendChild(el); const b = this.$('tmStudioBtn'); if (b) b.classList.add('on');
     el.addEventListener('click', e => { if (e.target.closest('[data-sv="x"]')) this.studio(false); });
     /* the studio's own objects are top-level constants of its page, so they are reached by name in its window */
     const fr = el.querySelector('iframe'); fr.addEventListener('load', () => { const w = fr.contentWindow, get = name => { try { return w.eval('typeof ' + name + " !== 'undefined' ? " + name + ' : null'); } catch(x){ return null; } }; let n = 0;
-      const go = () => { const T = get('T'), M = get('Markets'); if (T && T.symbols && T.symbols.length && M && M.chart){ if (M.sym !== sym && T.symbols.includes(sym)) M.open(sym); if (M.tf !== tf){ M.tf = tf; M.loadChart(true); } return; } if (++n < 40) setTimeout(go, 500); }; go(); }); },
+      const go = () => { const T = get('T'), M = get('Markets'); if (T && T.symbols && T.symbols.length && M && M.chart){ if (M.sym !== sym && T.symbols.includes(sym)) M.open(sym); if (M.tf !== tf){ M.tf = tf; M.loadChart(true); }
+          /* zoomed on a moment: once the studio's candles are in, centre them on it (they reach back about 600 candles) */
+          if (at){ let m = 0; const fx = () => { const ok = M.chart && M.chart.sym === sym && M.chart.raw && M.chart.raw.length > 30 && this.focusStudio(M, at); if (!ok && ++m < 30) setTimeout(fx, 400); else if (!ok){ const h = el.querySelector('.svHead span'); if (h) h.textContent += ' · that moment is older than the studio’s candles'; } }; setTimeout(fx, 300); } return; } if (++n < 40) setTimeout(go, 500); }; go(); }); },
 
   /* ---------- the order of Layers ▸ More overlays ---------- */
   LKEY: 'astra_layers_order',
@@ -207,6 +249,16 @@ const ChartPlus = window.ChartPlus = {
     /* the tabs the new look adds arrive after Classic has put its own in order: they are put in their places too */
     let tries = 0; const later = () => { arm(); try { if (typeof TabOrder !== 'undefined') TabOrder.apply('side'); } catch(e){} if (++tries < 6) setTimeout(later, 1500); }; later(); },
 
+  /* ---------- the clock strip and the news stream of the side panel: on or off (View menu) ---------- */
+  OPTS: [['cpNoClock', 'astra_side_clock_off', 'Clock strip', 'the market sessions at the top of the side panel'], ['cpNoNews', 'astra_side_news_off', 'News stream', 'the headlines at the foot of the side panel']],
+  viewOpts(){ const H = document.documentElement; for (const [cls, key] of this.OPTS){ let off = false; try { off = localStorage.getItem(key) === '1'; } catch(e){} H.classList.toggle(cls, off); }
+    const put = () => { const v = this.$('tmPopView'); if (!v || this.$('cpViewOpts')) return; const box = document.createElement('div'); box.id = 'cpViewOpts'; v.appendChild(box); this.paintOpts();
+      box.addEventListener('click', e => { const b = e.target.closest('[data-cpopt]'); if (!b) return; e.stopPropagation(); const o = this.OPTS.find(x => x[0] === b.dataset.cpopt), off = !H.classList.contains(o[0]); H.classList.toggle(o[0], off); try { localStorage.setItem(o[1], off ? '1' : ''); } catch(x){} this.paintOpts(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60); }); };
+    put(); setInterval(put, 2000); },
+  paintOpts(){ const box = this.$('cpViewOpts'); if (!box) return; const H = document.documentElement;
+    box.innerHTML = '<h4>Side panel</h4>' + this.OPTS.map(o => { const on = !H.classList.contains(o[0]); return '<button type="button" class="cpOpt' + (on ? ' on' : '') + '" data-cpopt="' + o[0] + '"><i></i><span><b>' + o[2] + '</b><small>' + o[3] + '</small></span><em>' + (on ? 'on' : 'off') + '</em></button>'; }).join(''); },
+  /* ---------- the side tab you put first opens with the chart (unless you starred another with a right-click) ---------- */
+  firstTab(){ setTimeout(() => { try { if (!this.on()) return; const c = typeof lsGet === 'function' ? (lsGet('astra_taborder', {}) || {}) : {}; if (c.side && c.side.def) return; const b = document.querySelector('#sideTabs button[data-tab]'); if (b && !b.classList.contains('active')) b.click(); } catch(e){} }, 9500); },
   /* ---------- the names of the side tabs, in front of everything ---------- */
   sideTip(){ const st = this.$('sideTabs'); if (!st || this.$('cpTabTip')) return; const tip = document.createElement('div'); tip.id = 'cpTabTip'; tip.hidden = true; document.body.appendChild(tip);
     st.addEventListener('mouseover', e => { const b = e.target.closest && e.target.closest('button[data-tab]'); if (!b || !this.on()) return; const t = b.dataset.tml || (b.textContent || '').trim(); if (!t) return; tip.textContent = t; tip.hidden = false;

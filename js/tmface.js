@@ -145,7 +145,7 @@ const Face = window.Face = {
       try { if (!on && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (on && document.fullscreenElement) document.exitFullscreen(); } catch(e){} setTimeout(paint, 80); });
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.documentElement.dataset.chartmax === '1' && typeof App !== 'undefined' && App.setMax) App.setMax(false); setTimeout(paint, 80); });
     new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-chartmax'] }); paint(); host.appendChild(b); },
-  SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours: this chart, hour by hour', tsclock: 'Clock: every market’s hours', tsheat: 'Heatmap: every market today', tsnews: 'News', tssig: 'Signals: twenty readings, live', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
+  SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours: this chart, hour by hour', tsclock: 'Clock: every market’s hours', tsheat: 'Heatmap: every market today', tsnews: 'News', tssig: 'Signals: twenty readings, live', tstrade: 'Trade: ticket and open trades', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
   sideNames(){ const st = $('sideTabs'); if (!st) return; const set = () => { st.querySelectorAll('[data-tab]').forEach(b => { b.dataset.tml = this.SIDE[b.dataset.tab] || (b.textContent || '').trim(); }); const a = st.querySelector('[data-tab].active'); st.dataset.tml = a ? a.dataset.tml : ''; };
     set(); if (!this._sideObs){ this._sideObs = new MutationObserver(set); this._sideObs.observe(st, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true }); } },
   restore(){ for (const m of this.moved.reverse()){ try { if (m.label === undefined) delete m.el.dataset.tml; else m.el.dataset.tml = m.label; m.parent.insertBefore(m.el, m.next && m.next.parentNode === m.parent ? m.next : null); } catch(e){} } this.moved = []; },
@@ -236,12 +236,19 @@ const Face = window.Face = {
   layersSync(){
     const h = $('tmLayersHead'); if (!h || !this.on() || typeof Studio === 'undefined') return; const c = Studio.overlay.cfg();
     h.innerHTML = '<div class="tmLH"><b>Layers</b><button type="button" data-lx="close" title="Close">✕</button></div>' +
-      '<div class="tmScenes"><span>Scene</span><button type="button" data-scene="clean">Clean</button><button type="button" data-scene="studio">Studio</button><button type="button" data-scene="structure">Structure</button><button type="button" data-scene="all">Everything</button></div>' +
-      '<div class="tmLGroup"><label class="tmSwitch big"><input type="checkbox" data-st="on"' + (c.on ? ' checked' : '') + '><i></i><span>Studio look</span></label>' +
+      '<div class="tmScenes"><button type="button" class="lyFold" data-lyfold="scene">Scene</button><button type="button" data-scene="clean">Clean</button><button type="button" data-scene="studio">Studio</button><button type="button" data-scene="structure">Structure</button><button type="button" data-scene="all">Everything</button></div>' +
+      '<button type="button" class="lyFold lyFoldRow" data-lyfold="studio">Studio look and its layers</button><div class="tmLGroup"><label class="tmSwitch big"><input type="checkbox" data-st="on"' + (c.on ? ' checked' : '') + '><i></i><span>Studio look</span></label>' +
       this.STUDIO.map(([k, name, ev]) => { const v = this.verdict(ev); return '<label class="tmSwitch' + (c.on ? '' : ' dim') + '"><input type="checkbox" data-st="' + k + '"' + (c[k] ? ' checked' : '') + '><i></i><span>' + name + '</span>' + (v ? '<em class="' + (v === 'no edge' ? 'no' : 'ok') + '" title="What the test of this signal found. A layer can still help you see the market.">' + v + '</em>' : '') + '</label>'; }).join('') + '</div>' +
-      '<div class="tmLSub">More overlays <em>drag a row to move it</em></div>';
+      '<div class="tmLSub"><button type="button" class="lyFold" data-lyfold="more">More overlays</button> <em>drag a row to move it</em></div>';
+    this.lyFolds();
   },
+  lyFoldGet(){ try { return JSON.parse(localStorage.getItem('astra_layers_fold') || '{}') || {}; } catch(e){ return {}; } },
+  lyFolds(){ const strip = $('chartLabelBar'); if (!strip) return; const F = this.lyFoldGet(); for (const k of ['scene', 'studio', 'more']) strip.classList.toggle('lyF-' + k, !!F[k]);
+    /* the panel also keeps its scroll position */
+    if (!strip._lyScroll){ strip._lyScroll = true; let t = 0; strip.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(() => { try { localStorage.setItem('astra_layers_scroll', String(strip.scrollTop)); } catch(e){} }, 200); });
+      new MutationObserver(() => { if (H.dataset.tmlayers === '1'){ let y = 0; try { y = +localStorage.getItem('astra_layers_scroll') || 0; } catch(e){} setTimeout(() => { strip.scrollTop = y; }, 30); } }).observe(H, { attributes: true, attributeFilter: ['data-tmlayers'] }); } },
   layersClick(e){
+    const fb = e.target.closest && e.target.closest('[data-lyfold]'); if (fb){ e.preventDefault(); const k = fb.dataset.lyfold, F = this.lyFoldGet(); F[k] = !F[k]; try { localStorage.setItem('astra_layers_fold', JSON.stringify(F)); } catch(x){} this.lyFolds(); return; }
     const t = e.target; if (t.dataset.lx === 'close'){ H.dataset.tmlayers = ''; this.bLayers.classList.remove('on'); return; }
     if (t.dataset.st){ const c = Studio.overlay.cfg(); if (t.dataset.st === 'on'){ if (c.on !== t.checked) Studio.overlay.toggle(); } else { c[t.dataset.st] = t.checked; if (t.checked && !c.on){ Studio.overlay.save(c); Studio.overlay.toggle(); } else Studio.overlay.save(c); } this.layersSync(); return; }
     const s = t.dataset.scene; if (!s) return; e.preventDefault();
