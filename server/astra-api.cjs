@@ -45,12 +45,22 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
   '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json',
   '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
+/* --- who may use this service ----------------------------------------------
+   It listens on this computer only (ASTRA_HOST can widen that on a hosting panel),
+   and its data routes answer only ASTRA's own pages: a web page from anywhere else
+   is refused, so a site open in a browser tab cannot read or change anything here. */
+const HOST = process.env.ASTRA_HOST || '127.0.0.1';
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
+const EXTRA_ORIGINS = String(process.env.ASTRA_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+function originOk(o){ return !o || LOCAL_ORIGIN.test(o) || EXTRA_ORIGINS.includes(o); }
 const CORS = {
-  'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
   'access-control-allow-headers': 'content-type',
-  'access-control-allow-private-network': 'true',
 };
+/* wrong sync passwords: five in a row from one address, then a fifteen-minute wait */
+const FAILS = new Map();
+function locked(ip){ const f = FAILS.get(ip); return !!(f && f.until > Date.now()); }
+function failed(ip){ const f = FAILS.get(ip) || { n: 0, until: 0 }; f.n++; if (f.n >= 5){ f.until = Date.now() + 15 * 60000; f.n = 0; } FAILS.set(ip, f); }
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const YH_HOSTS = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
@@ -241,7 +251,10 @@ async function handleSync(req, res, url){
   try { body = await readBody(req); }
   catch(e){ return sendJSON(res, { error: 'bad_json' }, 400, 0); }
   if (!account()) return sendJSON(res, { error: 'sync_not_configured' }, 503, 0);
-  if (!checkAuth(body.u, body.p)) return sendJSON(res, { error: 'bad_credentials' }, 401, 0);
+  const ip = req.socket.remoteAddress || '?';
+  if (locked(ip)) return sendJSON(res, { error: 'too_many_attempts', message: 'Too many wrong passwords. Wait fifteen minutes.' }, 429, 0);
+  if (!checkAuth(body.u, body.p)){ failed(ip); return sendJSON(res, { error: 'bad_credentials' }, 401, 0); }
+  FAILS.delete(ip);
 
   if (url.pathname === '/api/sync/pull'){
     const s = loadState();
@@ -261,8 +274,10 @@ async function handleSync(req, res, url){
 function serveStatic(req, res, url){
   let p = decodeURIComponent(url.pathname);
   if (p === '/' || p === '') p = '/index.html';
+  /* never the hidden folders and files (.git, .claude, .env …) */
+  if (p.split(/[\\/]/).some(seg => seg.startsWith('.'))) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('not found'); }
   const file = path.normalize(path.join(ROOT, p));
-  if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
+  if (file !== ROOT && !file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(file, (err, data) => {
     if (err){ res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('not found'); }
     res.writeHead(200, { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
@@ -273,6 +288,9 @@ function serveStatic(req, res, url){
 /* ---------------- server ---------------- */
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
+  const origin = req.headers.origin;
+  if (origin && originOk(origin)){ res.setHeader('access-control-allow-origin', origin); res.setHeader('vary', 'Origin'); res.setHeader('access-control-allow-private-network', 'true'); }
+  if (origin && !originOk(origin) && (url.pathname.startsWith('/api/') || req.method !== 'GET')){ res.writeHead(403, { 'content-type': 'application/json' }); return res.end('{"error":"forbidden_origin"}'); }
   try {
     if (req.method === 'OPTIONS'){ res.writeHead(204, CORS); return res.end(); }
     if (url.pathname === '/api/health') return sendJSON(res, { ok: true, service: 'astra', time: Date.now() }, 200, 0);
@@ -290,7 +308,7 @@ http.createServer(async (req, res) => {
   } catch(e){
     sendJSON(res, { error: String((e && e.message) || e) }, 502, 0);
   }
-}).listen(PORT, () => {
-  console.log('ASTRA terminal + data service on http://localhost:' + PORT);
+}).listen(PORT, HOST, () => {
+  console.log('ASTRA terminal + data service on http://localhost:' + PORT + (HOST === '127.0.0.1' ? ' (this computer only)' : ' (listening on ' + HOST + ')'));
   console.log('sync state: ' + STATE_FILE);
 });

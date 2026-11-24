@@ -64,6 +64,15 @@ function startServer(){
   });
 }
 
+/* ---------- links that lead outside ASTRA ----------
+   Only web addresses (http / https) are handed to the real browser; anything else (file:, other
+   programs' link schemes) is ignored, so no page can make Windows start a program. */
+function openOutside(target){ try { const u = new URL(target); if (u.protocol === 'https:' || u.protocol === 'http:') shell.openExternal(u.href); } catch(e){} }
+function guard(wc, child){
+  wc.on('will-navigate', (e, target) => { if (!target.startsWith(URL_BASE)){ e.preventDefault(); openOutside(target); } });
+  if (child) wc.setWindowOpenHandler(({ url: target }) => { if (!target.startsWith(URL_BASE)){ openOutside(target); return { action: 'deny' }; } return { action: 'allow' }; });
+}
+
 /* ---------- windows ---------- */
 function makeWindow(url, key, opts){
   opts = opts || {};
@@ -96,6 +105,8 @@ function makeWindow(url, key, opts){
     return 'panel:' + panel + (slot ? ':' + slot.toLowerCase() : '');
   };
   win.webContents.setWindowOpenHandler(({ url: target, features }) => {
+    /* a page that is not ASTRA's own (a news article, a broker page) opens in the real browser, never in here */
+    if (!target.startsWith(URL_BASE)){ openOutside(target); return { action: 'deny' }; }
     const num = n => { const m = features && features.match(new RegExp(n + '=(\\d+)')); return m ? +m[1] : undefined; };
     const bounds = usableBounds(loadBounds()[winKey(target)]) || {};
     const slot = +((target.match(/[?&]chart=w([0-9]{1,2})/i) || [])[1] || 0);
@@ -119,6 +130,7 @@ function makeWindow(url, key, opts){
 
   win.webContents.on('did-create-window', (child, details) => {
     const key = winKey(details.url);
+    guard(child.webContents, true);
     extraWins.add(child);
     const remember = () => saveBounds(key, child);
     child.on('moved', remember);
@@ -127,9 +139,7 @@ function makeWindow(url, key, opts){
   });
 
   /* anything that is not our own app opens in the real browser, never in here */
-  win.webContents.on('will-navigate', (e, target) => {
-    if (!target.startsWith(URL_BASE)){ e.preventDefault(); shell.openExternal(target); }
-  });
+  guard(win.webContents);
 
   const remember = () => saveBounds(key, win);
   win.on('moved', remember);

@@ -83,6 +83,18 @@ _symbols_cache = {"t": 0.0, "list": []}
 # this window ends live trading immediately.
 TRADING_ENABLED = False
 SESSION_CODE = ""
+
+# --- who may talk to this bridge ----------------------------------------------
+# Only ASTRA's own pages, served from this computer (http://localhost or
+# http://127.0.0.1, any port), and local programs that send no website origin
+# at all (the research scripts). A web page from anywhere else is refused, so a
+# site open in a browser tab can neither read the account nor try to trade.
+ALLOWED_ORIGIN = re.compile(r"^http://(localhost|127\.0\.0\.1)(:\d{1,5})?$")
+# Wrong session codes: after this many, trading is locked until the live window
+# is closed and started again (the code is never guessable by trial).
+MAX_BAD_CODES = 5
+BAD_CODES = 0
+TRADING_LOCKED = False
 STARTED_AT = int(time.time())   # shown in ASTRA, so you can tell WHICH bridge window answers
 MAGIC = 20260902          # stamps every order ASTRA sends, so they are identifiable
 MANUAL_EXECUTION = ManualExecution(mt5, MAGIC)
@@ -430,23 +442,42 @@ def entry_deals(days=30):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    def _origin_ok(self):
+        """ASTRA's own pages, or a local program with no website origin."""
+        o = self.headers.get("Origin")
+        return o is None or bool(ALLOWED_ORIGIN.match(o))
+
+    def _cors(self):
+        o = self.headers.get("Origin")
+        if o and ALLOWED_ORIGIN.match(o):
+            self.send_header("Access-Control-Allow-Origin", o)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+
     def _send(self, obj, status=200):
         body = json.dumps(obj).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self._cors()
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
+    def _refuse_origin(self):
+        log_order("REFUSED a request from another website (%s) for %s" % (self.headers.get("Origin"), urlparse(self.path).path))
+        return self._send({"error": "forbidden_origin", "message": "Only ASTRA's own pages may use this bridge."}, 403)
+
     def do_OPTIONS(self):
+        if not self._origin_ok():
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors()
         self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -466,7 +497,11 @@ class Handler(BaseHTTPRequestHandler):
         open: this program must have been started with --enable-trading, and the
         caller must know the code printed in this window.
         """
+        global BAD_CODES, TRADING_LOCKED
         u = urlparse(self.path)
+
+        if not self._origin_ok():
+            return self._refuse_origin()
 
         if not TRADING_ENABLED:
             return self._send({"error": "trading_disabled",
@@ -476,10 +511,22 @@ class Handler(BaseHTTPRequestHandler):
         body = self._read_json()
         if body is None:
             return self._send({"error": "bad_body"}, 400)
+        if TRADING_LOCKED:
+            return self._send({"error": "locked",
+                               "message": "Trading is locked after %d wrong session codes. Close the live "
+                                          "window and start START-LIVE-TRADING.bat again." % MAX_BAD_CODES}, 403)
         if str(body.get("code", "")).strip() != SESSION_CODE:
-            log_order("REFUSED wrong session code for %s" % u.path)
+            with _lock:
+                BAD_CODES += 1
+                if BAD_CODES >= MAX_BAD_CODES:
+                    TRADING_LOCKED = True
+            log_order("REFUSED wrong session code for %s (%d of %d)" % (u.path, BAD_CODES, MAX_BAD_CODES))
+            if TRADING_LOCKED:
+                log_order("LOCKED: trading refused until the live window is started again")
+                print("\n  !! %d wrong session codes: trading is LOCKED. Close this window and start it again.\n" % MAX_BAD_CODES, flush=True)
             return self._send({"error": "bad_code",
-                               "message": "Wrong session code. Read the six digits in the bridge window."}, 403)
+                               "message": "Wrong session code. Read the six digits in the bridge window.",
+                               "triesLeft": max(0, MAX_BAD_CODES - BAD_CODES)}, 403)
 
         if u.path == "/session":
             # Authentication-only heartbeat: never sends or changes an order.
@@ -703,6 +750,8 @@ class Handler(BaseHTTPRequestHandler):
         return self._send({"ok": ok, "retcode": r.retcode, "comment": r.comment, "sl": sl, "tp": tp}, 200 if ok else 502)
 
     def do_GET(self):
+        if not self._origin_ok():
+            return self._refuse_origin()
         u = urlparse(self.path)
         q = parse_qs(u.query)
         try:
