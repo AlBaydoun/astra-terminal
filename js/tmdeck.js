@@ -15,6 +15,8 @@
      confluenceScanner ... Board · Rules · Notes. A tile an instrument with its five checks as bars
      brain ..... Teach · Report · Lab · Autopilot · Notes. Its buttons are cards that say what each does
      fit ....... Study · Markets · Plan · Table · History · Notes. The three buttons are steps 1, 2, 3
+     checker ... Answer · Map · Signals · Study · Notebook · Notes
+     research .. New ideas · On paper · Dismissed · Ask · Notes. Each idea is drawn against random entries
 
    This file DRAWS and ARRANGES only. Every control is still Classic's own element inside the page
    body the studio moved here (BotStudio.embed): a station is made by showing and hiding those
@@ -66,6 +68,19 @@ const LiveDeck = window.LiveDeck = {
       { id: 'table', n: 'Table', icon: '☰', title: 'Every combination', text: 'Every strategy on every market and timeframe it was measured on. Press a heading to sort.', sel: ['.fitWrap > .botH:has(+ .dashScroll:not(.short))', '.fitWrap > .dashScroll:not(.short)'] },
       { id: 'history', n: 'History', icon: '🕘', title: 'Study after study', text: 'The same combination measured on different days. What keeps holding is worth more than one good figure.', sel: ['.fitWrap > .botH:has(+ .botNote + .dashScroll.short)', '.fitWrap > .botNote:has(+ .dashScroll.short)', '.fitWrap > .dashScroll.short', '.fitWrap > .botNote:not(.warn):has(+ .botH + .dashScroll:not(.short))'] },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this study.', sel: ['.bnWrap'] } ] },
+    checker: { key: 'astra_deck_checker', eyebrow: 'STRATEGY CHECKER', watch: true, stations: [
+      { id: 'answer', n: 'Answer', icon: '🏆', title: 'What the history says', text: 'For the view you are in: how often the target came before the stop, what one signal was worth after costs, and the best measured signals with the target and stop that suit them. A measured history is a probability, not a promise.', parts: ['crumbs', 'controls', 'hero', 'recs', 'now'] },
+      { id: 'map', n: 'Map', icon: '🎯', title: 'Target and stop', text: 'Every target against every stop, and how far price usually runs after a signal. Press a cell to use that pair on the whole page.', parts: ['crumbs', 'controls', 'grid', 'reach'] },
+      { id: 'signals', n: 'Signals', icon: '📋', title: 'Every signal, and smaller views', text: 'All signals ranked against random entries. Open a smaller view by market, pair, timeframe, side, hour or weekday to see where a signal really works.', parts: ['crumbs', 'board', 'splits'] },
+      { id: 'study', n: 'Study', icon: '🧠', title: 'The brain that measures', text: 'It replays the history pair by pair and timeframe by timeframe. Pause it, speed it up, or choose which markets it studies.', parts: ['status'], rest: true },
+      { id: 'notebook', n: 'Notebook', icon: '📓', title: 'Its notebook and its bots', text: 'The mixes of signals it tried and kept, the paper bots made from findings, and the library of every signal it knows.', parts: ['brain', 'botsMade', 'lib'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on the checker.', parts: ['notes'] } ] },
+    research: { key: 'astra_deck_research', eyebrow: 'RESEARCH', tag: 'tagResearch', dress: 'dressResearch', stations: [
+      { id: 'ideas', n: 'New ideas', icon: '💡', title: 'Ideas waiting for your decision', text: 'Each idea with the evidence it was found on, next to what random entries did on the same markets over the same period. Add one as a paper bot, or dismiss it. Real money only ever goes through the Live desk and its gates.', empty: 'No new idea is waiting.' },
+      { id: 'added', n: 'On paper', icon: '🤖', title: 'Added as paper bots', text: 'The ideas you added. Each runs as an ordinary paper bot; open it, or take it out of your bots.', empty: 'You have not added an idea as a paper bot yet.' },
+      { id: 'gone', n: 'Dismissed', icon: '🗂', title: 'Dismissed', text: 'Ideas you put away. Bring one back whenever you like.', empty: 'Nothing has been dismissed.' },
+      { id: 'how', n: 'Ask', icon: '💬', title: 'How to ask for a research run', text: 'Where these ideas come from, and the prompt that starts a new research run.' },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on research.' } ] },
   },
   sel: {},
   esc(s){ return TmSettings.esc(s); },
@@ -91,7 +106,7 @@ const LiveDeck = window.LiveDeck = {
           if (box && box !== b0()) box.scrollTop += c.getBoundingClientRect().top - box.getBoundingClientRect().top - 6; else m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - (h ? h.offsetHeight : 0) - 16; }, 40); });
       /* Classic draws its page again from time to time: the stations are put back on it at once */
       if (typeof Bots !== 'undefined' && !Bots._dkWrapped){ Bots._dkWrapped = true; const o = Bots.render.bind(Bots); Bots.render = (...a) => { const r = o(...a); try { if (this.on && this.body()) this.apply(); } catch(e){} return r; }; } }
-    if (C.focus && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (this._moT) return; this._moT = setTimeout(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }, 30); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
+    if ((C.focus || C.watch) && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (!this.on || !this.body()) return; const n = Date.now(); if (n - (this._moAt || 0) > 1000){ this._moAt = n; this._moN = 0; } if (++this._moN <= 6){ this.apply(); return; } if (!this._moT) this._moT = setTimeout(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }, 120); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
     if (!h._ro && 'ResizeObserver' in window){ h._ro = new ResizeObserver(() => this.measure()); h._ro.observe(h); }
     this.paint(); this.fresh(); clearInterval(this.timer); this.timer = setInterval(() => { if (this.on && this.body() && !document.hidden) this.paint(); else if (this.on && !this.body()) this.unmount(); }, 1500); },
   unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
@@ -105,6 +120,7 @@ const LiveDeck = window.LiveDeck = {
     const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart], .blCell[data-blpart]')].filter(p => !p.parentElement.closest('.blPart, .blCell'));
     for (const p of parts){ const v = C.stations.filter(x => (x.parts || []).includes(p.dataset.blpart)).map(x => x.id).join(' ') || rest; if (p.dataset.dkst !== v) p.dataset.dkst = v; }
     for (const s of C.stations) for (const q of s.sel || []) b.querySelectorAll(q).forEach(el => { if (!el.closest('.blPart')) el.dataset.dkst = s.id; });
+    if (C.tag){ try { this[C.tag](b); } catch(e){ console.warn('deck tag', e); } }
     b.querySelectorAll('[data-dkst]').forEach(el => { const on = this.st === 'all' || el.dataset.dkst.split(' ').includes(this.st); if (el.classList.contains('dkOn') !== on) el.classList.toggle('dkOn', on); }); if (C.dress){ try { this[C.dress](b); } catch(e){ console.warn('deck dress', e); } } this.emptyNote(b, C); this.applyFocus(); },
   applyFocus(){ const b = this.body(), C = this.cfg(); if (!b || !C || !C.focus) return; const k = this.sel[this.page] || ''; b.querySelectorAll(C.focus.card).forEach(c => { const on = !!k && c.dataset[C.focus.key] === k; if (c.classList.contains('dkSel') !== on) c.classList.toggle('dkSel', on); }); },
 
@@ -149,8 +165,24 @@ const LiveDeck = window.LiveDeck = {
   emptyNote(b, C){ const s = C.stations.find(x => x.id === this.st), none = !!s && !b.querySelector('[data-dkst].dkOn'); let el = b.querySelector(':scope > .dkEmpty'); if (!none){ if (el) el.remove(); return; }
     const t = s.empty || 'Nothing to show here yet.'; if (!el){ el = document.createElement('div'); el.className = 'dkEmpty dkAdd'; b.appendChild(el); } if (el.dataset.t !== s.id + t){ el.dataset.t = s.id + t; el.innerHTML = '<i>' + s.icon + '</i><b>' + this.esc(s.title) + '</b><span>' + this.esc(t) + '</span>'; } },
 
+  /* Research is one long page without named parts: its pieces are sorted into stations by what they are */
+  tagResearch(b){ const pg = b.querySelector('.rsxPage'); if (!pg) return; let cur = 'ideas'; const set = (el, v) => { if (el.dataset.dkst !== v) el.dataset.dkst = v; }, open = el => { if (this.st !== 'all' && !el.open) el.open = true; };
+    for (const el of pg.children){ if (el.matches('h3.rsxH')){ cur = /^new/i.test((el.textContent || '').trim()) ? 'ideas' : 'added'; set(el, cur); } else if (el.matches('.rsxList')) set(el, cur); else if (el.matches('.botStats, .rsxEmpty')) set(el, 'ideas'); else if (el.matches('.rsxGone')){ set(el, 'gone'); open(el); } else if (el.matches('.rsxHow')){ set(el, 'how'); open(el); } else if (el.matches('.rsxIntro')) set(el, 'how'); }
+    const n = b.querySelector(':scope > .bnWrap'); if (n) set(n, 'notes'); },
+  /* each idea gets its picture: its profit factor beside what random entries made, with the break-even line */
+  dressResearch(b){ if (typeof Research === 'undefined') return; let by = null;
+    b.querySelectorAll('.rsxCard[data-rsx]').forEach(card => { if (card.querySelector('.dkVs')) return; by = by || new Map(Research.all().map(c => [c.id, c])); const c = by.get(card.dataset.rsx), nums = card.querySelector('.rsxNums'); if (!c || !nums) return;
+      const e = c.evidence || {}, r = e.random || {}, fin = v => Number.isFinite(v) ? v : 0, mx = Math.max(1.5, fin(e.pf), fin(r.pf)), bar = (l, v, k) => '<div class="pgPf"><span>' + l + '</span><i><u class="' + k + '" style="--w:' + (v === Infinity ? 100 : Math.max(0, fin(v)) / mx * 100).toFixed(1) + '%"></u><s style="left:' + (1 / mx * 100).toFixed(1) + '%"></s></i><b>' + (v === Infinity ? '∞' : v != null ? (+v).toFixed(2) : '–') + '</b></div>';
+      const el = document.createElement('div'); el.className = 'dkVs dkAdd'; el.innerHTML = bar('this idea', e.pf, 'up') + bar('random entries', r.pf, 'gr') + '<small>profit factor: money won ÷ money lost · the line is 1.0, break-even</small>'; nums.after(el); }); },
+  /* bring one thing on the page into view and light it up for a moment */
+  flash(sel){ const b = this.body(), c = b && b.querySelector(sel), m = document.getElementById('suMain'), h = this.head(); if (!c || !m) return; m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - (h ? h.offsetHeight : 0) - 16; c.classList.remove('dkFlash'); void c.offsetWidth; c.classList.add('dkFlash'); setTimeout(() => c.classList.remove('dkFlash'), 1900); },
+
   /* ---------- where each station stands: read, never written ---------- */
-  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit' }[this.page]; return f ? this[f]() : {}; },
+  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch' }[this.page]; return f ? this[f]() : {}; },
+  factsChecker(){ let S = {}; try { S = Checker.load() || {}; } catch(e){} const b = this.body(), q = s => b ? b.querySelectorAll(s).length : 0, T = (typeof Checker !== 'undefined' && Checker.TH) || [], St = (typeof Checker !== 'undefined' && Checker.ST) || [], view = (S.path || []).length;
+    return { _label: (S.on ? 'studying' : 'paused') + (view ? ' · inside ' + view + ' smaller view' + (view === 1 ? '' : 's') : ''), answer: { t: q('.ckRec') + ' recommendation' + (q('.ckRec') === 1 ? '' : 's') }, map: { t: T[S.t] != null && St[S.s] != null ? '+' + T[S.t] + '% / −' + St[S.s] + '%' : '' }, signals: { t: q('.ckRow') + ' ranked' }, study: { t: S.on ? 'studying' : 'paused' }, notebook: { t: q('.ckIdea') + ' mix' + (q('.ckIdea') === 1 ? '' : 'es') + ' kept' }, notes: { t: 'yours' } }; },
+  factsResearch(){ let all = [], s = { added: {}, removed: {}, dismissed: {} }; try { all = Research.all(); s = Research.state(); } catch(e){} const gone = all.filter(c => s.dismissed[c.id]).length, added = all.filter(c => !s.dismissed[c.id] && s.added[c.id] && !s.removed[c.id]).length, fresh = all.length - gone - added;
+    return { _label: all.length + ' idea' + (all.length === 1 ? '' : 's'), ideas: { t: fresh + ' to decide' }, added: { t: added + ' running' }, gone: { t: gone + ' put away' }, how: { t: 'the prompt' }, notes: { t: 'yours' } }; },
   factsBrain(){ let S = {}, label = ''; try { S = MasterBrain.state || MasterBrain.load(); label = String(MasterBrain.status().label || '').toLowerCase(); } catch(e){} const m = S.metrics, b = this.body(), n = (S.samples || []).length, tg = b && b.querySelector('[data-act="autotoggle"]'), lab = b ? b.querySelectorAll('.labCard').length : 0;
     return { _label: label, teach: { t: n + ' example' + (n === 1 ? '' : 's') }, report: { t: m && m.val ? m.val.acc.toFixed(0) + '% right on new trades' : 'not trained yet' }, lab: { t: m ? lab + ' bot' + (lab === 1 ? '' : 's') + ' published' : 'after training' }, auto: { t: tg ? (/off/i.test(tg.textContent) ? 'on' : 'off') : 'after training' }, notes: { t: 'yours' } }; },
   factsFit(){ const b = this.body(), q = s => b ? b.querySelectorAll(s).length : 0, txt = s => { const e = b && b.querySelector(s); return e ? (e.textContent || '').trim().replace(/\s+/g, ' ') : ''; };
