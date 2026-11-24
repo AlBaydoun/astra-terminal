@@ -139,13 +139,13 @@ const Face = window.Face = {
   },
   /* one button on the chart: the chart takes the whole screen (maximised and the window in full screen); again, or Esc, comes back */
   expandBtn(){ const host = $('mainWrap'); if (!host || $('tmExpand')) return; if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
-    const b = document.createElement('button'); b.type = 'button'; b.id = 'tmExpand'; b.title = 'Chart in full screen (Esc comes back)';
-    const paint = () => { const on = document.documentElement.dataset.chartmax === '1'; b.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>'; b.title = on ? 'Back to the normal view (Esc)' : 'Chart in full screen (Esc comes back)'; };
+    const b = document.createElement('button'); b.type = 'button'; b.id = 'tmExpand'; b.title = 'Maximise the chart: it takes the whole screen (Esc comes back)';
+    const paint = () => { const on = document.documentElement.dataset.chartmax === '1'; b.innerHTML = on ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6"/></svg>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>'; b.title = on ? 'Back to the normal view (Esc)' : 'Maximise the chart: it takes the whole screen (Esc comes back)'; };
     b.addEventListener('click', () => { const on = document.documentElement.dataset.chartmax === '1'; if (typeof App !== 'undefined' && App.setMax) App.setMax(!on);
       try { if (!on && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else if (on && document.fullscreenElement) document.exitFullscreen(); } catch(e){} setTimeout(paint, 80); });
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.documentElement.dataset.chartmax === '1' && typeof App !== 'undefined' && App.setMax) App.setMax(false); setTimeout(paint, 80); });
     new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-chartmax'] }); paint(); host.appendChild(b); },
-  SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours: this chart, hour by hour', tsclock: 'Clock: every market’s hours', tsheat: 'Heatmap: every market today', tsnews: 'News', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
+  SIDE: { watch: 'Watchlist', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours: this chart, hour by hour', tsclock: 'Clock: every market’s hours', tsheat: 'Heatmap: every market today', tsnews: 'News', tssig: 'Signals: twenty readings, live', alerts: 'Alerts', portfolio: 'Paper account', ai: 'Observer', notes: 'Notes' },
   sideNames(){ const st = $('sideTabs'); if (!st) return; const set = () => { st.querySelectorAll('[data-tab]').forEach(b => { b.dataset.tml = this.SIDE[b.dataset.tab] || (b.textContent || '').trim(); }); const a = st.querySelector('[data-tab].active'); st.dataset.tml = a ? a.dataset.tml : ''; };
     set(); if (!this._sideObs){ this._sideObs = new MutationObserver(set); this._sideObs.observe(st, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true }); } },
   restore(){ for (const m of this.moved.reverse()){ try { if (m.label === undefined) delete m.el.dataset.tml; else m.el.dataset.tml = m.label; m.parent.insertBefore(m.el, m.next && m.next.parentNode === m.parent ? m.next : null); } catch(e){} } this.moved = []; },
@@ -239,7 +239,7 @@ const Face = window.Face = {
       '<div class="tmScenes"><span>Scene</span><button type="button" data-scene="clean">Clean</button><button type="button" data-scene="studio">Studio</button><button type="button" data-scene="structure">Structure</button><button type="button" data-scene="all">Everything</button></div>' +
       '<div class="tmLGroup"><label class="tmSwitch big"><input type="checkbox" data-st="on"' + (c.on ? ' checked' : '') + '><i></i><span>Studio look</span></label>' +
       this.STUDIO.map(([k, name, ev]) => { const v = this.verdict(ev); return '<label class="tmSwitch' + (c.on ? '' : ' dim') + '"><input type="checkbox" data-st="' + k + '"' + (c[k] ? ' checked' : '') + '><i></i><span>' + name + '</span>' + (v ? '<em class="' + (v === 'no edge' ? 'no' : 'ok') + '" title="What the test of this signal found. A layer can still help you see the market.">' + v + '</em>' : '') + '</label>'; }).join('') + '</div>' +
-      '<div class="tmLSub">More overlays</div>';
+      '<div class="tmLSub">More overlays <em>drag a row to move it</em></div>';
   },
   layersClick(e){
     const t = e.target; if (t.dataset.lx === 'close'){ H.dataset.tmlayers = ''; this.bLayers.classList.remove('on'); return; }

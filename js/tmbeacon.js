@@ -26,7 +26,7 @@ const Beacon = {
       el.style.setProperty('--c', it.color || '#4FD8F7'); el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
       el.style.setProperty('--h', bounds.h + 'px'); el.style.setProperty('--y', y.toFixed(1) + 'px'); el.style.setProperty('--lw', Math.max(0, bounds.w - x).toFixed(1) + 'px');
       el.querySelector('.bcnCore').title = it.title || ((it.tag || '') + ' ' + (it.sub || '')).trim(); const tg = el.querySelector('.bcnTag'); tg.firstChild.textContent = it.tag || ''; tg.lastChild.textContent = it.sub || ''; tg.style.cursor = it.onClick ? 'pointer' : 'default';
-      el.querySelector('.bcnEdge').textContent = (off === 'left' ? '◀ ' : '') + (it.kind === 'exit' ? 'EXIT' : 'ENTRY') + (off === 'right' ? ' ▶' : ''); }
+      el.querySelector('.bcnEdge').textContent = (off === 'left' ? '◀ ' : '') + (it.edge || (it.kind === 'exit' ? 'EXIT' : 'ENTRY')) + (off === 'right' ? ' ▶' : ''); }
     for (const el of [...layer.children]) if (!keep.has(el.dataset.k)){ el.remove(); delete host._bcn[el.dataset.k]; }
   },
   clear(host){ const l = host && host.querySelector(':scope > .bcnLayer'); if (l) l.innerHTML = ''; },
