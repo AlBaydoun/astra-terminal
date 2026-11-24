@@ -1,4 +1,4 @@
-# ASTRA Crypto Terminal — User Guide
+# ASTRA Markets Terminal — User Guide
 
 ## Starting
 
