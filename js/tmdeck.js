@@ -4,7 +4,7 @@
    rail on top; one station is open at a time, and "Show everything" lays the whole page out again
    with its layout tools.
 
-     live ...... Link → Money → Exits → Bots → Arm → Watch → Records. A real sequence: the rail reads
+     live ...... Link → Money → Exits → Bots → Arm → Watch → Results → Records. A real sequence: the rail reads
                  the desk's own four gates (Bridge, Code, Desk armed, Real money) and the next step
                  pulses. Link status, Refresh and STOP EVERYTHING ride under the rail at every station.
      manual .... Ticket · Rules · Auto · Orders · Results · Notes (your paper desk; not a sequence)
@@ -38,9 +38,10 @@ const LiveDeck = window.LiveDeck = {
       { id: 'exits', n: 'Exits', icon: '🎯', title: 'Exit rules', text: 'How every real trade of the desk is closed.' },
       { id: 'bots', n: 'Bots', icon: '🤖', title: 'Which bots, and where', text: 'The bots that may trade with real money, and where each one may trade.' },
       { id: 'arm', n: 'Arm', icon: '🛡️', title: 'Arm the desk', text: 'Arming starts in shadow: orders are recorded, not sent. Real money has its own typed confirmation.' },
-      { id: 'watch', n: 'Watch', icon: '📈', title: 'What is happening', text: 'The desk’s pulse, your real open trades, and how each bot has done with real money.' },
+      { id: 'watch', n: 'Watch', icon: '📈', title: 'What is happening', text: 'The desk’s pulse, your real open trades, its log and the live positions on your account.' },
+      { id: 'results', n: 'Results', icon: '🏅', title: 'How real money has done', text: 'Which bots earned and which lost with real money, and what each trade put to work.' },
       { id: 'records', n: 'Records', icon: '📜', title: 'Records', text: 'Everything the desk did and refused, and your notes.' } ] },
-    manual: { key: 'astra_deck_manual', eyebrow: 'YOUR PAPER DESK · PLAY MONEY', stations: [
+    manual: { key: 'astra_deck_manual', eyebrow: 'YOUR PAPER DESK · PLAY MONEY', dress: 'dressManual', focus: { card: '.otCard', key: 'ot', head: '.otHead', skip: '.wsPriceRail' }, stations: [
       { id: 'ticket', n: 'Ticket', icon: '🎫', title: 'The order ticket', text: 'Place a paper trade: choose the instrument and the side, size it, set its stop and its target. The slip on the right shows what it would cost and what it could win or lose.', parts: ['ticket', 'help'] },
       { id: 'rules', n: 'Rules', icon: '📏', title: 'Your trading rules', text: 'The limits every paper trade of yours has to respect.', parts: ['rules'] },
       { id: 'auto', n: 'Auto', icon: '⚙️', title: 'Automatic entries', text: 'Entries the paper account may take by itself.', parts: ['auto'] },
@@ -141,7 +142,7 @@ const LiveDeck = window.LiveDeck = {
     if ((C.focus || C.watch) && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (!this.on || !this.body()) return; const n = Date.now(); if (n - (this._moAt || 0) > 1000){ this._moAt = n; this._moN = 0; } if (++this._moN <= 6){ this.apply(); return; } if (!this._moT) this._moT = setTimeout(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }, 120); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
     if (!h._ro && 'ResizeObserver' in window){ h._ro = new ResizeObserver(() => this.measure()); h._ro.observe(h); }
     this.paint(); this.fresh(); clearInterval(this.timer); this.timer = setInterval(() => { if (this.on && this.body() && !document.hidden) this.paint(); else if (this.on && !this.body()) this.unmount(); }, 1500); },
-  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.querySelectorAll('[data-dkb]').forEach(el => { delete el.dataset.dkb; }); b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
+  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.querySelectorAll('[data-dkb]').forEach(el => { delete el.dataset.dkb; }); b.querySelectorAll('[data-dkopen]').forEach(el => { el.open = false; delete el.dataset.dkopen; });   /* a box this file opened is folded again */ b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
   set(id){ const C = this.cfg(); if (!C) return; this.st = id; try { localStorage.setItem(C.key, id); } catch(e){} this._sig = ''; this.paint(); this.fresh(); const f = document.getElementById('suFull'); if (f) TmSettings.scrollTo(document.getElementById('suMain'), f); },
 
   /* the tiles of a station rise once when it opens, not each time the page redraws itself */
@@ -198,7 +199,7 @@ const LiveDeck = window.LiveDeck = {
     const t = s.empty || 'Nothing to show here yet.'; if (!el){ el = document.createElement('div'); el.className = 'dkEmpty dkAdd'; b.appendChild(el); } if (el.dataset.t !== s.id + t){ el.dataset.t = s.id + t; el.innerHTML = '<i>' + s.icon + '</i><b>' + this.esc(s.title) + '</b><span>' + this.esc(t) + '</span>'; } },
 
   /* Research is one long page without named parts: its pieces are sorted into stations by what they are */
-  tagResearch(b){ const pg = b.querySelector('.rsxPage'); if (!pg) return; let cur = 'ideas'; const set = (el, v) => { if (el.dataset.dkst !== v) el.dataset.dkst = v; }, open = el => { if (this.st !== 'all' && !el.open) el.open = true; };
+  tagResearch(b){ const pg = b.querySelector('.rsxPage'); if (!pg) return; let cur = 'ideas'; const set = (el, v) => { if (el.dataset.dkst !== v) el.dataset.dkst = v; }, open = el => { if (this.st !== 'all' && !el.open){ el.open = true; el.dataset.dkopen = '1'; } };
     for (const el of pg.children){ if (el.matches('h3.rsxH')){ cur = /^new/i.test((el.textContent || '').trim()) ? 'ideas' : 'added'; set(el, cur); } else if (el.matches('.rsxList')) set(el, cur); else if (el.matches('.botStats, .rsxEmpty')) set(el, 'ideas'); else if (el.matches('.rsxGone')){ set(el, 'gone'); open(el); } else if (el.matches('.rsxHow')){ set(el, 'how'); open(el); } else if (el.matches('.rsxIntro')) set(el, 'how'); }
     const n = b.querySelector(':scope > .bnWrap'); if (n) set(n, 'notes'); },
   /* each idea gets its picture: its profit factor beside what random entries made, with the break-even line */
@@ -213,6 +214,9 @@ const LiveDeck = window.LiveDeck = {
      stylesheet draws them as two bars growing away from the measure's name. The figures themselves are untouched. */
   dressAnalysis(b){ const num = t => { const m = String(t || '').replace(/[,\s]/g, '').replace('−', '-').match(/-?\d+(\.\d+)?/); return m ? Math.abs(parseFloat(m[0])) : null; };
     b.querySelectorAll('[data-blpart="compare"] .anTable tbody tr').forEach(tr => { if (tr.dataset.dkb) return; const td = tr.querySelectorAll('td'); if (td.length < 2) return; const x = num(td[0].textContent), y = num(td[1].textContent), mx = Math.max(x || 0, y || 0); tr.dataset.dkb = '1'; tr.style.setProperty('--b', mx ? ((x || 0) / mx).toFixed(3) : '0'); tr.style.setProperty('--s', mx ? ((y || 0) / mx).toFixed(3) : '0'); }); },
+
+  /* the paper desk's rules sit in a folded box on the Classic page: as a station of their own they are simply open */
+  dressManual(b){ if (this.st === 'all') return; const d = b.querySelector('details.manualRules'); if (d && !d.open){ d.open = true; d.dataset.dkopen = '1'; } },
 
   /* ---------- where each station stands: read, never written ---------- */
   facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch', analysis: 'factsAnalysis', report: 'factsReport', bot: 'factsBot', permissions: 'factsPerm' }[this.page]; return f ? this[f]() : {}; },
@@ -252,6 +256,7 @@ const LiveDeck = window.LiveDeck = {
       bots: { done: !!who && !noBot, t: who ? (noBot ? 'none chosen' : who.slice(0, 26)) : 'choose them' },
       arm: { done: G.arm.on, next: G.arm.next || G.live.next, hot: G.live.on, t: G.live.on ? 'LIVE · real orders' : G.arm.on ? 'armed · shadow' : 'not armed' },
       watch: { t: armed ? armed + ' armed' : 'nothing armed' },
+      results: { t: 'bot by bot' },
       records: { t: audit + ' entr' + (audit === 1 ? 'y' : 'ies') } }; },
   factsManual(){ let L = {}, wait = 0; try { L = Bots.ledger('manual') || {}; } catch(e){} try { if (typeof ManualOrders !== 'undefined') wait = ManualOrders.read().filter(o => ['waiting', 'processing', 'review'].includes(o.status)).length; } catch(e){}
     const b = this.body(), side = b && b.querySelector('.sideBtn.on'), sym = b && b.querySelector('#mbSym'), open = (L.open || []).length, closed = (L.closed || []).length, eq = Number.isFinite(L.equity) ? L.equity : null;
