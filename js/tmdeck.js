@@ -17,6 +17,8 @@
      fit ....... Study · Markets · Plan · Table · History · Notes. The three buttons are steps 1, 2, 3
      checker ... Answer · Map · Signals · Study · Notebook · Notes
      research .. New ideas · On paper · Dismissed · Ask · Notes. Each idea is drawn against random entries
+     analysis .. Headline · Money · Where · When · Trades · Notes. The filters ride along on every station
+     report .... Verdict · Ranking · Charts · Fleet · Live seat · Notes
 
    This file DRAWS and ARRANGES only. Every control is still Classic's own element inside the page
    body the studio moved here (BotStudio.embed): a station is made by showing and hiding those
@@ -81,6 +83,20 @@ const LiveDeck = window.LiveDeck = {
       { id: 'gone', n: 'Dismissed', icon: '🗂', title: 'Dismissed', text: 'Ideas you put away. Bring one back whenever you like.', empty: 'Nothing has been dismissed.' },
       { id: 'how', n: 'Ask', icon: '💬', title: 'How to ask for a research run', text: 'Where these ideas come from, and the prompt that starts a new research run.' },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on research.' } ] },
+    analysis: { key: 'astra_deck_analysis', eyebrow: 'BUY / SELL ANALYSIS', watch: true, dress: 'dressAnalysis', stations: [
+      { id: 'headline', n: 'Headline', icon: '◈', title: 'Buying against selling', text: 'The verdict in one line, then the BUY card and the SELL card. Press any card, row or figure to look only at those trades; every part narrows together.', parts: ['filters', 'hero', 'scope', 'notices', 'sides'], rest: true },
+      { id: 'money', n: 'Money', icon: '▥', title: 'Where the money came from', text: 'What each side won and gave back, how the result built up over time, and the full comparison line by line.', parts: ['filters', 'money', 'time', 'compare'] },
+      { id: 'where', n: 'Where', icon: '◎', title: 'Which instruments, timeframes and bots', text: 'The same result split by instrument, by timeframe and by bot account.', parts: ['filters', 'instruments', 'tf', 'bots'] },
+      { id: 'when', n: 'When', icon: '⏱', title: 'When the trades happened', text: 'By session, weekday, hour and how long a trade was held.', parts: ['filters', 'when'] },
+      { id: 'trades', n: 'Trades', icon: '☷', title: 'Every completed trade', text: 'The list behind every figure on this page.', parts: ['filters', 'log', 'updated'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this analysis.', parts: ['notes'] } ] },
+    report: { key: 'astra_deck_report', eyebrow: 'PERFORMANCE REPORT', watch: true, stations: [
+      { id: 'verdict', n: 'Verdict', icon: '🏆', title: 'Where the fleet stands', text: 'The numbers of every bot together and the best on the evidence so far. Test every bot, or take the report out as Excel or PDF. This page decides nothing by itself and cannot trade.', parts: ['head', 'intro', 'disclaimer', 'kpis', 'best'], rest: true },
+      { id: 'ranking', n: 'Ranking', icon: '☰', title: 'Which bot would you trust?', text: 'Every bot ranked on the evidence it has produced.', parts: ['ranking'] },
+      { id: 'charts', n: 'Charts', icon: '📈', title: 'The pictures', text: 'Profit and loss by bot, win rate, the equity curves and how trades finished.', parts: ['pnl', 'winrate', 'curves', 'rmult'] },
+      { id: 'fleet', n: 'Fleet', icon: '🌍', title: 'Where it earns, and the lab', text: 'Which markets the fleet earns on, and what the lab has been doing.', parts: ['earns', 'lab'] },
+      { id: 'seat', n: 'Live seat', icon: '✅', title: 'The six conditions for a live seat', text: 'What a bot has to show before it is even considered for real money. Passing them arms nothing: real money only goes through the Live desk and its gates.', parts: ['conditions'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on the report.', parts: ['notes'] } ] },
   },
   sel: {},
   esc(s){ return TmSettings.esc(s); },
@@ -109,7 +125,7 @@ const LiveDeck = window.LiveDeck = {
     if ((C.focus || C.watch) && !b._dkMo){ b._dkMo = new MutationObserver(() => { if (!this.on || !this.body()) return; const n = Date.now(); if (n - (this._moAt || 0) > 1000){ this._moAt = n; this._moN = 0; } if (++this._moN <= 6){ this.apply(); return; } if (!this._moT) this._moT = setTimeout(() => { this._moT = 0; if (this.on && this.body()) this.apply(); }, 120); }); b._dkMo.observe(b, { childList: true, subtree: true }); }
     if (!h._ro && 'ResizeObserver' in window){ h._ro = new ResizeObserver(() => this.measure()); h._ro.observe(h); }
     this.paint(); this.fresh(); clearInterval(this.timer); this.timer = setInterval(() => { if (this.on && this.body() && !document.hidden) this.paint(); else if (this.on && !this.body()) this.unmount(); }, 1500); },
-  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
+  unmount(){ clearInterval(this.timer); const h = this.head(), b = document.getElementById('botBody'); if (b){ delete b.dataset.deck; delete b.dataset.deckpage; b.querySelectorAll('[data-dkst]').forEach(el => { delete el.dataset.dkst; el.classList.remove('dkOn'); }); b.querySelectorAll('.dkAdd').forEach(el => el.remove()); b.querySelectorAll('.dkHid, .dkSel').forEach(el => el.classList.remove('dkHid', 'dkSel')); b.querySelectorAll('[data-dkk]').forEach(el => { delete el.dataset.dkk; }); b.querySelectorAll('[data-dkb]').forEach(el => { delete el.dataset.dkb; }); b.classList.remove('dkFresh'); } if (h && h.dataset.plain != null){ h.innerHTML = h.dataset.plain; h.classList.remove('dkHead'); } this.on = false; this.page = ''; },
   set(id){ const C = this.cfg(); if (!C) return; this.st = id; try { localStorage.setItem(C.key, id); } catch(e){} this._sig = ''; this.paint(); this.fresh(); const f = document.getElementById('suFull'); if (f) TmSettings.scrollTo(document.getElementById('suMain'), f); },
 
   /* the tiles of a station rise once when it opens, not each time the page redraws itself */
@@ -117,7 +133,7 @@ const LiveDeck = window.LiveDeck = {
 
   /* which of the page's own parts belong to which station (pages laid out by BotLayout parts; a part may sit in several) */
   apply(){ const b = this.body(), C = this.cfg(); if (!b || !C) return; if (b.dataset.deck !== this.st) b.dataset.deck = this.st; if (b.dataset.deckpage !== this.page) b.dataset.deckpage = this.page; if (C.css) return;
-    const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart], .blCell[data-blpart]')].filter(p => !p.parentElement.closest('.blPart, .blCell'));
+    const rest = (C.stations.find(s => s.rest) || C.stations[C.stations.length - 1]).id, parts = [...b.querySelectorAll('.blPart[data-blpart], .blCell[data-blpart], .blGridFold[data-blpart]')].filter(p => !p.parentElement.closest('.blPart, .blCell, .blGridFold'));
     for (const p of parts){ const v = C.stations.filter(x => (x.parts || []).includes(p.dataset.blpart)).map(x => x.id).join(' ') || rest; if (p.dataset.dkst !== v) p.dataset.dkst = v; }
     for (const s of C.stations) for (const q of s.sel || []) b.querySelectorAll(q).forEach(el => { if (!el.closest('.blPart')) el.dataset.dkst = s.id; });
     if (C.tag){ try { this[C.tag](b); } catch(e){ console.warn('deck tag', e); } }
@@ -177,8 +193,19 @@ const LiveDeck = window.LiveDeck = {
   /* bring one thing on the page into view and light it up for a moment */
   flash(sel){ const b = this.body(), c = b && b.querySelector(sel), m = document.getElementById('suMain'), h = this.head(); if (!c || !m) return; m.scrollTop = c.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - (h ? h.offsetHeight : 0) - 16; c.classList.remove('dkFlash'); void c.offsetWidth; c.classList.add('dkFlash'); setTimeout(() => c.classList.remove('dkFlash'), 1900); },
 
+  /* Buy against sell, measure by measure: each row of the comparison gets the size of its two figures, and the
+     stylesheet draws them as two bars growing away from the measure's name. The figures themselves are untouched. */
+  dressAnalysis(b){ const num = t => { const m = String(t || '').replace(/[,\s]/g, '').replace('−', '-').match(/-?\d+(\.\d+)?/); return m ? Math.abs(parseFloat(m[0])) : null; };
+    b.querySelectorAll('[data-blpart="compare"] .anTable tbody tr').forEach(tr => { if (tr.dataset.dkb) return; const td = tr.querySelectorAll('td'); if (td.length < 2) return; const x = num(td[0].textContent), y = num(td[1].textContent), mx = Math.max(x || 0, y || 0); tr.dataset.dkb = '1'; tr.style.setProperty('--b', mx ? ((x || 0) / mx).toFixed(3) : '0'); tr.style.setProperty('--s', mx ? ((y || 0) / mx).toFixed(3) : '0'); }); },
+
   /* ---------- where each station stands: read, never written ---------- */
-  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch' }[this.page]; return f ? this[f]() : {}; },
+  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch', analysis: 'factsAnalysis', report: 'factsReport' }[this.page]; return f ? this[f]() : {}; },
+  /* both read what the page itself has drawn, so the rail always agrees with it */
+  factsAnalysis(){ const b = this.body(), txt = s => { const e = b && b.querySelector(s); return e ? (e.textContent || '').trim().replace(/\s+/g, ' ') : ''; }, q = s => b ? b.querySelectorAll(s).length : 0, n = t => (t.match(/(\d[\d,]*)\s+completed/) || ['', ''])[1];
+    const buy = n(txt('.anSide.buy')), sell = n(txt('.anSide.sell')), rows = q('[data-blpart="log"] tbody tr');
+    return { _label: buy || sell ? ((+String(buy).replace(/,/g, '') || 0) + (+String(sell).replace(/,/g, '') || 0)) + ' completed trades' : '', headline: { t: buy || sell ? (buy || 0) + ' buys · ' + (sell || 0) + ' sells' : 'no trades yet' }, money: { t: 'won and gave back' }, where: { t: q('[data-blpart="instruments"] tbody tr') ? q('[data-blpart="instruments"] tbody tr') + ' instruments' : 'by instrument' }, when: { t: 'session · day · hour' }, trades: { t: rows ? rows + ' listed' : 'the list' }, notes: { t: 'yours' } }; },
+  factsReport(){ const b = this.body(), q = s => b ? b.querySelectorAll(s).length : 0, bots = q('[data-blpart="ranking"] tbody tr');
+    return { _label: bots ? bots + ' bots ranked' : '', verdict: { t: 'the numbers' }, ranking: { t: bots ? bots + ' bots' : 'no bot yet' }, charts: { t: 'four pictures' }, fleet: { t: 'markets and lab' }, seat: { t: 'six conditions' }, notes: { t: 'yours' } }; },
   factsChecker(){ let S = {}; try { S = Checker.load() || {}; } catch(e){} const b = this.body(), q = s => b ? b.querySelectorAll(s).length : 0, T = (typeof Checker !== 'undefined' && Checker.TH) || [], St = (typeof Checker !== 'undefined' && Checker.ST) || [], view = (S.path || []).length;
     return { _label: (S.on ? 'studying' : 'paused') + (view ? ' · inside ' + view + ' smaller view' + (view === 1 ? '' : 's') : ''), answer: { t: q('.ckRec') + ' recommendation' + (q('.ckRec') === 1 ? '' : 's') }, map: { t: T[S.t] != null && St[S.s] != null ? '+' + T[S.t] + '% / −' + St[S.s] + '%' : '' }, signals: { t: q('.ckRow') + ' ranked' }, study: { t: S.on ? 'studying' : 'paused' }, notebook: { t: q('.ckIdea') + ' mix' + (q('.ckIdea') === 1 ? '' : 'es') + ' kept' }, notes: { t: 'yours' } }; },
   factsResearch(){ let all = [], s = { added: {}, removed: {}, dismissed: {} }; try { all = Research.all(); s = Research.state(); } catch(e){} const gone = all.filter(c => s.dismissed[c.id]).length, added = all.filter(c => !s.dismissed[c.id] && s.added[c.id] && !s.removed[c.id]).length, fresh = all.length - gone - added;
