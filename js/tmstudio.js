@@ -51,9 +51,11 @@ const BotStudio = window.BotStudio = {
      that page. It is put back where it came from the moment you leave the studio. */
   embed(){ const host = document.getElementById('suFullHost'), sec = document.getElementById('suFull'), body = document.getElementById('botBody'); if (!host || !sec || !body || typeof Bots === 'undefined') return;
     const id = this.id, ok = id === 'permissions' || (typeof BOT_BY_ID !== 'undefined' && !!BOT_BY_ID[id]); sec.hidden = !ok; if (!ok){ this.release(); this._shown = ''; return; }
+    const deck = () => { try { if (typeof LiveDeck !== 'undefined') LiveDeck.sync(id); } catch(e){ console.warn('deck', e); } };
     if (body.parentElement !== host){ this._home = { parent: body.parentElement, next: body.nextSibling }; host.appendChild(body); }
-    if (this._shown !== id || Bots.active !== id){ this._shown = id; Bots.active = id; try { if (Bots.renderNav) Bots.renderNav(); Bots.render(); } catch(e){ console.warn('studio embed', e); } } },
-  release(){ const body = document.getElementById('botBody'), h = this._home || {}, st = document.getElementById('tmStudio'); this._shown = ''; if (!body || !st || !st.contains(body)) return;
+    if (this._shown !== id || Bots.active !== id){ this._shown = id; Bots.active = id; try { if (Bots.renderNav) Bots.renderNav(); Bots.render(); } catch(e){ console.warn('studio embed', e); } } deck(); },
+  release(){ try { if (typeof LiveDeck !== 'undefined' && LiveDeck.on) LiveDeck.unmount(); } catch(e){}
+    const body = document.getElementById('botBody'), h = this._home || {}, st = document.getElementById('tmStudio'); this._shown = ''; if (!body || !st || !st.contains(body)) return;
     /* back where it came from; if that place is gone, back into Classic's own Bots panel: it is never left inside the studio */
     const home = h.parent && h.parent.isConnected && !st.contains(h.parent) ? h.parent : document.querySelector('#bot-bots .botsWrap'); if (!home) return;
     try { home.insertBefore(body, h.next && h.next.parentNode === home ? h.next : null); } catch(e){ home.appendChild(body); } },
