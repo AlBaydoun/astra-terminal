@@ -18,7 +18,9 @@
 const H = document.documentElement, KEY = 'astra_face';
 /* before the first paint, so nothing flashes. A torn-off panel window keeps the Classic look. */
 const isPanel = !!new URLSearchParams(location.search).get('panel');
-try { if (!isPanel && localStorage.getItem(KEY) === 'tm') H.dataset.face = 'tm'; } catch(e){}
+/* the Classic look can be switched off in View → Settings: then ASTRA always opens in this look */
+const CKEY = 'astra_classic_off', classicOff = () => { try { return localStorage.getItem(CKEY) === '1'; } catch(e){ return false; } };
+try { if (!isPanel && (localStorage.getItem(KEY) === 'tm' || classicOff())) H.dataset.face = 'tm'; if (classicOff()) H.classList.add('tmNoClassic'); } catch(e){}
 { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap'; document.head.appendChild(l); }
 
 const ICON = {
@@ -54,6 +56,7 @@ const Face = window.Face = {
   /* ---------- switching the face ---------- */
   set(on){
     if (isPanel) return;
+    if (!on && classicOff()){ if (typeof toast === 'function') toast('The Classic look is switched off. To use it again: View → Settings → Classic look → On.', 'info'); return; }
     try { localStorage.setItem(KEY, on ? 'tm' : 'classic'); } catch(e){}
     if (on){ H.dataset.face = 'tm'; this.build(); this.arrange(); this.go(localStorage.getItem('astra_face_room') || 'chart', true); }
     else { this.closePops(); this.restore(); delete H.dataset.face; delete H.dataset.tmroom; delete H.dataset.tmlayers; delete H.dataset.tmview; const st = $('tmStage'); if (st) st.hidden = true; if ($('tmViewSwitch')) $('tmViewSwitch').hidden = true;
@@ -62,6 +65,12 @@ const Face = window.Face = {
     if (typeof toast === 'function') toast(on ? 'Timurila look on. Everything Classic does is still here: press Ctrl+K to find any of it.' : 'Classic look on. Nothing else changed.', 'info');
   },
   toggle(){ this.set(!this.on()); },
+  classicOff(){ return classicOff(); },
+  /* switch the Classic look off (always this look, every way back closed) or on again */
+  setClassic(allowed){ try { localStorage.setItem(CKEY, allowed ? '0' : '1'); } catch(e){} H.classList.toggle('tmNoClassic', !allowed); if (!allowed) try { localStorage.setItem(KEY, 'tm'); } catch(e){}
+    this.paintSettings(); if (typeof toast === 'function') toast(allowed ? 'The Classic look is available again (F12 or the Classic button).' : 'The Classic look is switched off: ASTRA always opens in this look.', 'info'); },
+  paintSettings(){ const box = $('tmSettings'); if (!box) return; const off = classicOff();
+    box.innerHTML = '<h4>Settings</h4><div class="tmSet"><div><b>Classic look</b><small>' + (off ? 'Off: ASTRA always opens in this look. F12, the Classic button and the menu no longer go back. Every function stays here.' : 'On: F12 or the Classic button switches to the old look.') + '</small></div><span class="tmSetSeg"><button type="button" data-set="classic:1" class="' + (off ? '' : 'on') + '">On</button><button type="button" data-set="classic:0" class="' + (off ? 'on' : '') + '">Off</button></span></div>'; },
 
   /* ---------- the dock, the stage, the palette (made once, shown by the stylesheet) ---------- */
   build(){
@@ -110,6 +119,8 @@ const Face = window.Face = {
     tools.innerHTML = '<h4>Tools</h4>'; view.innerHTML = '<h4>View</h4>';
     for (const [id, label] of [['alertBtn', 'New price alert'], ['replayBtn', 'Bar replay'], ['cmpBtn', 'Compare another instrument'], ['mktBtn', 'Markets: what I watch'], ['layoutsBtn', 'Saved workspaces'], ['chartReviewBtn', 'Inspect or replay this chart']]) this.move($(id), tools, label);
     for (const [id, label] of [['layoutSeg', 'Charts on screen'], ['winBtn', 'Open a panel in its own window'], ['maxBtn', 'Maximise the chart'], ['shotBtn', 'Screenshot the chart'], ['themeBtn', 'Light or dark'], ['fsBtn', 'Full screen']]) this.move($(id), view, label);
+    if (!$('tmSettings')){ const st = document.createElement('div'); st.id = 'tmSettings'; view.appendChild(st); st.addEventListener('click', e => { const b = e.target.closest('[data-set]'); if (!b) return; e.stopPropagation(); this.setClassic(b.dataset.set === 'classic:1'); }); } else view.appendChild($('tmSettings'));
+    this.paintSettings();
     /* the chart strip becomes the Layers panel; the manual BUY / SELL buttons stay in sight on the top bar */
     const strip = $('chartLabelBar'), acts = strip && strip.querySelector('.chartTradeActions');
     if (acts) { this.moved.push({ el: acts, parent: acts.parentNode, next: acts.nextSibling }); this.bTools.after(acts); }
@@ -313,7 +324,8 @@ const Face = window.Face = {
     document.querySelectorAll('#lefttools [data-tool]').forEach(b => out.push({ label: 'Draw: ' + (b.title || b.dataset.tool).split('(')[0].split('—')[0].trim(), hint: 'Drawing tool', run: () => { this.go('chart'); b.click(); } }));
     document.querySelectorAll('#chartLabelBar .chartTools .autoSrBtn').forEach(b => out.push({ label: 'Layer: ' + txt(b).replace(/^[✦★⚡]\s*/, ''), hint: b.classList.contains('on') ? 'On · click to switch off' : 'Off · click to switch on', run: () => { this.go('chart'); b.click(); } }));
     if (typeof CandleStyles !== 'undefined') for (const s of CandleStyles.SHAPES) out.push({ label: 'Candles: ' + s[1], hint: 'Chart', run: () => { this.go('chart'); CandleStyles.set(s[0]); } });
-    out.push({ label: 'Classic look', hint: 'Face', run: () => this.set(false) });
+    if (!classicOff()) out.push({ label: 'Classic look', hint: 'Face', run: () => this.set(false) });
+    out.push({ label: classicOff() ? 'Settings: allow the Classic look again' : 'Settings: switch the Classic look off', hint: 'Setting', run: () => this.setClassic(classicOff()) });
     try { for (const s of (Feed.bridge && Feed.bridge.symbols) || []) out.push({ label: s, hint: 'Instrument', sym: true, run: () => { this.go('chart'); typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.openChart(s) : App.setSymbol(s); } }); } catch(e){}
     return out;
   },
