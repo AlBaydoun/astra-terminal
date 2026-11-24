@@ -17,7 +17,7 @@ const SideTrade = window.SideTrade = {
   $: id => document.getElementById(id),
   esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
   on(){ return document.documentElement.dataset.face === 'tm'; },
-  scope: 'all', kind: 'paper', open: new Set(), q: '',
+  scope: 'all', kind: 'paper', open: new Set(), openLive: new Set(), q: '',
   ICON: '<svg class="wsIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/><path d="M4 21h16"/></svg>',
 
   init(){ const st = this.$('sideTabs'), body = document.querySelector('#sidebar .sideBody'); if (!st || !body || this.$('tab-tstrade') || typeof OpenTrades === 'undefined' || typeof WorkspaceUI === 'undefined') return false;
@@ -54,7 +54,9 @@ const SideTrade = window.SideTrade = {
       else if (k.startsWith('kind:')){ this.kind = k.slice(5); try { localStorage.setItem('astra_trade_kind', this.kind); } catch(x){} this.cards(true); }
       return; }
     /* ▾ opens a card's controls; a press anywhere else on it shows the trade on the chart, as the chart's own list does */
-    const more = e.target.closest('#tsTradeCards .trMore'); if (more){ const card = more.closest('.otCard'), k = card.dataset.ot, isOpen = card.classList.contains('trOpen'); if (isOpen) this.open.delete(k); else this.open.add(k); card.classList.toggle('trOpen', !isOpen); return; }
+    const more = e.target.closest('#tab-tstrade .trMore'); if (more){ const card = more.closest('.otCard'), live = card.hasAttribute('data-ldpos'), k = live ? card.dataset.ldpos : card.dataset.ot, set = live ? this.openLive : this.open, isOpen = card.classList.contains('trOpen'); if (isOpen) set.delete(k); else set.add(k); card.classList.toggle('trOpen', !isOpen); return; }
+    /* a real position: a press shows it on the chart, as its own On chart button does */
+    const lc = e.target.closest('#tsLiveCards .ldPos'); if (lc){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit')) return; try { LiveDesk.showOnChart(lc.dataset.ldpos); } catch(x){} return; }
     const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection')) return; this.focus(card.dataset.ot); },
   focus(k){ if (typeof PosLines === 'undefined' || !k) return; const i = k.indexOf(':'), bot = k.slice(0, i), id = /^T/.test(k.slice(i + 1)) ? k.slice(i + 1) : +k.slice(i + 1); const row = OpenTrades.all().find(r => r.bot + ':' + r.p.id === k); if (!row) return;
     const here = this.base(STORE.symbol) === this.base(row.p.sym);
@@ -92,7 +94,10 @@ const SideTrade = window.SideTrade = {
   /* the real positions: the live desk's own cards, with its own Apply (which asks first) and its two-press close */
   live(fresh){ const host = this.$('tsLiveCards'); if (!host || typeof LiveDesk === 'undefined') return;
     if (!fresh){ if (host.contains(document.activeElement) && document.activeElement.matches('input')) return; if (host.querySelector('[data-ldclose][data-armed="1"]')) return; if (typeof PriceRail !== 'undefined' && PriceRail.busy(host)) return; if (Date.now() - (this._lAt || 0) < 3000) return; }
-    this._lAt = Date.now(); let html = ''; try { html = LiveDesk.positionsView(); } catch(e){ html = '<div class="empty">The real positions could not be read just now.</div>'; } host.innerHTML = html; try { LiveDesk.bindPositions(host); } catch(e){} this.filter(); },
+    this._lAt = Date.now(); let html = ''; try { html = LiveDesk.positionsView(); } catch(e){ html = '<div class="empty">The real positions could not be read just now.</div>'; } host.innerHTML = html; try { LiveDesk.bindPositions(host); } catch(e){}
+    /* each real card gets its ▾ and keeps its open state across the desk's redraws */
+    host.querySelectorAll('.ldPos[data-ldpos]').forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target at the broker, on chart, close'; b.textContent = '▾'; c.appendChild(b); c.classList.toggle('trOpen', this.openLive.has(c.dataset.ldpos)); });
+    this.filter(); },
   cards(fresh){ try { const k = localStorage.getItem('astra_trade_kind'); if (k && fresh && !this._kindRead){ this.kind = k; } this._kindRead = true; } catch(e){}
     const lv = this.$('tsLiveCards'), pp = this.$('tsTradeCards'); if (lv) lv.hidden = this.kind !== 'live'; if (pp) pp.hidden = this.kind === 'live';
     document.querySelectorAll('#tab-tstrade [data-tr^="kind:"]').forEach(b => b.classList.toggle('on', b.dataset.tr === 'kind:' + this.kind));
