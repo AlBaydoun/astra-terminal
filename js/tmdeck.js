@@ -19,6 +19,8 @@
      research .. New ideas · On paper · Dismissed · Ask · Notes. Each idea is drawn against random entries
      analysis .. Headline · Money · Where · When · Trades · Notes. The filters ride along on every station
      report .... Verdict · Ranking · Charts · Fleet · Live seat · Notes
+     bot ....... Result · Trades · Decisions · Markets · Settings · Notes, for every strategy bot
+     permissions ... Blocked · Allowed · Rules · Notes
 
    This file DRAWS and ARRANGES only. Every control is still Classic's own element inside the page
    body the studio moved here (BotStudio.embed): a station is made by showing and hiding those
@@ -97,6 +99,19 @@ const LiveDeck = window.LiveDeck = {
       { id: 'fleet', n: 'Fleet', icon: '🌍', title: 'Where it earns, and the lab', text: 'Which markets the fleet earns on, and what the lab has been doing.', parts: ['earns', 'lab'] },
       { id: 'seat', n: 'Live seat', icon: '✅', title: 'The six conditions for a live seat', text: 'What a bot has to show before it is even considered for real money. Passing them arms nothing: real money only goes through the Live desk and its gates.', parts: ['conditions'] },
       { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on the report.', parts: ['notes'] } ] },
+    /* one layout for every strategy bot: the studio shows whichever bot is picked (LiveDeck.botId) */
+    bot: { key: 'astra_deck_bot', eyebrow: 'PAPER BOT', focus: { card: '.otCard', key: 'ot', head: '.otHead', skip: '.wsPriceRail' }, stations: [
+      { id: 'result', n: 'Result', icon: '◎', title: 'What it has made, and what is open', text: 'Its net result, its open paper trades as cards (press one for its stop, target, trailing stop and close), its numbers and its equity curve.', parts: ['result', 'stats', 'equity'], rest: true },
+      { id: 'trades', n: 'Trades', icon: '🕘', title: 'Closed trades, day by day', text: 'Every paper trade it has finished, and its result for each day.', parts: ['history', 'daily'], empty: 'It has not finished a trade yet.' },
+      { id: 'why', n: 'Decisions', icon: '🔎', title: 'Why it acted, and what it learned', text: 'Each decision it took or refused with its reason, and the lessons it drew from its losses.', parts: ['decisions', 'lessons'], empty: 'It has not taken a decision yet.' },
+      { id: 'markets', n: 'Markets', icon: '🌍', title: 'Where it may trade', text: 'The markets and pairs this bot may open paper trades on.', parts: ['markets', 'scanner'] },
+      { id: 'settings', n: 'Settings', icon: '⚙️', title: 'How it runs', text: 'Its timeframes, score and limits, Run now, Pause and Reset, and its backtest.', parts: ['controls', 'backtest', 'buttons', 'rules', 'status'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on this bot.', parts: ['notes'] } ] },
+    permissions: { key: 'astra_deck_perm', eyebrow: 'INSTRUMENT PERMISSIONS', watch: true, stations: [
+      { id: 'blocked', n: 'Blocked', icon: '⛔', title: 'Pairs that may not open new trades', text: 'New entries are refused on these pairs across the bots. Allow one again whenever you like.', parts: ['search', 'columns'], rest: true },
+      { id: 'allowed', n: 'Allowed', icon: '✅', title: 'Pairs that may trade', text: 'These pairs may open new trades; every other risk limit still applies. Block one from here.', parts: ['search', 'columns'] },
+      { id: 'rules', n: 'Rules', icon: '⚙️', title: 'How blocking works', text: 'Automatic blocking on or off, and the rule it uses.', parts: ['tools', 'note'] },
+      { id: 'notes', n: 'Notes', icon: '📝', title: 'Notes', text: 'Your notes on permissions.', parts: ['notes'] } ] },
   },
   sel: {},
   esc(s){ return TmSettings.esc(s); },
@@ -105,7 +120,8 @@ const LiveDeck = window.LiveDeck = {
   cfg(){ return this.PAGES[this.page] || null; },
 
   /* called by the studio each time it shows a page */
-  sync(id){ if (this.PAGES[id]) this.mount(id); else this.unmount(); },
+  isBot(id){ try { const b = typeof BOT_BY_ID !== 'undefined' ? BOT_BY_ID[id] : null; return !!b && typeof BotLayout !== 'undefined' && id !== 'manual' && (BotLayout.applies(b) || id === 'confluence'); } catch(e){ return false; } },
+  sync(id){ const k = id !== 'bot' && this.PAGES[id] ? id : this.isBot(id) ? 'bot' : ''; this.botId = id; if (k) this.mount(k); else this.unmount(); },
   mount(id){ const b = this.body(), h = this.head(), C = this.PAGES[id]; if (!b || !h || !C) return; if (this.on && this.page !== id) this.unmount(); this.page = id; this.st = C.stations[0].id; try { const s = localStorage.getItem(C.key); if (s && (s === 'all' || C.stations.some(x => x.id === s))) this.st = s; } catch(e){}
     if (!h.dataset.plain) h.dataset.plain = h.innerHTML; h.classList.add('dkHead'); this.on = true; this._sig = ''; b.dataset.deck = this.st; b.dataset.deckpage = id;
     if (!h._dk){ h._dk = true; h.addEventListener('click', e => { const n = e.target.closest('[data-dk]'); if (n && this.on) this.set(n.dataset.dk); }); }
@@ -199,7 +215,11 @@ const LiveDeck = window.LiveDeck = {
     b.querySelectorAll('[data-blpart="compare"] .anTable tbody tr').forEach(tr => { if (tr.dataset.dkb) return; const td = tr.querySelectorAll('td'); if (td.length < 2) return; const x = num(td[0].textContent), y = num(td[1].textContent), mx = Math.max(x || 0, y || 0); tr.dataset.dkb = '1'; tr.style.setProperty('--b', mx ? ((x || 0) / mx).toFixed(3) : '0'); tr.style.setProperty('--s', mx ? ((y || 0) / mx).toFixed(3) : '0'); }); },
 
   /* ---------- where each station stands: read, never written ---------- */
-  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch', analysis: 'factsAnalysis', report: 'factsReport' }[this.page]; return f ? this[f]() : {}; },
+  facts(){ const f = { live: 'factsLive', manual: 'factsManual', open: 'factsOpen', scanner: 'factsScanner', confluenceScanner: 'factsConfluence', brain: 'factsBrain', fit: 'factsFit', checker: 'factsChecker', research: 'factsResearch', analysis: 'factsAnalysis', report: 'factsReport', bot: 'factsBot', permissions: 'factsPerm' }[this.page]; return f ? this[f]() : {}; },
+  factsBot(){ const id = this.botId, b = this.body(); let L = {}, cfg = {}, name = ''; try { L = Bots.ledger(id) || {}; cfg = Bots.cfg(id) || {}; name = (BOT_BY_ID[id] || {}).name || ''; } catch(e){} const open = (L.open || []).length, closed = (L.closed || []).length, mk = b && b.querySelector('.mkCount');
+    return { _label: name, result: { t: open + ' open · ' + closed + ' closed' }, trades: { t: closed + ' closed' }, why: { t: 'the reasons' }, markets: { t: mk ? ((mk.textContent || '').trim().match(/^\d+\s+\w+/) || [''])[0] : '' }, settings: { t: (cfg.paused ? 'paused' : 'running') + (cfg.tf ? ' · ' + cfg.tf : '') }, notes: { t: 'yours' } }; },
+  factsPerm(){ const b = this.body(), n = i => b ? b.querySelectorAll('.prCols > .prCol:nth-child(' + i + ') .prCard').length : 0, tg = b && b.querySelector('[data-blpart="tools"] .bMini'), auto = tg ? /:\s*on/i.test(tg.textContent || '') : null;
+    return { _label: auto == null ? '' : 'automatic blocking ' + (auto ? 'on' : 'off'), blocked: { t: n(1) + ' pair' + (n(1) === 1 ? '' : 's') }, allowed: { t: n(2) + ' pair' + (n(2) === 1 ? '' : 's') }, rules: { t: auto == null ? '' : 'automatic · ' + (auto ? 'on' : 'off') }, notes: { t: 'yours' } }; },
   /* both read what the page itself has drawn, so the rail always agrees with it */
   factsAnalysis(){ const b = this.body(), txt = s => { const e = b && b.querySelector(s); return e ? (e.textContent || '').trim().replace(/\s+/g, ' ') : ''; }, q = s => b ? b.querySelectorAll(s).length : 0, n = t => (t.match(/(\d[\d,]*)\s+completed/) || ['', ''])[1];
     const buy = n(txt('.anSide.buy')), sell = n(txt('.anSide.sell')), rows = q('[data-blpart="log"] tbody tr');
