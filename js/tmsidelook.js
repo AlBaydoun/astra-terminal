@@ -1,8 +1,8 @@
 /* ASTRA · new look — the side panel's tab strip, easier to see and to hit.
 
-     SIZE      the strip comes in three sizes: Small (one row, as it was), Medium (two rows, larger
-               buttons; the one it comes with) and Large (three rows, each tab with its name). The
-               small button beside the pin switches between them; the choice is remembered.
+     ROWS      the strip comes in one row (every tab in a line, small), two rows (larger buttons; the
+               one it comes with) or three rows (each tab with its name). The small button beside the
+               pin opens a menu to choose; the choice is remembered.
      ICONS     each tab has its own picture in its own colours, so it is found at a glance: a star for
                the watchlist, a dial for Signals, a green and a red arrow for Trade, and so on. Classic
                keeps its line icons.
@@ -12,7 +12,7 @@
    It draws and reads candles (GET only). It places nothing and changes nothing but the strip's size. */
 'use strict';
 const SideLook = window.SideLook = {
-  KEY: 'astra_sidetabs_size', SIZES: ['s', 'm', 'l'], SAY: { s: 'Small · one row', m: 'Medium · two rows', l: 'Large · with names' },
+  KEY: 'astra_sidetabs_size', SIZES: ['s', 'm', 'l'], SAY: { s: 'One row', m: 'Two rows', l: 'Three rows, with names' }, HINT: { s: 'every tab in one line, small', m: 'larger buttons', l: 'each tab with its name' },
   NAME: { watch: 'Watch', tssig: 'Signals', tstrade: 'Trade', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours', tsclock: 'Clock', tsheat: 'Heatmap', tsnews: 'News', alerts: 'Alerts', portfolio: 'Paper', ai: 'Observer', notes: 'Notes', tslayers: 'Layers' },
   TFS: ['5m', '15m', '1h', '4h', '1d'], C: {},
   $(id){ return document.getElementById(id); },
@@ -44,14 +44,23 @@ const SideLook = window.SideLook = {
     st.querySelectorAll('button[data-tab]').forEach(b => { const k = b.dataset.tab; if (I[k] && !b.querySelector(':scope > .stIco')) b.insertAdjacentHTML('afterbegin', I[k]); const n = this.NAME[k] || ''; if (n && b.dataset.stn !== n) b.dataset.stn = n; });
     const ctl = st.querySelector('.sideCtl'); if (ctl && !this.$('stSize')){ const b = document.createElement('button'); b.type = 'button'; b.id = 'stSize'; b.className = 'tsOnlyFace';
       b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="18" height="5" rx="1.5"/></svg>';
-      ctl.prepend(b); b.addEventListener('click', e => { e.stopPropagation(); this.cycle(); }); this.say(); } },
+      ctl.prepend(b); b.addEventListener('click', e => { e.stopPropagation(); this.menu(); }); this.say(); } },
 
   /* ---------- the size ---------- */
   size(){ let v = 'm'; try { v = localStorage.getItem(this.KEY) || 'm'; } catch(e){} return this.SIZES.includes(v) ? v : 'm'; },
   set(v, quiet){ if (!this.SIZES.includes(v)) return; try { localStorage.setItem(this.KEY, v); } catch(e){} document.documentElement.dataset.sidetabs = v; this.say(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
     if (!quiet && typeof toast === 'function') toast('Side tabs: ' + this.SAY[v], 'info'); },
   cycle(){ const i = this.SIZES.indexOf(this.size()); this.set(this.SIZES[(i + 1) % this.SIZES.length]); },
-  say(){ const b = this.$('stSize'); if (b) b.title = 'Size of the tabs: ' + this.SAY[this.size()] + '. Click for the next size.'; },
+  say(){ const b = this.$('stSize'); if (b){ b.title = 'Rows of tabs: ' + this.SAY[this.size()] + '. Click to choose.'; b.setAttribute('aria-haspopup', 'menu'); } },
+  /* the menu: a small picture of each choice */
+  rowsPic(k){ const rows = k === 's' ? 1 : k === 'm' ? 2 : 3, per = k === 's' ? 8 : k === 'm' ? 5 : 4, w = k === 's' ? 3.6 : k === 'm' ? 6 : 6.4, gap = (44 - per * w) / (per + 1), h = k === 'l' ? 4.6 : w, rh = 26 / rows; let o = '';
+    for (let r = 0; r < rows; r++) for (let c = 0; c < per; c++){ const x = 1 + gap + c * (w + gap), y = 1 + r * rh + (rh - h - (k === 'l' ? 2.4 : 0)) / 2; o += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w + '" height="' + h + '" rx="1.2" fill="#4FD8F7"/>' + (k === 'l' ? '<rect x="' + x.toFixed(1) + '" y="' + (y + h + 1.2).toFixed(1) + '" width="' + w + '" height="1.2" rx=".6" fill="#7C8BA8"/>' : ''); }
+    return '<svg viewBox="0 0 46 28" aria-hidden="true"><rect x=".5" y=".5" width="45" height="27" rx="4" fill="#080E1A" stroke="rgba(126,156,224,.3)"/>' + o + '</svg>'; },
+  menu(){ const old = this.$('stMenu'); if (old){ old.remove(); return; } const b = this.$('stSize'); if (!b) return; const m = document.createElement('div'); m.id = 'stMenu'; m.setAttribute('role', 'menu'); const cur = this.size();
+    m.innerHTML = '<b>Tabs in the side panel</b>' + this.SIZES.map(k => '<button type="button" role="menuitemradio" aria-checked="' + (k === cur) + '" data-sz="' + k + '" class="' + (k === cur ? 'on' : '') + '">' + this.rowsPic(k) + '<span><b>' + this.SAY[k] + '</b><small>' + this.HINT[k] + '</small></span></button>').join('');
+    document.body.appendChild(m); const r = b.getBoundingClientRect(); m.style.top = (r.bottom + 6) + 'px'; m.style.left = Math.max(8, Math.min(window.innerWidth - 234, r.right - 226)) + 'px';
+    const shut = () => { m.remove(); document.removeEventListener('mousedown', off, true); document.removeEventListener('keydown', key, true); }, off = e => { if (!m.contains(e.target) && !b.contains(e.target)) shut(); }, key = e => { if (e.key === 'Escape'){ e.stopPropagation(); shut(); b.focus(); } };
+    m.addEventListener('click', e => { const t = e.target.closest('[data-sz]'); if (t){ this.set(t.dataset.sz); shut(); } }); setTimeout(() => { document.addEventListener('mousedown', off, true); document.addEventListener('keydown', key, true); const on = m.querySelector('.on'); if (on) on.focus(); }, 0); },
 
   /* ---------- the watchlist: which way the forming candle points, timeframe by timeframe ---------- */
   symOf(row){ if (!row) return ''; if (row.dataset.sym) return row.dataset.sym; try { for (const k in Watch.rows) if (Watch.rows[k] === row) return k; } catch(e){} return ''; },

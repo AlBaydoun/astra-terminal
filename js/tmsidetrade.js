@@ -29,7 +29,7 @@ const SideTrade = window.SideTrade = {
       '<section class="trTicket" id="trTicket" hidden><div class="trBar"><b>Manual ticket</b><button type="button" data-tr="full" title="The whole Manual Trading Bot: rules, automatic entries, orders, results">Full desk ↗</button><button type="button" data-tr="close" title="Put the ticket away">✕</button></div><div id="tsTradeHost"></div></section>' +
       '<div class="trCardsHead"><b>Open trades</b><span class="trSeg trKind"><button type="button" data-tr="kind:paper">Paper</button><button type="button" data-tr="kind:live">Live</button></span><span class="trSeg"><button type="button" data-tr="scope:all">All</button><button type="button" data-tr="scope:chart">This chart</button></span><em id="trCount"></em></div><div id="tsTradeCards" class="trCards"></div><div id="tsLiveCards" class="trLive" hidden></div></div>';
     body.appendChild(p);
-    p.addEventListener('click', e => this.click(e));
+    p.addEventListener('click', e => this.click(e)); p.addEventListener('dblclick', e => this.dbl(e));
     /* the ticket is the Manual Trading Bot's own: Buy / Sell anywhere bring it here while the chart is on screen */
     const om = WorkspaceUI.openManual.bind(WorkspaceUI);
     WorkspaceUI.openManual = (sym, dir, tf) => { if (this.on() && document.documentElement.dataset.tmroom === 'chart' && !document.documentElement.dataset.panel){ this.ticket(sym || STORE.symbol, dir, tf || STORE.tf); return; } return om(sym, dir, tf); };
@@ -56,8 +56,11 @@ const SideTrade = window.SideTrade = {
     /* ▾ opens a card's controls; a press anywhere else on it shows the trade on the chart, as the chart's own list does */
     const more = e.target.closest('#tab-tstrade .trMore'); if (more){ const card = more.closest('.otCard'), live = card.hasAttribute('data-ldpos'), k = live ? card.dataset.ldpos : card.dataset.ot, set = live ? this.openLive : this.open, isOpen = card.classList.contains('trOpen'); if (isOpen) set.delete(k); else set.add(k); card.classList.toggle('trOpen', !isOpen); return; }
     /* a real position: a press shows it on the chart, as its own On chart button does */
-    const lc = e.target.closest('#tsLiveCards .ldPos'); if (lc){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit, .tnBox')) return; try { LiveDesk.showOnChart(lc.dataset.ldpos); } catch(x){} return; }
-    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection, .tnBox')) return; this.focus(card.dataset.ot); },
+    const lc = e.target.closest('#tsLiveCards .ldPos'); if (lc){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit, .tnBox')) return; const id = lc.dataset.ldpos; clearTimeout(this._ct); this._ct = setTimeout(() => { try { LiveDesk.showOnChart(id); } catch(x){} }, 260); return; }
+    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection, .tnBox')) return; const ck = card.dataset.ot; clearTimeout(this._ct); this._ct = setTimeout(() => this.focus(ck), 260); },
+  /* a double press anywhere on a card that is not a control unfolds it (or folds it again); the single press waits a moment so the two do not both happen */
+  dbl(e){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit, .wsTradeSection, .tnBox')) return; const card = e.target.closest('#tsTradeCards .otCard, #tsLiveCards .ldPos[data-ldpos]'); if (!card) return; clearTimeout(this._ct); e.preventDefault();
+    const live = card.hasAttribute('data-ldpos'), k = live ? card.dataset.ldpos : card.dataset.ot, set = live ? this.openLive : this.open, isOpen = card.classList.contains('trOpen'); if (isOpen) set.delete(k); else set.add(k); card.classList.toggle('trOpen', !isOpen); try { window.getSelection().removeAllRanges(); } catch(x){} if (!isOpen) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); },
   focus(k){ if (typeof PosLines === 'undefined' || !k) return; const i = k.indexOf(':'), bot = k.slice(0, i), id = /^T/.test(k.slice(i + 1)) ? k.slice(i + 1) : +k.slice(i + 1); const row = OpenTrades.all().find(r => r.bot + ':' + r.p.id === k); if (!row) return;
     const here = this.base(STORE.symbol) === this.base(row.p.sym);
     if (!here){ PosLines.show(bot, id); setTimeout(() => { try { if (PosLines.rows().length > 1) PosLines.toggleSolo(k); } catch(e){} this.dress(); }, 1500); return; }
@@ -65,7 +68,7 @@ const SideTrade = window.SideTrade = {
     this.dress(); },
   /* each card gets its ▾, the note written with the trade, and a mark when it is the one singled out on the chart */
   dress(){ const host = this.$('tsTradeCards'); if (!host) return; let rows = null, solo = null; try { solo = PosLines.soloKey(); } catch(e){}
-    host.querySelectorAll('.otCard').forEach(c => { if (!c.querySelector(':scope > .trMore')){ const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target, trailing stop, reduce or close'; b.textContent = '▾'; c.appendChild(b); }
+    host.querySelectorAll('.otCard').forEach(c => { if (!c.querySelector(':scope > .trMore')){ const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target, trailing stop, reduce or close. A double-click on the card does the same.'; b.textContent = '▾'; c.appendChild(b); }
       rows = rows || new Map(OpenTrades.all().map(r => [r.bot + ':' + r.p.id, r])); const r = rows.get(c.dataset.ot), note = r && typeof ChartPlus !== 'undefined' ? ChartPlus.noteOf(r.p) : '';
       let n = c.querySelector(':scope > .trNote'); if (note){ if (!n){ n = document.createElement('div'); n.className = 'trNote'; c.querySelector('.otHead').after(n); } if (n.textContent !== '📝 ' + note) n.textContent = '📝 ' + note; } else if (n) n.remove();
       c.classList.toggle('trSolo', !!solo && solo === c.dataset.ot); }); },
@@ -96,7 +99,7 @@ const SideTrade = window.SideTrade = {
     if (!fresh){ if (host.contains(document.activeElement) && document.activeElement.matches('input')) return; if (host.querySelector('[data-ldclose][data-armed="1"]')) return; if (typeof PriceRail !== 'undefined' && PriceRail.busy(host)) return; if (Date.now() - (this._lAt || 0) < 3000) return; }
     this._lAt = Date.now(); let html = ''; try { html = LiveDesk.positionsView(); } catch(e){ html = '<div class="empty">The real positions could not be read just now.</div>'; } host.innerHTML = html; try { LiveDesk.bindPositions(host); } catch(e){}
     /* each real card gets its ▾ and keeps its open state across the desk's redraws */
-    host.querySelectorAll('.ldPos[data-ldpos]').forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target at the broker, on chart, close'; b.textContent = '▾'; c.appendChild(b); c.classList.toggle('trOpen', this.openLive.has(c.dataset.ldpos)); });
+    host.querySelectorAll('.ldPos[data-ldpos]').forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'trMore'; b.title = 'Stop and target at the broker, on chart, close. A double-click on the card does the same.'; b.textContent = '▾'; c.appendChild(b); c.classList.toggle('trOpen', this.openLive.has(c.dataset.ldpos)); });
     this.filter(); },
   cards(fresh){ try { const k = localStorage.getItem('astra_trade_kind'); if (k && fresh && !this._kindRead){ this.kind = k; } this._kindRead = true; } catch(e){}
     const lv = this.$('tsLiveCards'), pp = this.$('tsTradeCards'); if (lv) lv.hidden = this.kind !== 'live'; if (pp) pp.hidden = this.kind === 'live';
