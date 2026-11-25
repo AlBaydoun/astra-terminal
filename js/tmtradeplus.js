@@ -13,6 +13,9 @@
                 are a small journal kept with the trade (in this browser), each with its time. They show
                 on the trade's card, in the ended-trades list, and in the Autopsy room beside the note
                 written at entry.
+     FILTER     two lists over the cards: the bot that opened a trade, and the signal within that bot. They
+                narrow the open trades and the ended ones alike. The signal is the one the bot recorded when
+                it opened the trade; a trade that recorded none reads "Not recorded".
      ENDED      the Trade tab has an Ended button: the closed trades (paper or real, as the switch says),
                 for today, the last day, week or month, everything, or between two dates. A row opens to
                 its facts and notes; Review opens it in the Autopsy room.
@@ -70,12 +73,12 @@ const TradePlus = window.TradePlus = {
   endedRows(){ const out = [], kind = this.kind();
     if (kind === 'paper'){ try { for (const b of BOTS){ if (Bots.isPage(b)) continue; const L = Bots.ledgers[b.id], nm = typeof TmSettings !== 'undefined' ? TmSettings.name(b) : b.name;
           for (const t of (L && L.closed) || []){ if (!t.exitTime || !t.entryTime) continue; out.push({ id: 'p:' + b.id + ':' + t.id, key: 'p:' + b.id + ':' + t.id + '@' + t.entryTime, src: 'paper', bot: b.id, botName: nm, sym: t.sym, tf: t.tf || '', dir: t.dir > 0 ? 1 : -1, entry: t.entry, exit: t.exit, t0: t.entryTime, t1: t.exitTime, pnl: +t.pnl || 0, r: Number.isFinite(t.r) ? t.r : null, reason: t.reason || '', touched: !!t.touched,
-            note: typeof ChartPlus !== 'undefined' ? ChartPlus.noteOf(t) : '' }); } } } catch(e){ console.warn('ended paper', e); } }
-    else { try { for (const t of (typeof Autopsy !== 'undefined' && Autopsy.trades) || []) if (t.src === 'live') out.push(Object.assign({}, t, { key: String(t.id), note: '' })); } catch(e){} }
+            note: typeof ChartPlus !== 'undefined' ? ChartPlus.noteOf(t) : '', sig: this.sigOf(t, b.id, nm) }); } } } catch(e){ console.warn('ended paper', e); } }
+    else { try { for (const t of (typeof Autopsy !== 'undefined' && Autopsy.trades) || []) if (t.src === 'live') out.push(Object.assign({}, t, { key: String(t.id), note: '', sig: this.sigOf(t.orig, t.bot, t.botName) })); } catch(e){} }
     let since = 0, until = Infinity; if (this.from || this.to){ if (this.from) since = new Date(this.from + 'T00:00:00').getTime() || 0; if (this.to) until = (new Date(this.to + 'T00:00:00').getTime() || 0) + 86400000 || Infinity; }
     else if (this.per === 'today'){ const d = new Date(); d.setHours(0, 0, 0, 0); since = d.getTime(); } else if (this.per !== 'all') since = Date.now() - (+this.per) * 86400000;
     const here = this.base(typeof STORE !== 'undefined' ? STORE.symbol : ''), chart = typeof SideTrade !== 'undefined' && SideTrade.scope === 'chart';
-    return out.filter(t => t.t1 >= since && t.t1 < until && (!chart || this.base(t.sym) === here)).sort((a, b) => b.t1 - a.t1); },
+    this._endAll = out; return out.filter(t => t.t1 >= since && t.t1 < until && (!chart || this.base(t.sym) === here) && this.match(t)).sort((a, b) => b.t1 - a.t1); },
   /* real trades come from MetaTrader's history (a GET), read again at most every five minutes */
   async liveHistory(force){ if (typeof Autopsy === 'undefined' || this._lhBusy) return; if (!force && Date.now() - (this._lhAt || 0) < 300000) return; this._lhBusy = true; this._lhAt = Date.now();
     try { Autopsy.live = null; await Autopsy.collect(); } catch(e){} finally { this._lhBusy = false; this._eSig = ''; this.paintEnded(); } },
@@ -101,19 +104,55 @@ const TradePlus = window.TradePlus = {
   paintEnded(force){ const s = this.$('tpEnded'), b = this.$('tpEndedBtn'); if (!s || !b) return; b.classList.toggle('on', this.ended); if (s.hidden === this.ended) s.hidden = !this.ended; if (!this.ended) return;
     const a = document.activeElement; if (!force && a && s.contains(a) && /INPUT|TEXTAREA/.test(a.tagName)) return;
     const kind = this.kind(); if (kind === 'live') this.liveHistory(false);
-    const rows = this.endedRows(), sig = kind + '|' + this.per + '|' + this.from + '|' + this.to + '|' + this.eOpen + '|' + this.eMax + '|' + rows.length + '|' + (rows[0] ? rows[0].id + rows[0].t1 : '') + '|' + (typeof STORE !== 'undefined' ? STORE.symbol : '') + '|' + (this._lhBusy ? 1 : 0);
+    const rows = this.endedRows(), sig = kind + '|' + this.fBot + '|' + this.fSig + '|' + this.per + '|' + this.from + '|' + this.to + '|' + this.eOpen + '|' + this.eMax + '|' + rows.length + '|' + (rows[0] ? rows[0].id + rows[0].t1 : '') + '|' + (typeof STORE !== 'undefined' ? STORE.symbol : '') + '|' + (this._lhBusy ? 1 : 0);
     if (!force && sig === this._eSig) return; this._eSig = sig;
     const won = rows.filter(t => t.pnl > 0).length, net = rows.reduce((x, t) => x + (t.pnl || 0), 0), custom = !!(this.from || this.to), E = x => this.esc(x);
     const row = t => { const open = this.eOpen === t.id, n = this.notes(t.key).length + (t.note ? 1 : 0), cls = t.pnl > 0 ? 'up' : t.pnl < 0 ? 'dn' : '';
-      return '<div class="teRow ' + cls + (open ? ' open' : '') + '"><button type="button" class="teHead" data-tp="erow:' + E(t.id) + '" aria-expanded="' + open + '"><i class="' + (t.dir > 0 ? 'buy' : 'sell') + '">' + (t.dir > 0 ? 'BUY' : 'SELL') + '</i><span><b>' + E(typeof baseAsset === 'function' ? baseAsset(t.sym) : t.sym) + '</b><small>' + E(t.botName || '') + (t.tf ? ' · ' + E(t.tf) : '') + '</small></span><span class="teRes"><b>' + this.money(t.pnl) + '</b><small>' + (t.r != null ? (t.r >= 0 ? '+' : '−') + Math.abs(t.r).toFixed(2) + 'R · ' : '') + this.when(t.t1) + '</small></span>' + (n ? '<u title="' + n + ' note' + (n === 1 ? '' : 's') + '">📝' + n + '</u>' : '') + '</button>' +
+      return '<div class="teRow ' + cls + (open ? ' open' : '') + '"><button type="button" class="teHead" data-tp="erow:' + E(t.id) + '" aria-expanded="' + open + '"><i class="' + (t.dir > 0 ? 'buy' : 'sell') + '">' + (t.dir > 0 ? 'BUY' : 'SELL') + '</i><span><b>' + E(typeof baseAsset === 'function' ? baseAsset(t.sym) : t.sym) + '</b><small>' + E(t.botName || '') + (t.sig && t.sig !== 'Not recorded' ? ' · ' + E(t.sig) : '') + (t.tf ? ' · ' + E(t.tf) : '') + '</small></span><span class="teRes"><b>' + this.money(t.pnl) + '</b><small>' + (t.r != null ? (t.r >= 0 ? '+' : '−') + Math.abs(t.r).toFixed(2) + 'R · ' : '') + this.when(t.t1) + '</small></span>' + (n ? '<u title="' + n + ' note' + (n === 1 ? '' : 's') + '">📝' + n + '</u>' : '') + '</button>' +
         (open ? '<div class="teBody"><dl><dt>Entry</dt><dd>' + this.px(t.entry) + ' · ' + this.when(t.t0) + '</dd><dt>Exit</dt><dd>' + this.px(t.exit) + ' · ' + this.when(t.t1) + '</dd><dt>Held</dt><dd>' + this.dur(t.t1 - t.t0) + '</dd><dt>Ended by</dt><dd>' + E(t.reason || 'not recorded') + (t.touched ? ' · adjusted by hand' : '') + '</dd></dl>' +
           (t.note ? '<div class="teNote"><small>WRITTEN AT ENTRY</small><p>' + E(t.note) + '</p></div>' : '') + this.box(t.key, true) +
           '<div class="teActs"><button type="button" data-tp="review:' + E(t.id) + '" title="Open this trade in the Autopsy room: the chart around it, candle by candle">Review ↗</button><button type="button" data-tp="chart:' + E(t.sym) + '">Open its chart</button></div></div>' : '') + '</div>'; };
     s.innerHTML = '<div class="teTop"><b>Ended trades</b><em>' + (kind === 'live' ? 'real · from MetaTrader' : 'paper') + '</em>' + (kind === 'live' ? '<button type="button" data-tp="erefresh" title="Read MetaTrader’s history again">' + (this._lhBusy ? 'reading…' : '↻') + '</button>' : '') + '</div>' +
       '<div class="teChips">' + this.PER.map(p => '<button type="button" data-tp="per:' + p[0] + '" class="' + (!custom && this.per === p[0] ? 'on' : '') + '">' + p[1] + '</button>').join('') + '</div>' +
       '<div class="teDates' + (custom ? ' on' : '') + '"><label>From <input type="date" data-tpd="from" value="' + E(this.from) + '"></label><label>To <input type="date" data-tpd="to" value="' + E(this.to) + '"></label></div>' +
-      '<p class="teSum">' + (rows.length ? '<b>' + rows.length + '</b> trade' + (rows.length === 1 ? '' : 's') + ' · <b class="up">' + won + '</b> won · <b class="dn">' + (rows.length - won) + '</b> not · net <b class="' + (net > 0 ? 'up' : net < 0 ? 'dn' : '') + '">' + this.money(net) + '</b>' : (kind === 'live' && this._lhBusy ? 'Reading MetaTrader’s history…' : 'No ended trades in this time.')) + '</p>' +
+      '<p class="teSum">' + (rows.length ? '<b>' + rows.length + '</b> trade' + (rows.length === 1 ? '' : 's') + ' · <b class="up">' + won + '</b> won · <b class="dn">' + (rows.length - won) + '</b> not · net <b class="' + (net > 0 ? 'up' : net < 0 ? 'dn' : '') + '">' + this.money(net) + '</b>' : (kind === 'live' && this._lhBusy ? 'Reading MetaTrader’s history…' : this.fBot || this.fSig ? 'No ended trade matches this time and this filter.' : 'No ended trades in this time.')) + '</p>' +
       rows.slice(0, this.eMax).map(row).join('') + (rows.length > this.eMax ? '<button type="button" class="teMore" data-tp="emore">Show ' + Math.min(60, rows.length - this.eMax) + ' more of ' + rows.length + '</button>' : ''); },
+
+  /* ================= filter: the bot that opened a trade, and the signal within that bot ================= */
+  fBot: '', fSig: '', NOSIG: 'Not recorded',
+  /* what the bot recorded as its reason, read the way the Autopsy room reads it */
+  sigOf(o, bot, botName){ let s = ''; try { if (o && typeof Explorer !== 'undefined' && Explorer.triggerOf) s = Explorer.triggerOf(o); } catch(e){} s = String(s || (o && (o.trigger || o.model)) || '').trim(); return !s || s === bot || s === botName || s === this.NOSIG ? this.NOSIG : s; },
+  match(t){ return (!this.fBot || t.bot === this.fBot) && (!this.fSig || t.sig === this.fSig); },
+  /* the open trades of the side that is showing, each with its bot and signal */
+  openMeta(){ const M = new Map(), kind = this.kind();
+    if (kind === 'paper'){ try { for (const r of OpenTrades.all()) M.set(r.bot + ':' + r.p.id, { bot: r.bot, botName: this.botName(r.bot, r.botName), sig: this.sigOf(r.p, r.bot, r.botName) }); } catch(e){} }
+    else { let orders = []; try { orders = (Live.loadBook().orders || []); } catch(e){} try { for (const r of LiveDesk.chartRows()){ const id = String(r.ticket != null ? r.ticket : r.p && r.p.id), o = orders.find(x => x && String(x.ticket) === id) || null, bid = r.bot === 'live' || !r.bot ? 'untagged' : r.bot; M.set(id, { bot: bid, botName: bid === 'untagged' ? 'untagged' : this.botName(bid, r.botName), sig: this.sigOf(o, bid, r.botName) }); } } catch(e){} }
+    return M; },
+  botName(id, fallback){ try { const b = typeof BOT_BY_ID !== 'undefined' && BOT_BY_ID[id]; if (b && typeof TmSettings !== 'undefined') return TmSettings.name(b); } catch(e){} return fallback || id; },
+  filterInit(){ const head = document.querySelector('#tab-tstrade .trCardsHead'); if (!head || this.$('tpFilter')) return; const f = document.createElement('div'); f.id = 'tpFilter'; f.className = 'tpFilter';
+    f.innerHTML = '<label>Bot<select id="tpFBot" title="Only the trades this bot opened"></select></label><label>Signal<select id="tpFSig" title="Only the trades opened by this signal"></select></label><button type="button" id="tpFClear" title="Show every trade again" hidden>Clear</button><p id="tpFNone" hidden>No open trade matches this filter.</p>';
+    head.after(f);
+    f.addEventListener('change', e => { if (e.target.id === 'tpFBot'){ this.fBot = e.target.value; this.fSig = ''; } else if (e.target.id === 'tpFSig') this.fSig = e.target.value; else return; this.filterChanged(); });
+    f.addEventListener('click', e => { if (e.target.id === 'tpFClear'){ this.fBot = this.fSig = ''; this.filterChanged(); } });
+    document.querySelector('#tab-tstrade .trWrap').addEventListener('click', e => { if (e.target.closest('[data-tr^="kind:"]')){ this.fBot = this.fSig = ''; setTimeout(() => this.filterChanged(), 60); } });
+    this.filterPaint(true); },
+  filterChanged(){ this._fAt = 0; this.filterPaint(true); try { SideTrade.filter(); } catch(e){} this._eSig = ''; this.eOpen = ''; this.paintEnded(true); },
+  /* the two lists hold what there is to choose from: every bot with a trade on this side, and the signals of the chosen bot */
+  filterPaint(force){ const sb = this.$('tpFBot'), ss = this.$('tpFSig'); if (!sb || !ss) return; const a = document.activeElement; if (!force && (a === sb || a === ss)) return; if (!force && Date.now() - (this._fAt || 0) < 5000) return; this._fAt = Date.now();
+    const open = [...this.openMeta().values()]; if (!this.ended || !this._endAll || this._endKind !== this.kind()){ try { this.endedRows(); } catch(e){} } this._endKind = this.kind(); const ended = this._endAll || [];
+    const bots = new Map(), add = (t, k) => { const b = bots.get(t.bot) || { id: t.bot, name: t.botName || t.bot, open: 0, ended: 0, sigs: new Map() }; b[k]++; const s = b.sigs.get(t.sig) || { open: 0, ended: 0 }; s[k]++; b.sigs.set(t.sig, s); bots.set(t.bot, b); };
+    for (const t of open) add(t, 'open'); for (const t of ended) add(t, 'ended');
+    const cnt = x => (x.open ? x.open + ' open' : '') + (x.open && x.ended ? ' · ' : '') + (x.ended ? x.ended + ' ended' : ''), E = s => this.esc(s), L = [...bots.values()].sort((x, y) => String(x.name).localeCompare(String(y.name)));
+    let hb = '<option value="">All bots (' + L.length + ')</option>' + L.map(b => '<option value="' + E(b.id) + '">' + E(b.name) + ' — ' + cnt(b) + '</option>').join(''); if (this.fBot && !bots.has(this.fBot)) hb += '<option value="' + E(this.fBot) + '">' + E(this.botName(this.fBot)) + ' — no trade now</option>';
+    const sg = new Map(); for (const b of L){ if (this.fBot && b.id !== this.fBot) continue; for (const [k, v] of b.sigs){ const s = sg.get(k) || { open: 0, ended: 0 }; s.open += v.open; s.ended += v.ended; sg.set(k, s); } }
+    const SL = [...sg.entries()].sort((x, y) => (x[0] === this.NOSIG) - (y[0] === this.NOSIG) || x[0].localeCompare(y[0]));
+    let hs = '<option value="">' + (this.fBot ? 'All its signals (' + SL.length + ')' : 'All signals (' + SL.length + ')') + '</option>' + SL.map(([k, v]) => '<option value="' + E(k) + '">' + E(k) + ' — ' + cnt(v) + '</option>').join(''); if (this.fSig && !sg.has(this.fSig)) hs += '<option value="' + E(this.fSig) + '">' + E(this.fSig) + ' — no trade now</option>';
+    if (sb._h !== hb){ sb._h = hb; sb.innerHTML = hb; } if (ss._h !== hs){ ss._h = hs; ss.innerHTML = hs; } sb.value = this.fBot; ss.value = this.fSig;
+    const on = !!(this.fBot || this.fSig); this.$('tpFilter').classList.toggle('on', on); this.$('tpFClear').hidden = !on; },
+  /* after the Trade tab has shown or hidden its cards for "This chart", the cards the filter leaves out are hidden too */
+  applyFilter(){ const none = this.$('tpFNone'), on = !!(this.fBot || this.fSig); if (!on){ if (none) none.hidden = true; return; } const M = this.openMeta(), live = this.kind() === 'live', host = this.$(live ? 'tsLiveCards' : 'tsTradeCards'); if (!host) return; let shown = 0, all = 0;
+    host.querySelectorAll(live ? '[data-ldpos]' : '.otCard').forEach(c => { const m = M.get(live ? c.dataset.ldpos : c.dataset.ot); all++; if (!m || !this.match(m)){ if (!c.hidden) c.hidden = true; } else if (!c.hidden) shown++; });
+    const cnt = this.$('trCount'); if (cnt) cnt.textContent = shown + ' shown by the filter · ' + cnt.textContent; if (none) none.hidden = shown > 0 || !all; },
 
   /* ================= the top row: Paper or Live, BUY and SELL with the price ================= */
   MKEY: 'astra_top_trade_mode', FKEY: 'astra_ticket_fast',
@@ -164,10 +203,11 @@ const TradePlus = window.TradePlus = {
     const t = used.length ? 'Still set in the full ticket: ' + used.join(' · ') + '. Press Fast to see every field.' : 'Market order at the price now. Leave Amount and the stop empty and the ticket sizes the trade from your risk limit and sets its own stop. The button under BUY / SELL is the ticket’s own: it places the paper trade.';
     if (p.textContent !== t) p.textContent = t; p.hidden = false; p.classList.toggle('warn', used.length > 0); },
 
-  init(){ this.notesInit(); this.topInit(); this.endedInit(); this.fastInit();
+  init(){ this.notesInit(); this.topInit(); this.endedInit(); this.fastInit(); this.filterInit();
+    if (typeof SideTrade !== 'undefined' && !SideTrade._tpFilt && SideTrade.filter){ SideTrade._tpFilt = true; const f = SideTrade.filter.bind(SideTrade); SideTrade.filter = (...a) => { const r = f(...a); try { this.applyFilter(); } catch(e){} return r; }; }
     if (typeof SideTrade !== 'undefined' && !SideTrade._tpWrap && SideTrade.dress){ SideTrade._tpWrap = true; const d = SideTrade.dress.bind(SideTrade), l = SideTrade.live.bind(SideTrade);
       SideTrade.dress = (...a) => { const r = d(...a); try { this.cardBoxes(); } catch(e){} return r; }; SideTrade.live = (...a) => { const r = l(...a); try { this.cardBoxes(); } catch(e){} return r; }; }
-    if (!this._tick){ this._tick = setInterval(() => { try { this.prices(); if (!this.on()) return; const tab = this.$('tab-tstrade'); if (tab && tab.classList.contains('active') && tab.offsetParent !== null){ this.cardBoxes(); this.paintEnded(false); const tk = this.$('trTicket'); if (tk && !tk.hidden) this.fastPaint(); } } catch(e){} }, 1000); }
-    return !!(this.$('tpTop') && this.$('tpEndedBtn') && this.$('tpFastBtn')); },
+    if (!this._tick){ this._tick = setInterval(() => { try { this.prices(); if (!this.on()) return; const tab = this.$('tab-tstrade'); if (tab && tab.classList.contains('active') && tab.offsetParent !== null){ this.cardBoxes(); this.filterPaint(false); this.paintEnded(false); const tk = this.$('trTicket'); if (tk && !tk.hidden) this.fastPaint(); } } catch(e){} }, 1000); }
+    return !!(this.$('tpTop') && this.$('tpEndedBtn') && this.$('tpFastBtn') && this.$('tpFilter')); },
 };
 (function start(n){ let ok = false; try { ok = TradePlus.init(); } catch(e){ console.warn('trade plus', e); } if (!ok && n < 40) setTimeout(() => start(n + 1), 700); })(0);

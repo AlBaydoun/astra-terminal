@@ -4,7 +4,9 @@
               look and every other overlay is a card with a small picture of what it draws, made from the
               candles of the chart you have open. Rest the mouse on one: a large picture and a few words say
               what would be put on the chart (for a scene: what it switches on and off). A press on the card
-              is a press on the layer's own switch; ⚙ opens its own settings. "List" brings back the plain
+              is a press on the layer's own switch; ⚙ opens its own settings. Drag a card onto another
+              of its group to move it: the overlays share their order with the list, the Studio layers
+              keep the same order in both, the scenes keep theirs here. "List" brings back the plain
               list of switches.
      BOTS     rest the mouse on a bot or page in the Bots tab: what it does, its state, its paper trades so
               far and its equity line, before you open it.
@@ -41,8 +43,30 @@ const SidePeek = window.SidePeek = {
       out.push({ id: 'lab:confluence', group: 'More overlays', name: 'ASTRA Confluence labels (15m)', on: lab === 'confluence' || lab === 'both', draw: ['signals'], desc: 'The Confluence indicator’s labels, with its panel above the chart.' }); }
     bar.querySelectorAll('.chartTools > button').forEach(b => { const draw = this.OVER[b.id]; if (!draw || b.hidden) return; const cfg = this.$(b.id.replace(/Btn$/, 'Cfg'));
       out.push({ id: 'ov:' + b.id, group: 'More overlays', name: this.clean(b.textContent), on: b.classList.contains('on'), draw, desc: this.clean(b.title), cfg: cfg && cfg.id !== b.id ? cfg.id : '' }); });
-    return out; },
-  press(id){ const i = id.indexOf(':'), k = id.slice(0, i), v = id.slice(i + 1), bar = this.$('chartLabelBar'); if (!bar) return;
+    /* your own order: scenes and Studio layers from this panel's memory, the overlays in the order of the list */
+    const O = this.order(), rank = (list, id) => { const k = list.indexOf(id); return k < 0 ? 999 : k; }; let ov = []; try { if (typeof ChartPlus !== 'undefined' && ChartPlus.layersApply) ov = ChartPlus.layersApply() || []; } catch(e){}
+    const G = ['Scenes', 'Studio look', 'More overlays'], key = x => x.group === 'Scenes' ? rank(O.scenes, x.id) : x.group === 'Studio look' ? (x.id === 'st:on' ? -1 : rank(O.studio, x.id)) : x.id.startsWith('lab:') ? -1 : rank(ov, x.id.slice(3));
+    return out.map((x, i) => ({ x, i })).sort((a, b) => G.indexOf(a.x.group) - G.indexOf(b.x.group) || key(a.x) - key(b.x) || a.i - b.i).map(o => o.x); },
+  OKEY: 'astra_layers_cards',
+  order(){ let o = {}; try { o = JSON.parse(localStorage.getItem(this.OKEY) || '{}') || {}; } catch(e){} return { scenes: Array.isArray(o.scenes) ? o.scenes : [], studio: Array.isArray(o.studio) ? o.studio : [] }; },
+  fixed(id){ return id === 'st:on' || id.startsWith('lab:'); },
+  /* the Studio layers keep one order: the list is drawn from Face.STUDIO, so that is what is put in order */
+  studioOrder(){ try { const o = this.order().studio; if (!o.length || typeof Face === 'undefined') return; const r = k => { const i = o.indexOf('st:' + k); return i < 0 ? 999 : i; }, before = Face.STUDIO.map(x => x[0]).join(); Face.STUDIO.sort((a, b) => r(a[0]) - r(b[0])); if (Face.STUDIO.map(x => x[0]).join() !== before && Face.layersSync) Face.layersSync(); } catch(e){} },
+  moved(drag, target, after){ const L = this.L || [], a = L.find(x => x.id === drag), b = L.find(x => x.id === target); if (!a || !b || a === b || a.group !== b.group || this.fixed(drag) || this.fixed(target)) return false;
+    const ids = L.filter(x => x.group === a.group && !this.fixed(x.id)).map(x => x.id).filter(id => id !== drag); let k = ids.indexOf(target); if (after) k++; ids.splice(k, 0, drag);
+    try { if (a.group === 'More overlays'){ const rest = (typeof ChartPlus !== 'undefined' && ChartPlus.layersApply ? ChartPlus.layersApply() : []).filter(id => !ids.includes('ov:' + id)); localStorage.setItem(ChartPlus.LKEY, JSON.stringify(ids.map(id => id.slice(3)).concat(rest))); ChartPlus.layersApply(); }
+      else { const o = this.order(); o[a.group === 'Scenes' ? 'scenes' : 'studio'] = ids; localStorage.setItem(this.OKEY, JSON.stringify(o)); if (a.group === 'Studio look') this.studioOrder(); } } catch(e){ console.warn('layer order', e); return false; }
+    this._sig = ''; this._dsig = ''; this.fill(); return true; },
+  /* dragging is done with the pointer itself (press, move, let go), so it starts from anywhere on a card, the picture included */
+  dragInit(grid){ let st = null; const cardOf = el => el && el.closest ? el.closest('.lcCard') : null, mark = (c, after) => { grid.querySelectorAll('.lcDrop, .lcDropA').forEach(x => x.classList.remove('lcDrop', 'lcDropA')); if (c) c.classList.add(after ? 'lcDropA' : 'lcDrop'); };
+    const ok = c => { if (!c || !st || c.dataset.lcid === st.id) return false; const L = this.L || [], x = L.find(y => y.id === st.id), y = L.find(z => z.id === c.dataset.lcid); return !!(x && y && x.group === y.group && !this.fixed(y.id)); };
+    grid.addEventListener('pointerdown', e => { if (e.button !== 0) return; const c = cardOf(e.target); if (!c || this.fixed(c.dataset.lcid) || e.target.closest('[data-lc^="cfg:"]')) return; st = { id: c.dataset.lcid, el: c, x: e.clientX, y: e.clientY, on: false, pid: e.pointerId, to: '', after: false }; });
+    const move = e => { if (!st) return; if (!st.on){ if (Math.hypot(e.clientX - st.x, e.clientY - st.y) < 7) return; st.on = true; this._drag = true; st.el.classList.add('lcDrag'); grid.classList.add('lcDragging'); this.hide(); try { grid.setPointerCapture(st.pid); } catch(x){} }
+      e.preventDefault(); const t = cardOf(document.elementFromPoint(e.clientX, e.clientY)); if (ok(t)){ const r = t.getBoundingClientRect(); st.to = t.dataset.lcid; st.after = e.clientY > r.top + r.height / 2; mark(t, st.after); } else { st.to = ''; mark(null); }
+      const g = grid.getBoundingClientRect(); if (e.clientY < g.top + 34) grid.scrollTop -= 14; else if (e.clientY > g.bottom - 34) grid.scrollTop += 14; };
+    const up = () => { if (!st) return; const d = st; st = null; mark(null); grid.classList.remove('lcDragging'); d.el.classList.remove('lcDrag'); if (!d.on) return; try { grid.releasePointerCapture(d.pid); } catch(x){} if (d.to) this.moved(d.id, d.to, d.after); setTimeout(() => { this._drag = false; }, 220); };
+    window.addEventListener('pointermove', move, { passive: false }); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up); },
+  press(id){ if (this._drag) return; const i = id.indexOf(':'), k = id.slice(0, i), v = id.slice(i + 1), bar = this.$('chartLabelBar'); if (!bar) return;
     if (k === 'scene'){ const b = bar.querySelector('#tmLayersHead [data-scene="' + v + '"]'); if (b) b.click(); }
     else if (k === 'st'){ const b = bar.querySelector('#tmLayersHead input[data-st="' + v + '"]'); if (b) b.click(); }
     else if (k === 'ov'){ const b = this.$(v); if (b) b.click(); }
@@ -104,10 +128,11 @@ const SidePeek = window.SidePeek = {
 
   /* ---------- the Layers tab as cards ---------- */
   layersInit(){ const p = this.$('tab-tslayers'); if (!p || this.$('lcGrid')) return !!p; const bar = document.createElement('div'); bar.className = 'lcBar'; bar.id = 'lcBar';
-    bar.innerHTML = '<b>Layers</b><span>rest the mouse on one to see it</span><span class="trSeg"><button type="button" data-lc="view:cards" title="A picture for every layer">Pictures</button><button type="button" data-lc="view:list" title="The plain list of switches">List</button></span>';
+    bar.innerHTML = '<b>Layers</b><span>rest on one to see it · drag to move it</span><span class="trSeg"><button type="button" data-lc="view:cards" title="A picture for every layer">Pictures</button><button type="button" data-lc="view:list" title="The plain list of switches">List</button></span>';
     const grid = document.createElement('div'); grid.id = 'lcGrid'; grid.className = 'lcGrid'; p.prepend(grid); p.prepend(bar);
     p.addEventListener('click', e => { const t = e.target.closest('[data-lc]'); if (!t) return; const v = t.dataset.lc; if (v.startsWith('view:')){ try { localStorage.setItem(this.VKEY, v.slice(5)); } catch(x){} this._sig = ''; this.sync(); } else { e.preventDefault(); this.press(v); } });
-    grid.addEventListener('mouseover', e => { const t = e.target.closest('[data-lcid]'); if (t) this.layerTip(t.dataset.lcid, t); }); grid.addEventListener('mouseleave', () => this.hide());
+    this.studioOrder(); this.dragInit(grid);
+    grid.addEventListener('mouseover', e => { if (this._drag) return; const t = e.target.closest('[data-lcid]'); if (t) this.layerTip(t.dataset.lcid, t); }); grid.addEventListener('mouseleave', () => this.hide());
     grid.addEventListener('focusin', e => { const t = e.target.closest('[data-lcid]'); if (t) this.layerTip(t.dataset.lcid, t); }); grid.addEventListener('focusout', () => this.hide());
     this.sync(); return true; },
   layersShown(){ const p = this.$('tab-tslayers'); return !!p && p.classList.contains('active') && p.offsetParent !== null && this.on(); },
@@ -119,7 +144,7 @@ const SidePeek = window.SidePeek = {
         if (em && !x.verdict){ const wait = x.ticked && !x.on; em.className = wait ? 'wait' : ''; em.textContent = wait ? 'ticked · Studio look is off' : ''; }
         if (!o || o.draw.join() !== x.draw.join()){ try { this.draw(el.querySelector('canvas'), x.draw, false); } catch(e){} } } return; }
     this._dsig = dsig; let g = '', h = ''; for (const x of L){ if (x.group !== g){ g = x.group; h += '<h5 class="lcH">' + g + (g === 'Scenes' ? ' <em>one press sets the whole chart</em>' : g === 'Studio look' ? ' <em>the layers of the Studio look</em>' : ' <em>Classic’s own overlays</em>') + '</h5>'; }
-      h += '<div class="tsCard lcCard' + (x.on ? ' on' : '') + (x.ticked && !x.on ? ' ticked' : '') + '" data-lcid="' + this.esc(x.id) + '"><button type="button" class="tsPic" data-lc="' + this.esc(x.id) + '" aria-pressed="' + (x.on ? 'true' : 'false') + '" title="' + (x.id.startsWith('scene:') ? 'Set the chart to this scene' : x.on ? 'Take it off the chart' : 'Put it on the chart') + '"><canvas></canvas><span class="tsOn">' + (x.on ? 'ON' : x.id.startsWith('scene:') ? 'SET' : '+') + '</span></button>' +
+      h += '<div class="tsCard lcCard' + (this.fixed(x.id) ? '' : ' lcMove') + (x.on ? ' on' : '') + (x.ticked && !x.on ? ' ticked' : '') + '" data-lcid="' + this.esc(x.id) + '"><button type="button" class="tsPic" data-lc="' + this.esc(x.id) + '" aria-pressed="' + (x.on ? 'true' : 'false') + '" title="' + (x.id.startsWith('scene:') ? 'Set the chart to this scene' : x.on ? 'Take it off the chart' : 'Put it on the chart') + '"><canvas></canvas><span class="tsOn">' + (x.on ? 'ON' : x.id.startsWith('scene:') ? 'SET' : '+') + '</span></button>' +
         '<div class="tsMeta"><b>' + this.esc(x.name) + '</b><span class="lcFoot">' + (x.verdict ? '<em class="' + (x.verdict === 'no edge' ? 'no' : 'ok') + '" title="What the test of this signal found. A layer can still help you see the market.">' + x.verdict + '</em>' : x.ticked && !x.on ? '<em class="wait">ticked · Studio look is off</em>' : '<em></em>') + (x.cfg ? '<button type="button" data-lc="cfg:' + this.esc(x.cfg) + '" title="Settings of this overlay">⚙</button>' : '') + '</span></div></div>'; }
     grid.innerHTML = h || '<div class="tsEmpty">The layers are not ready yet.</div>';
     const cards = [...grid.querySelectorAll('.lcCard')]; let i = 0; const run = () => { if (!this.layersShown()) return; for (let k = 0; k < 6 && i < cards.length; k++, i++){ const x = L.find(y => y.id === cards[i].dataset.lcid); try { this.draw(cards[i].querySelector('canvas'), x ? x.draw : [], false); } catch(e){} } if (i < cards.length) setTimeout(run, 0); }; run(); },
