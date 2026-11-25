@@ -4,7 +4,8 @@
              (Sydney, Tokyo, London, New York, each in its own city's time, summer time included),
              which are open now, and the next opening or closing. Click: Classic's full Market Clock.
    HEATMAP   a side tab: every broker market as a tile, coloured by today's % change, in groups.
-             Hover: price and the last 24 hours as a line. Click: that chart. Expand: the full Heatmap.
+             Hover: price and the last 24 hours as a line. Click keeps that overview; double-click opens
+             the chart. Expand: the full Heatmap.
    NEWS      a side tab of its own, full height: news about the open chart first, then the rest;
              filters This market · High impact · All. While it is open, the stream at the foot of the
              panel steps aside so the same headlines do not show twice.
@@ -32,9 +33,11 @@ const SidePanels = {
     const ph = document.createElement('div'); ph.id = 'tab-tsheat'; ph.className = 'sidePanel tsOnlyFace'; ph.innerHTML = '<div class="tsHHead"><span id="tsHSum"></span><button type="button" data-th="watch" title="Only the markets in your watchlist">Watchlist</button><button type="button" data-th="expand" title="The full Heatmap, full width">Expand ⤢</button></div><div class="tsHBody" id="tsHBody"></div>'; body.appendChild(ph);
     const pn = document.createElement('div'); pn.id = 'tab-tsnews'; pn.className = 'sidePanel tsOnlyFace'; pn.innerHTML = '<div class="tsNfHead" id="tsNfHead"></div><div class="tsNfBody" id="tsNfBody"></div>'; body.appendChild(pn);
     st.addEventListener('click', () => setTimeout(() => this.sync(), 20));
-    ph.addEventListener('click', e => { const t = e.target.closest('[data-th]'), tile = e.target.closest('[data-sym]'); if (tile){ this.open(tile.dataset.sym); return; } if (!t) return;
+    ph.addEventListener('click', e => { const t = e.target.closest('[data-th]'), tile = e.target.closest('[data-sym]'); if (tile){ this._tipPin = this._tipPin === tile.dataset.sym ? '' : tile.dataset.sym; ph.querySelectorAll('[data-sym].pin').forEach(x => x.classList.remove('pin')); if (this._tipPin){ tile.classList.add('pin'); this.tip(tile); } return; } if (!t) return;
       if (t.dataset.th === 'expand'){ if (typeof Face !== 'undefined') Face.panel('heatmap'); } else if (t.dataset.th === 'watch'){ this.watchOnly = !this.watchOnly; t.classList.toggle('on', this.watchOnly); this.heat(); } });
-    ph.addEventListener('mouseover', e => { const tile = e.target.closest('[data-sym]'); if (tile) this.tip(tile); }); ph.addEventListener('mouseleave', () => { const t = this.$('tsHTip'); if (t) t.hidden = true; });
+    ph.addEventListener('dblclick', e => { const tile = e.target.closest('[data-sym]'); if (!tile) return; e.preventDefault(); this._tipPin = ''; const t = this.$('tsHTip'); if (t) t.hidden = true; this.open(tile.dataset.sym); });
+    ph.addEventListener('keydown', e => { const tile = e.target.closest && e.target.closest('[data-sym]'); if (tile && e.key === 'Enter'){ e.preventDefault(); this.open(tile.dataset.sym); } });
+    ph.addEventListener('mouseover', e => { const tile = e.target.closest('[data-sym]'); if (tile) this.tip(tile); }); ph.addEventListener('mouseleave', () => { const t = this.$('tsHTip'); if (!t) return; const pin = this._tipPin && ph.querySelector('[data-sym="' + (window.CSS && CSS.escape ? CSS.escape(this._tipPin) : this._tipPin) + '"]'); if (pin) this.tip(pin); else t.hidden = true; });
     pn.addEventListener('click', e => { const f = e.target.closest('[data-nf]'); if (f){ this.nf = f.dataset.nf; this.newsTab(); } });
     const tip = document.createElement('div'); tip.id = 'tsHTip'; tip.hidden = true; document.body.appendChild(tip);
     try { BUS.on('symbol', () => setTimeout(() => this.sync(), 700)); } catch(e){}
@@ -49,7 +52,7 @@ const SidePanels = {
     const h = document.createElement('div'); h.id = 'tsSideHandle'; h.className = 'tsOnlyFace'; h.title = 'The side panel: move the mouse here'; h.innerHTML = '<i></i><span>◀</span>'; document.body.appendChild(h);
     h.addEventListener('mouseenter', () => this.peek(true)); h.addEventListener('click', () => this.peek(true));
     sb.addEventListener('mouseenter', () => { clearTimeout(this._hideT); }); sb.addEventListener('mouseleave', () => this.later());
-    document.addEventListener('mousemove', e => { if (this.auto && !this.open && e.clientX >= window.innerWidth - 6 && document.documentElement.dataset.tmroom === 'chart') this.peek(true); }, { passive: true });
+    document.addEventListener('mousemove', e => { if (this.auto && !this.peekOn && e.clientX >= window.innerWidth - 6 && document.documentElement.dataset.tmroom === 'chart') this.peek(true); }, { passive: true });
     window.addEventListener('resize', () => { if (this.auto) this.place(); });
     let on = false; try { on = localStorage.getItem(this.AKEY) === '1'; } catch(e){} this.setAuto(on, true); },
   setAuto(on, quiet){ this.auto = on; try { localStorage.setItem(this.AKEY, on ? '1' : '0'); } catch(e){} const H = document.documentElement; H.classList.toggle('tsSideAuto', on); this.peek(false);
@@ -57,7 +60,7 @@ const SidePanels = {
     if (on) this.place(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60); if (!quiet && typeof toast === 'function') toast(on ? 'Side panel: auto-hide. Move the mouse to the right edge to bring it in.' : 'Side panel: pinned', 'info'); },
   /* the panel floats over the chart, from the top of the work area to its foot */
   place(){ const m = this.$('main'); if (!m) return; const r = m.getBoundingClientRect(), H = document.documentElement.style; H.setProperty('--tsSideTop', (r.top + 10) + 'px'); H.setProperty('--tsSideBot', Math.max(8, window.innerHeight - r.bottom + 10) + 'px'); },
-  peek(on){ if (on && !this.auto) return; clearTimeout(this._hideT); this.open = on; if (on) this.place(); document.documentElement.classList.toggle('tsSideOpen', !!on); if (on) setTimeout(() => this.sync(), 50); },
+  peek(on){ if (on && !this.auto) return; clearTimeout(this._hideT); this.peekOn = on; if (on) this.place(); document.documentElement.classList.toggle('tsSideOpen', !!on); if (on) setTimeout(() => this.sync(), 50); },
   later(){ if (!this.auto) return; clearTimeout(this._hideT); this._hideT = setTimeout(() => { const sb = this.$('sidebar'), a = document.activeElement; if (sb && (sb.matches(':hover') || (a && sb.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)))) return this.later(); this.peek(false); }, 450); },
   open(sym){ try { if (typeof Face !== 'undefined' && Face.room !== 'chart') Face.go('chart'); typeof WorkspaceUI !== 'undefined' ? WorkspaceUI.openChart(sym) : App.setSymbol(sym); } catch(e){} },
   active(id){ const p = this.$('tab-' + id); return !!p && p.classList.contains('active') && p.offsetParent !== null; },
@@ -138,14 +141,14 @@ const SidePanels = {
     this.$('tsHSum').innerHTML = '<b class="up">' + up + '</b> up · <b class="dn">' + (list.length - up) + '</b> down today';
     el.innerHTML = keys.map(k => { const L = by[k].sort((a, b) => b.pct - a.pct), avg = L.reduce((s, x) => s + x.pct, 0) / L.length;
       return '<section><h4>' + this.esc((G[k] && G[k].label) || k) + '<em class="' + (avg >= 0 ? 'up' : 'dn') + '">' + (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%</em><small>' + L.length + '</small></h4><div class="tsHGrid">' +
-        L.slice(0, 40).map(x => '<button type="button" data-sym="' + this.esc(x.sym) + '" style="background:' + this.col(x.pct) + '"' + (x.sym === STORE.symbol ? ' class="here"' : '') + '><b>' + this.esc(this.base(x.sym)) + '</b><span>' + (x.pct >= 0 ? '+' : '') + x.pct.toFixed(2) + '%</span></button>').join('') + (L.length > 40 ? '<i>+' + (L.length - 40) + ' more in Expand</i>' : '') + '</div></section>'; }).join(''); },
+        L.slice(0, 40).map(x => '<button type="button" data-sym="' + this.esc(x.sym) + '" style="background:' + this.col(x.pct) + '"' + ' class="' + (x.sym === STORE.symbol ? 'here' : '') + (x.sym === this._tipPin ? ' pin' : '') + '" title="Double-click: open this chart"><b>' + this.esc(this.base(x.sym)) + '</b><span>' + (x.pct >= 0 ? '+' : '') + x.pct.toFixed(2) + '%</span></button>').join('') + (L.length > 40 ? '<i>+' + (L.length - 40) + ' more in Expand</i>' : '') + '</div></section>'; }).join(''); },
   spark: {},
   async tip(tile){ const t = this.$('tsHTip'), sym = tile.dataset.sym, r = tile.getBoundingClientRect(), x = this.tiles().find(y => y.sym === sym); if (!t || !x) return; this._tipSym = sym;
     t.hidden = false; t.style.top = Math.max(60, Math.min(window.innerHeight - 150, r.top - 20)) + 'px'; t.style.left = Math.max(80, r.left - 250) + 'px';
     const draw = arr => { if (!arr || arr.length < 2) return ''; const lo = Math.min(...arr), hi = Math.max(...arr), W = 210, Hh = 50; return '<svg viewBox="0 0 ' + W + ' ' + Hh + '" preserveAspectRatio="none"><polyline fill="none" stroke="' + (arr[arr.length - 1] >= arr[0] ? '#3DDC97' : '#FF6B7A') + '" stroke-width="1.6" points="' + arr.map((v, i) => (i / (arr.length - 1) * W).toFixed(1) + ',' + (Hh - 3 - (v - lo) / ((hi - lo) || 1) * (Hh - 6)).toFixed(1)).join(' ') + '"/></svg>'; };
     const head = '<b>' + this.esc(this.base(sym)) + '</b><span class="' + (x.pct >= 0 ? 'up' : 'dn') + '">' + (x.pct >= 0 ? '+' : '') + x.pct.toFixed(2) + '% today</span>' + (x.px ? '<em>' + Number(x.px).toLocaleString('en-US', { maximumFractionDigits: 5 }) + '</em>' : '');
-    const c = this.spark[sym]; t.innerHTML = head + (c && Date.now() - c.at < 300000 ? draw(c.v) + '<small>last 24 hours · click to open the chart</small>' : '<small>reading the last 24 hours…</small>');
-    if (c && Date.now() - c.at < 300000) return; try { const b = await API.klines(sym, '1h', 24); this.spark[sym] = { at: Date.now(), v: b.map(k => k.close) }; if (this._tipSym === sym && !t.hidden) t.innerHTML = head + draw(this.spark[sym].v) + '<small>last 24 hours · click to open the chart</small>'; } catch(e){} },
+    const c = this.spark[sym]; t.innerHTML = head + (c && Date.now() - c.at < 300000 ? draw(c.v) + '<small>last 24 hours · double-click opens the chart</small>' : '<small>reading the last 24 hours…</small>');
+    if (c && Date.now() - c.at < 300000) return; try { const b = await API.klines(sym, '1h', 24); this.spark[sym] = { at: Date.now(), v: b.map(k => k.close) }; if (this._tipSym === sym && !t.hidden) t.innerHTML = head + draw(this.spark[sym].v) + '<small>last 24 hours · double-click opens the chart</small>'; } catch(e){} },
 
   /* ---------- the news tab ---------- */
   newsTab(){ const head = this.$('tsNfHead'), body = this.$('tsNfBody'); if (!body || typeof Side === 'undefined') return; const all = Side.news(), base = this.base(STORE.symbol), rel = all.filter(n => n.rel), high = all.filter(n => n.impact >= 3);

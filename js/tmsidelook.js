@@ -1,0 +1,85 @@
+/* ASTRA · new look — the side panel's tab strip, easier to see and to hit.
+
+     SIZE      the strip comes in three sizes: Small (one row, as it was), Medium (two rows, larger
+               buttons; the one it comes with) and Large (three rows, each tab with its name). The
+               small button beside the pin switches between them; the choice is remembered.
+     ICONS     each tab has its own picture in its own colours, so it is found at a glance: a star for
+               the watchlist, a dial for Signals, a green and a red arrow for Trade, and so on. Classic
+               keeps its line icons.
+     WATCHLIST rest the mouse on a market: a small card shows which way the candle that is forming now
+               points on 5m, 15m, 1h, 4h and 1d, with the last candles of each drawn small.
+
+   It draws and reads candles (GET only). It places nothing and changes nothing but the strip's size. */
+'use strict';
+const SideLook = window.SideLook = {
+  KEY: 'astra_sidetabs_size', SIZES: ['s', 'm', 'l'], SAY: { s: 'Small · one row', m: 'Medium · two rows', l: 'Large · with names' },
+  NAME: { watch: 'Watch', tssig: 'Signals', tstrade: 'Trade', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours', tsclock: 'Clock', tsheat: 'Heatmap', tsnews: 'News', alerts: 'Alerts', portfolio: 'Paper', ai: 'Observer', notes: 'Notes', tslayers: 'Layers' },
+  TFS: ['5m', '15m', '1h', '4h', '1d'], C: {},
+  $(id){ return document.getElementById(id); },
+  esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
+  on(){ return document.documentElement.dataset.face === 'tm'; },
+
+  /* ---------- the pictures ---------- */
+  g(id, a, b){ return '<linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + a + '"/><stop offset="1" stop-color="' + b + '"/></linearGradient>'; },
+  svg(k, defs, body){ return '<svg class="stIco" data-ico="' + k + '" viewBox="0 0 24 24" aria-hidden="true"><defs>' + defs + '</defs>' + body + '</svg>'; },
+  icons(){ if (this._I) return this._I; const g = (i, a, b) => this.g('si' + i, a, b), u = i => 'url(#si' + i + ')', I = {};
+    I.watch = this.svg('watch', g('w', '#FFE27A', '#F59E0B'), '<path d="M12 3.4l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17.2l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" fill="#7A4A05" transform="translate(0 1)"/><path d="M12 2.6l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.4l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" fill="' + u('w') + '"/><path d="M12 5.2l1.5 3.3-3.6.5z" fill="#FFF6CF" opacity=".8"/>');
+    I.tssig = this.svg('tssig', '', '<path d="M3.5 16A8.5 8.5 0 0 1 7.75 8.64" fill="none" stroke="#FF5C6C" stroke-width="3.8" stroke-linecap="round"/><path d="M16.25 8.64A8.5 8.5 0 0 1 20.5 16" fill="none" stroke="#2FD38A" stroke-width="3.8" stroke-linecap="round"/><path d="M8.6 8.2A8.5 8.5 0 0 1 15.4 8.2" fill="none" stroke="#FFC24B" stroke-width="3.8"/><path d="M12 16l4.8-6.2" stroke="#F4F8FF" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16" r="2.3" fill="#F4F8FF"/><circle cx="12" cy="16" r=".9" fill="#0B1322"/><path d="M5 20.4h14" stroke="#5E7399" stroke-width="1.6" stroke-linecap="round"/>');
+    I.tstrade = this.svg('tstrade', g('tu', '#5BF0AE', '#12A869') + g('td', '#FF8C98', '#E0354B'), '<path d="M7 3.2l4.6 6.2H8.9V20H5.1V9.4H2.4z" fill="' + u('tu') + '"/><path d="M17 20.8l-4.6-6.2h2.7V4h3.8v10.6h2.7z" fill="' + u('td') + '"/><path d="M7 4.9l2.2 3H6.3z" fill="#D8FFEC" opacity=".7"/>');
+    I.sbots = this.svg('sbots', g('b', '#B9A2FF', '#6D4BE0'), '<path d="M12 7.4V4.6" stroke="#C9B8FF" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="3.7" r="1.7" fill="#FFC24B"/><rect x="1.8" y="11.2" width="2.6" height="4.6" rx="1.2" fill="#8E73F2"/><rect x="19.6" y="11.2" width="2.6" height="4.6" rx="1.2" fill="#8E73F2"/><rect x="4" y="8.2" width="16" height="12.4" rx="4.2" fill="#3F2A95"/><rect x="4" y="7.2" width="16" height="12.4" rx="4.2" fill="' + u('b') + '"/><circle cx="8.9" cy="12.6" r="2.2" fill="#F4F8FF"/><circle cx="15.1" cy="12.6" r="2.2" fill="#F4F8FF"/><circle cx="8.9" cy="12.8" r="1" fill="#1B1240"/><circle cx="15.1" cy="12.8" r="1" fill="#1B1240"/><rect x="9" y="16.1" width="6" height="1.5" rx=".75" fill="#2A1B6B"/>');
+    I.book = this.svg('book', '', '<rect x="8" y="3.4" width="3.4" height="3.4" rx="1" fill="#2FD38A"/><rect x="6" y="8" width="5.4" height="3.4" rx="1" fill="#2FD38A"/><rect x="4" y="12.6" width="7.4" height="3.4" rx="1" fill="#2FD38A"/><rect x="2" y="17.2" width="9.4" height="3.4" rx="1" fill="#2FD38A"/><rect x="12.6" y="3.4" width="9.4" height="3.4" rx="1" fill="#FF5C6C"/><rect x="12.6" y="8" width="7.4" height="3.4" rx="1" fill="#FF5C6C"/><rect x="12.6" y="12.6" width="5.4" height="3.4" rx="1" fill="#FF5C6C"/><rect x="12.6" y="17.2" width="3.4" height="3.4" rx="1" fill="#FF5C6C"/>');
+    I.ind = this.svg('ind', g('i', '#1E3A66', '#0F2140'), '<rect x="2.2" y="3.6" width="19.6" height="16.8" rx="3.6" fill="' + u('i') + '" stroke="#3E639C" stroke-width="1"/><path d="M4.6 9.4c2.6 0 3.6 6 6.2 6s3.4-5.2 8.6-5.6" fill="none" stroke="#FFB648" stroke-width="2" stroke-linecap="round"/><path d="M4.6 15.4c2.4 0 3-7.2 5.6-7.2s3 6.2 5.4 6.2 2.4-3.6 3.8-3.6" fill="none" stroke="#4FD8F7" stroke-width="2" stroke-linecap="round"/>');
+    const ring = ['#FFE08A', '#FFC24B', '#FF9A3D', '#FF6A4D', '#D94A6B', '#7D4BB5', '#4B5FC4', '#FFD166'], Cc = 2 * Math.PI * 7.6, sg = Cc / 8;
+    I.heat = this.svg('heat', '', ring.map((c, k) => '<circle cx="12" cy="12" r="7.6" fill="none" stroke="' + c + '" stroke-width="4.4" stroke-dasharray="' + (sg - 1).toFixed(2) + ' ' + (Cc - sg + 1).toFixed(2) + '" transform="rotate(' + (k * 45 - 90) + ' 12 12)"/>').join('') + '<circle cx="12" cy="12" r="2.2" fill="#F4F8FF"/>');
+    I.tsclock = this.svg('tsclock', g('c', '#7CC4FF', '#2F6BE0'), '<circle cx="12" cy="12.8" r="9.2" fill="#173A86"/><circle cx="12" cy="12" r="9.2" fill="' + u('c') + '"/><circle cx="12" cy="12" r="6.9" fill="#F4F8FF"/><path d="M12 7.6V12l3.1 2" fill="none" stroke="#16306E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="1.1" fill="#FF5C6C"/>');
+    I.tsheat = this.svg('tsheat', '', '<rect x="2.4" y="2.8" width="10" height="18.4" rx="2.2" fill="#22C07A"/><rect x="13.8" y="2.8" width="7.8" height="7.4" rx="2" fill="#FF5C6C"/><rect x="13.8" y="11.6" width="7.8" height="4.2" rx="1.6" fill="#7DE3B0"/><rect x="13.8" y="17.2" width="7.8" height="4" rx="1.6" fill="#B92B40"/><rect x="4" y="4.4" width="3.4" height="1.6" rx=".8" fill="#D8FFEC" opacity=".7"/>');
+    I.tsnews = this.svg('tsnews', g('n', '#FFFFFF', '#B9C8E6'), '<path d="M4 4.2h13.4v15.6H6.6A2.6 2.6 0 0 1 4 17.2z" fill="' + u('n') + '"/><path d="M17.4 8.6H21v8.6a2.6 2.6 0 0 1-3.6 2.4z" fill="#8FA3CC"/><rect x="6.2" y="6.4" width="9" height="2.4" rx=".8" fill="#17223B"/><rect x="6.2" y="10.6" width="4" height="4" rx=".8" fill="#2FA8E0"/><path d="M11.6 11.2h3.6M11.6 13.6h3.6M6.2 16.8h9" stroke="#5E7399" stroke-width="1.4" stroke-linecap="round"/>');
+    I.alerts = this.svg('alerts', g('a', '#FFE27A', '#F5A300'), '<path d="M12 21.4a2.4 2.4 0 0 0 2.4-2.4H9.6a2.4 2.4 0 0 0 2.4 2.4z" fill="#C97B00"/><path d="M12 3.4c-3.4 0-5.6 2.6-5.6 6v3.4L4.2 16.6c-.4.8.1 1.6 1 1.6h13.6c.9 0 1.4-.8 1-1.6l-2.2-3.8V9.4c0-3.4-2.2-6-5.6-6z" fill="' + u('a') + '"/><path d="M12 2.2v1.6" stroke="#F5A300" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="6" r="3.2" fill="#FF4D5E" stroke="#0B1322" stroke-width="1.2"/>');
+    I.portfolio = this.svg('portfolio', g('p', '#6FE7A8', '#159E63'), '<rect x="2" y="6.4" width="17.6" height="11" rx="2.2" fill="#0C6B41"/><rect x="2" y="5.4" width="17.6" height="11" rx="2.2" fill="' + u('p') + '"/><circle cx="10.8" cy="10.9" r="3" fill="#0E7A4B"/><path d="M4.4 8.2h1.8M15.4 13.6h1.8" stroke="#0E7A4B" stroke-width="1.6" stroke-linecap="round"/><circle cx="17.6" cy="16.6" r="4.6" fill="#B87900"/><circle cx="17.6" cy="15.9" r="4.6" fill="#FFC83D"/><path d="M17.6 13.6v4.6M16.3 14.9h2.1a1 1 0 0 1 0 2h-1.6" fill="none" stroke="#8A5A00" stroke-width="1.3" stroke-linecap="round"/>');
+    I.ai = this.svg('ai', g('e', '#6FE3FF', '#7B5CF0'), '<path d="M1.8 12c2.7-4.8 6.2-7.2 10.2-7.2s7.5 2.4 10.2 7.2c-2.7 4.8-6.2 7.2-10.2 7.2S4.5 16.8 1.8 12z" fill="#F4F8FF"/><circle cx="12" cy="12" r="4.9" fill="' + u('e') + '"/><circle cx="12" cy="12" r="2.2" fill="#0B1322"/><circle cx="13.6" cy="10.3" r="1.1" fill="#FFFFFF"/><path d="M1.8 12c2.7-4.8 6.2-7.2 10.2-7.2s7.5 2.4 10.2 7.2" fill="none" stroke="#7B5CF0" stroke-width="1.4" stroke-linecap="round"/>');
+    I.notes = this.svg('notes', g('o', '#FFF08A', '#FFC93D'), '<path d="M4 3.4h16v11.2L14.6 20.6H4z" fill="' + u('o') + '"/><path d="M20 14.6h-5.4v6z" fill="#D99A00"/><path d="M7 8h10M7 11.4h10M7 14.8h5" stroke="#8A6400" stroke-width="1.6" stroke-linecap="round"/>');
+    I.tslayers = this.svg('tslayers', '', '<path d="M12 11.6l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#7B5CF0"/><path d="M12 7.1l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#2FB8E6"/><path d="M12 2.6l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#FFC24B"/><path d="M12 4.4l5.2 2.7-5.2 1.2z" fill="#FFF3C4" opacity=".7"/>');
+    return (this._I = I); },
+  dress(){ const st = this.$('sideTabs'); if (!st) return; const I = this.icons();
+    st.querySelectorAll('button[data-tab]').forEach(b => { const k = b.dataset.tab; if (I[k] && !b.querySelector(':scope > .stIco')) b.insertAdjacentHTML('afterbegin', I[k]); const n = this.NAME[k] || ''; if (n && b.dataset.stn !== n) b.dataset.stn = n; });
+    const ctl = st.querySelector('.sideCtl'); if (ctl && !this.$('stSize')){ const b = document.createElement('button'); b.type = 'button'; b.id = 'stSize'; b.className = 'tsOnlyFace';
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="18" height="5" rx="1.5"/></svg>';
+      ctl.prepend(b); b.addEventListener('click', e => { e.stopPropagation(); this.cycle(); }); this.say(); } },
+
+  /* ---------- the size ---------- */
+  size(){ let v = 'm'; try { v = localStorage.getItem(this.KEY) || 'm'; } catch(e){} return this.SIZES.includes(v) ? v : 'm'; },
+  set(v, quiet){ if (!this.SIZES.includes(v)) return; try { localStorage.setItem(this.KEY, v); } catch(e){} document.documentElement.dataset.sidetabs = v; this.say(); setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+    if (!quiet && typeof toast === 'function') toast('Side tabs: ' + this.SAY[v], 'info'); },
+  cycle(){ const i = this.SIZES.indexOf(this.size()); this.set(this.SIZES[(i + 1) % this.SIZES.length]); },
+  say(){ const b = this.$('stSize'); if (b) b.title = 'Size of the tabs: ' + this.SAY[this.size()] + '. Click for the next size.'; },
+
+  /* ---------- the watchlist: which way the forming candle points, timeframe by timeframe ---------- */
+  symOf(row){ if (!row) return ''; if (row.dataset.sym) return row.dataset.sym; try { for (const k in Watch.rows) if (Watch.rows[k] === row) return k; } catch(e){} return ''; },
+  ttl(tf){ return tf === '5m' || tf === '15m' ? 20000 : 60000; },
+  async load(sym){ if (this._busy) { this._next = sym; return; } this._busy = true;
+    try { for (const tf of this.TFS){ if (this._sym !== sym) break; const k = sym + '|' + tf, c = this.C[k]; if (c && Date.now() - c.at < this.ttl(tf)) continue;
+        try { const get = () => API.klines(sym, tf, 12), bars = await (typeof Autopsy !== 'undefined' && Autopsy.one ? Autopsy.one(get) : get()); this.C[k] = { at: Date.now(), bars: (bars || []).slice(-10) }; } catch(e){ this.C[k] = { at: Date.now() - this.ttl(tf) + 8000, bars: [] }; }
+        if (this._sym === sym) this.paintTip(); } }
+    finally { this._busy = false; const n = this._next; this._next = ''; if (n && n === this._sym) this.load(n); } },
+  candles(bars){ if (!bars || !bars.length) return ''; const W = 64, H = 26, n = bars.length, hi = Math.max(...bars.map(b => b.high)), lo = Math.min(...bars.map(b => b.low)), y = v => (1 + (hi - v) / ((hi - lo) || 1) * (H - 2)).toFixed(1), w = W / 10;
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="swC">' + bars.map((b, i) => { const x = (10 - n + i) * w, up = b.close >= b.open, c = up ? '#3DDC97' : '#FF6B7A', t = Math.min(+y(b.open), +y(b.close)), h = Math.max(1, Math.abs(+y(b.open) - +y(b.close)));
+      return '<path d="M' + (x + w / 2).toFixed(1) + ' ' + y(b.high) + 'V' + y(b.low) + '" stroke="' + c + '" stroke-width="1"/><rect x="' + (x + 1).toFixed(1) + '" y="' + t.toFixed(1) + '" width="' + (w - 2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx=".6" fill="' + c + '"' + (i === n - 1 ? ' stroke="#F4F8FF" stroke-width=".7"' : '') + '/>'; }).join('') + '</svg>'; },
+  paintTip(){ const t = this.$('swTip'), sym = this._sym; if (!t || !sym) return; const q = (typeof STORE !== 'undefined' && STORE.tickers.get(sym)) || {}, name = typeof baseAsset === 'function' ? baseAsset(sym) : sym; let up = 0, dn = 0, got = 0;
+    const rows = this.TFS.map(tf => { const c = this.C[sym + '|' + tf], bars = c && c.bars; if (!c) return '<div class="swRow"><b>' + tf + '</b><span class="swWait">reading…</span></div>'; if (!bars.length) return '<div class="swRow"><b>' + tf + '</b><span class="swWait">no candles</span></div>';
+      const l = bars[bars.length - 1], d = l.close > l.open ? 1 : l.close < l.open ? -1 : 0; let run = 1; for (let i = bars.length - 2; i >= 0; i--){ const x = bars[i].close > bars[i].open ? 1 : bars[i].close < bars[i].open ? -1 : 0; if (x !== d || !d) break; run++; }
+      got++; if (d > 0) up++; else if (d < 0) dn++; const pc = l.open ? (l.close / l.open - 1) * 100 : 0;
+      return '<div class="swRow ' + (d > 0 ? 'up' : d < 0 ? 'dn' : '') + '"><b>' + tf + '</b>' + this.candles(bars) + '<i>' + (d > 0 ? '▲' : d < 0 ? '▼' : '•') + '</i><em>' + (pc >= 0 ? '+' : '−') + Math.abs(pc).toFixed(2) + '%</em><small>' + (d && run > 1 ? run + ' in a row' : d ? 'first' : 'flat') + '</small></div>'; }).join('');
+    const pct = Number.isFinite(q.pct) ? q.pct : null, px = q.last || q.price;
+    t.innerHTML = '<div class="swHead"><b>' + this.esc(name) + '</b>' + (px ? '<em>' + (typeof fmtPrice === 'function' ? fmtPrice(px) : px) + '</em>' : '') + (pct != null ? '<span class="' + (pct >= 0 ? 'up' : 'dn') + '">' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% today</span>' : '') + '</div>' +
+      '<div class="swSum">' + (got ? 'The candle forming now: <b class="up">' + up + ' up</b> · <b class="dn">' + dn + ' down</b> of ' + got + ' timeframes' : 'Reading the candles…') + '</div>' + rows + '<small class="swFoot">The white-edged candle is the one still forming. It describes now; it is not a forecast.</small>'; },
+  tip(row){ const sym = this.symOf(row), t = this.$('swTip'); if (!sym || !t) return; if (this._sym === sym && !t.hidden) return; this._sym = sym; const r = row.getBoundingClientRect(), sb = this.$('sidebar').getBoundingClientRect();
+    t.hidden = false; t.style.top = Math.max(64, Math.min(window.innerHeight - 250, r.top - 30)) + 'px'; t.style.left = Math.max(8, sb.left - 268) + 'px'; this.paintTip(); this.load(sym); },
+  hide(){ clearTimeout(this._ht); this._sym = ''; const t = this.$('swTip'); if (t) t.hidden = true; },
+  watch(){ const wb = this.$('watchBody'); if (!wb || wb._swOn) return; wb._swOn = true; const t = document.createElement('div'); t.id = 'swTip'; t.hidden = true; document.body.appendChild(t);
+    wb.addEventListener('mouseover', e => { if (!this.on()) return; const row = e.target.closest('.wrow'); clearTimeout(this._ht); if (!row) return; this._ht = setTimeout(() => this.tip(row), this._sym ? 90 : 320); });
+    wb.addEventListener('mouseleave', () => this.hide()); wb.addEventListener('mousedown', () => this.hide()); wb.addEventListener('scroll', () => this.hide(), true);
+    setInterval(() => { if (this._sym && this.$('swTip') && !this.$('swTip').hidden) this.load(this._sym); }, 10000); },
+
+  init(){ document.documentElement.dataset.sidetabs = this.size(); this.dress(); this.watch(); const st = this.$('sideTabs'); if (st && !this._mo){ this._mo = new MutationObserver(() => { clearTimeout(this._dt); this._dt = setTimeout(() => this.dress(), 80); }); this._mo.observe(st, { childList: true, subtree: true }); } return !!st; },
+};
+(function start(n){ let ok = false; try { ok = SideLook.init(); } catch(e){ console.warn('side look', e); } if (n < 30) setTimeout(() => start(n + 1), ok ? 2000 : 400); })(0);

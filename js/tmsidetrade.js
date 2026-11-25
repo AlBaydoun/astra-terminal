@@ -56,8 +56,8 @@ const SideTrade = window.SideTrade = {
     /* ▾ opens a card's controls; a press anywhere else on it shows the trade on the chart, as the chart's own list does */
     const more = e.target.closest('#tab-tstrade .trMore'); if (more){ const card = more.closest('.otCard'), live = card.hasAttribute('data-ldpos'), k = live ? card.dataset.ldpos : card.dataset.ot, set = live ? this.openLive : this.open, isOpen = card.classList.contains('trOpen'); if (isOpen) set.delete(k); else set.add(k); card.classList.toggle('trOpen', !isOpen); return; }
     /* a real position: a press shows it on the chart, as its own On chart button does */
-    const lc = e.target.closest('#tsLiveCards .ldPos'); if (lc){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit')) return; try { LiveDesk.showOnChart(lc.dataset.ldpos); } catch(x){} return; }
-    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection')) return; this.focus(card.dataset.ot); },
+    const lc = e.target.closest('#tsLiveCards .ldPos'); if (lc){ if (e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .otEdit, .tnBox')) return; try { LiveDesk.showOnChart(lc.dataset.ldpos); } catch(x){} return; }
+    const card = e.target.closest('#tsTradeCards .otCard'); if (!card || e.target.closest('button, input, select, textarea, a, label, .wsPriceRail, .wsTradeSection, .tnBox')) return; this.focus(card.dataset.ot); },
   focus(k){ if (typeof PosLines === 'undefined' || !k) return; const i = k.indexOf(':'), bot = k.slice(0, i), id = /^T/.test(k.slice(i + 1)) ? k.slice(i + 1) : +k.slice(i + 1); const row = OpenTrades.all().find(r => r.bot + ':' + r.p.id === k); if (!row) return;
     const here = this.base(STORE.symbol) === this.base(row.p.sym);
     if (!here){ PosLines.show(bot, id); setTimeout(() => { try { if (PosLines.rows().length > 1) PosLines.toggleSolo(k); } catch(e){} this.dress(); }, 1500); return; }
