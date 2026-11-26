@@ -59,7 +59,7 @@ const TmKeys = {
       add('side:' + t, 'Side panel', full.split(':')[0].split('—')[0].trim() || txt(b), () => this.side(t), full); });
     document.querySelectorAll('#botTabs [data-tab]').forEach(b => { const n = b.firstChild && b.firstChild.nodeType === 3 ? b.firstChild.textContent : txt(b);
       add('panel:' + b.dataset.tab, 'Lower panel', n.replace(/^◉\s*/, '').replace(/\s+\d+\s*$/, '').trim().toLowerCase().replace(/^./, c => c.toUpperCase()).replace(/&amp;/g, '&'), () => { if (F) F.panel(b.dataset.tab); }, b.title); });
-    document.querySelectorAll('#tmMarkBar > button[id]').forEach(b => { if (/Car$/.test(b.id)) return;
+    document.querySelectorAll('#tmMarkBar > button[id]').forEach(b => { if (/Car$/.test(b.id) || b.id === 'tmPenBtn') return;
       add('bar:' + b.id, 'Chart tools', this.LABEL[b.id] || (b.title || txt(b)).split(':')[0].trim(), () => this.chart(() => { const x = this.$(b.id); if (x) x.click(); }), b.title); });
     add('tool:layers', 'Chart tools', 'Layers, floating', () => this.chart(() => { if (F && F.bLayers) F.bLayers.click(); }));
     add('tool:candles', 'Chart tools', 'Candle shape and colours', () => this.chart(() => { if (F && F.bCandles) F.bCandles.click(); }));

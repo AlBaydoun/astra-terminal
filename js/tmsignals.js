@@ -116,8 +116,10 @@ const SignalBoard = window.SignalBoard = {
   /* the count on any run of candles, read on the last one given: how many readings point up and down there, the same count
      on every candle before it (to see how long it has held), the close against its 200 average, and the usual range */
   tally(bars){ if (!bars || bars.length < 260 || typeof ProInd === 'undefined') return null; const P = ProInd.prep(bars.slice(-this.LOOK)), n = P.n, i = n - 1, R = this.readings(), U = new Int16Array(n), D = new Int16Array(n);
-    const last = new Int8Array(R.length); R.forEach((r, x) => { let d = null; try { d = r.run(P); } catch(e){ return; } last[x] = d[i] > 0 ? 1 : d[i] < 0 ? -1 : 0; for (let k = 0; k < n; k++){ if (d[k] > 0) U[k]++; else if (d[k] < 0) D[k]++; } });
-    const m = ProInd.sma(P.c, 200)[i], A = ProInd.atr(P, 14)[i]; return { up: U[i], dn: D[i], of: R.length, U, D, last, vol: this.hasVol(P), TS: P.t, px: P.c[i], ma: m, trend: m === m ? (P.c[i] > m ? 1 : P.c[i] < m ? -1 : 0) : 0, atr: A === A ? A : 0 }; },
+    const last = new Int8Array(R.length), held = new Int32Array(R.length), vals = new Array(R.length).fill(''), sgn = v => v > 0 ? 1 : v < 0 ? -1 : 0;
+    R.forEach((r, x) => { let d = null; try { d = r.run(P); } catch(e){ return; } last[x] = sgn(d[i]); let hl = 1; for (let k = i - 1; k >= 0 && sgn(d[k]) === last[x]; k--) hl++; held[x] = hl; try { vals[x] = r.val ? String(r.val(P, i) || '') : ''; } catch(e){}
+      for (let k = 0; k < n; k++){ if (d[k] > 0) U[k]++; else if (d[k] < 0) D[k]++; } });
+    const m = ProInd.sma(P.c, 200)[i], A = ProInd.atr(P, 14)[i]; return { up: U[i], dn: D[i], of: R.length, U, D, last, held, vals, vol: this.hasVol(P), TS: P.t, px: P.c[i], ma: m, trend: m === m ? (P.c[i] > m ? 1 : P.c[i] < m ? -1 : 0) : 0, atr: A === A ? A : 0 }; },
   compute(){ const raw = (typeof Chart !== 'undefined' && Chart.raw) || []; if (raw.length < 260) return null; const P = ProInd.prep(raw.slice(-this.LOOK)), n = P.n, i = n - 1, R = this.readings();
     const D = R.map(r => { try { return r.run(P); } catch(e){ return new Int8Array(n); } }), up = new Int16Array(n), dn = new Int16Array(n);
     for (const d of D) for (let k = 0; k < n; k++){ if (d[k] > 0) up[k]++; else if (d[k] < 0) dn[k]++; }
