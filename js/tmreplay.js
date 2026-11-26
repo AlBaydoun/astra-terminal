@@ -114,6 +114,7 @@ const Replay = {
     this.ind = { e20: ProInd.ema(P.c, 20), e50: ProInd.ema(P.c, 50), e200: ProInd.ema(P.c, 200), bu: bbm.map((m, i) => m + 2 * sd[i]), bl: bbm.map((m, i) => m - 2 * sd[i]), st: ProInd.supertrend(P), vw: ProInd.avwap(P, 'week').v, rsi: ProInd.rsi(P.c, 14), wt: ProInd.wavetrend(P) };
     this.fitY();
     this.paintStage(); this.paintSide(); this.draw(); Autopsy.strip(); Autopsy.paintAudit(); this.around(t);
+    try { if (typeof ReplaySig !== 'undefined') ReplaySig.run(this, t); } catch(e){ console.warn('replay signals', e); }
   },
 
   /* ---------- the stage ---------- */
@@ -264,7 +265,7 @@ const Replay = {
     const bar = (label, v, lo, hi, txt) => v == null || !isFinite(v) ? '' : '<div class="rpStat"><span>' + label + '</span><i><u style="width:' + Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(0) + '%"></u></i><b>' + txt + '</b></div>';
     const h = new Date(t.t0).getUTCHours(), ses = [['Asia', h >= 0 && h < 9], ['London', h >= 7 && h < 16], ['New York', h >= 12 && h < 21]];
     const others = Autopsy.trades.filter(x => x !== t && x.t0 <= t.t1 && x.t1 >= t.t0), ob = others.filter(x => x.dir > 0).length, same = Autopsy.trades.filter(x => x.src === t.src && x.bot === t.bot && x.sym === t.sym && x.tf === t.tf && this.sigOf(x) === this.sigOf(t)), sw = same.filter(x => x.pnl > 0).length, botAll = Autopsy.trades.filter(x => x.src === t.src && x.bot === t.bot), bw = botAll.filter(x => x.pnl > 0).length;
-    el.innerHTML = '<div class="rpCard rpWho"><small>WHO OPENED IT, AND WHY</small><div class="rpWhoTop">' + (sc != null ? '<svg viewBox="0 0 76 76" class="rpGauge"><circle cx="38" cy="38" r="30" class="bg" style="stroke-dasharray:' + arc.toFixed(1) + ' 999"/><circle cx="38" cy="38" r="30" class="fg" style="stroke-dasharray:' + (arc * Math.max(0, Math.min(100, sc)) / 100).toFixed(1) + ' 999"/><text x="38" y="41">' + Math.round(sc) + '</text><text x="38" y="54" class="s">score</text></svg>' : '') +
+    el.innerHTML = (typeof ReplaySig !== 'undefined' ? ReplaySig.card(t) : '') + '<div class="rpCard rpWho"><small>WHO OPENED IT, AND WHY</small><div class="rpWhoTop">' + (sc != null ? '<svg viewBox="0 0 76 76" class="rpGauge"><circle cx="38" cy="38" r="30" class="bg" style="stroke-dasharray:' + arc.toFixed(1) + ' 999"/><circle cx="38" cy="38" r="30" class="fg" style="stroke-dasharray:' + (arc * Math.max(0, Math.min(100, sc)) / 100).toFixed(1) + ' 999"/><text x="38" y="41">' + Math.round(sc) + '</text><text x="38" y="54" class="s">score</text></svg>' : '') +
         '<div><button type="button" class="rpBotBtn" data-r="bot:' + this.esc(t.bot) + '" title="Open this bot’s page">' + this.esc(t.botName) + ' ↗</button><b>' + (this.sigOf(t) === 'Not recorded' ? 'Signal not recorded' : this.esc(this.sigOf(t))) + '</b><span>' + (t.dir > 0 ? 'Buy' : 'Sell') + ' · ' + this.esc(t.tf) + (o.lots ? ' · ' + o.lots + ' lots' : '') + (Number.isFinite(o.riskCash) ? ' · risking ' + this.num(o.riskCash, 0) : o.risk > 0 ? ' · risking ' + this.num(o.risk, 2) : '') + '</span></div></div>' +
         (o.note && typeof ChartPlus !== 'undefined' && ChartPlus.noteOf(o) ? '<div class="rpNote"><small>📝 YOUR NOTE</small><p>' + this.esc(ChartPlus.noteOf(o)) + '</p></div>' : '') +
         (typeof TradePlus !== 'undefined' ? TradePlus.box(TradePlus.keyOf(t), true) : '') +

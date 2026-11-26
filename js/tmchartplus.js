@@ -138,12 +138,13 @@ const ChartPlus = window.ChartPlus = {
     rows.forEach((r, k) => { const p = r.p; if (!p || !(p.entry > 0)) return; const id = r.bot + ':' + p.id, side = p.dir > 0 ? 'BUY' : 'SELL', lots = p.lots != null ? p.lots : p.qty;
       let xE = NaN; try { const t = Math.floor(p.entryTime / 1000) + PosLines.serverShift() + (typeof TZ_OFF !== 'undefined' ? TZ_OFF : 0), l = Draw.logicalFor(t); if (l != null) xE = g.X(Math.floor(l + 1e-6)); } catch(e){}
       const cash = price => { try { const v = (price - p.entry) * p.dir * p.qty * BotEngine.cashRate(p, true); return isFinite(v) ? ' · ' + (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) : ''; } catch(e){ return ''; } };
+      const pc = price => { const v = (price - p.entry) / p.entry * 100 * p.dir; return isFinite(v) ? ' · ' + (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + '%' : ''; };
       const col = r.live ? '#FFB648' : '#4FD8F7', dx = k * 0;
       (this._entryAt = this._entryAt || {})['pe' + id] = { t: p.entryTime };
       const note = this.noteOf(p);
       items.push({ key: 'pe' + id, kind: 'entry', x: xE, y: g.Y(p.entry), color: col, noLevel: true, mini: many, tag: (r.live ? 'REAL · ' : 'ENTRY · ') + side + (note ? ' · 📝' : ''), sub: this.px(p.entry) + (lots != null ? ' · ' + (+lots).toFixed(2) + ' lots' : ''), title: 'Entry · ' + side + ' ' + this.px(p.entry) + (note ? '\n📝 ' + note : '') + '\nPress: zoom in on this candle' });
-      if (p.tp > 0) items.push({ key: 'pt' + id, kind: 'target', x: xF + dx, y: g.Y(p.tp), color: '#3DDC97', noLevel: true, mini: many, edge: 'TARGET', tag: 'TARGET', sub: this.px(p.tp) + cash(p.tp), title: 'Target ' + this.px(p.tp) });
-      if (p.sl > 0) items.push({ key: 'ps' + id, kind: 'stop', x: xF + dx, y: g.Y(p.sl), color: '#FF6B7A', noLevel: true, mini: many, edge: 'STOP', tag: 'STOP', sub: this.px(p.sl) + cash(p.sl), title: 'Stop ' + this.px(p.sl) }); });
+      if (p.tp > 0) items.push({ key: 'pt' + id, kind: 'target', x: xF + dx, y: g.Y(p.tp), color: '#3DDC97', noLevel: true, mini: many, edge: 'TARGET', tag: 'TARGET', sub: this.px(p.tp) + pc(p.tp) + cash(p.tp), title: 'Target ' + this.px(p.tp) + pc(p.tp) + ' from the entry' + cash(p.tp) });
+      if (p.sl > 0) items.push({ key: 'ps' + id, kind: 'stop', x: xF + dx, y: g.Y(p.sl), color: '#FF6B7A', noLevel: true, mini: many, edge: 'STOP', tag: 'STOP', sub: this.px(p.sl) + pc(p.sl) + cash(p.sl), title: 'Stop ' + this.px(p.sl) + pc(p.sl) + ' from the entry' + cash(p.sl) }); });
     const cw = Math.max(2, g.X(n - 1) - g.X(n - 2));
     Beacon.render(host, items, { w: g.w, h: g.h, cw });
     const layer = host.querySelector(':scope > .bcnLayer'); if (layer) layer.classList.add('passive'); },

@@ -95,8 +95,12 @@ const Draw = {
       if (l == null) return null;
       const raw = Chart.raw;
       if (!raw.length) return null;
-      const step = raw.length > 1 ? raw[1].time - raw[0].time : 60;
-      return raw[0].time + l * step;
+      const step = raw.length > 1 ? raw[1].time - raw[0].time : 60, n = raw.length;
+      /* the same rule logicalFor() reads back: before the first candle count from the first, after the last one from the
+         last, and between two candles (never the case for a null time, but kept right) from the candle on the left */
+      if (l <= 0) return raw[0].time + l * step;
+      if (l >= n - 1) return raw[n - 1].time + (l - (n - 1)) * step;
+      const k = Math.floor(l); return raw[k].time + (l - k) * (raw[k + 1].time - raw[k].time);
     } catch(e){ return null; }
   },
 
