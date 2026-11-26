@@ -4,7 +4,10 @@
      THE LEAN       a dial and a ring: how many of the readings point up, how many down
      TIME           when this candle closes, how long the lean has held, the newest change,
                     which sessions are open, how big this candle is against a usual one
-     TIMEFRAMES     the nine trend readings on 5m, 15m, 1h, 4h and 1d (press one to open it)
+     TIMEFRAMES     the nine trend readings on 5m, 15m, 1h, 4h, 1d and 1w (press one to open it)
+     THE PARTS      every part under the dial has ▲ ▼ in its title: move it up or down, the order is
+                    remembered. The timeframes come first.
+     AGREEMENT BOT  the rule of the Agreement bot (js/tmagreebot.js) read on this chart, and its numbers
      THE LIGHTS     trend (14), momentum (13), volume (3), pullback (2), structure (1).
                     Green = points up, red = down, grey = neither. The volume lights stay grey
                     on a market that reports no volume; the pullback lights are grey most of
@@ -25,7 +28,7 @@ const SignalBoard = window.SignalBoard = {
   LOOK: 1200,               /* candles of the open chart that are read */
   AHEAD: 5,                 /* candles looked ahead in the record */
   WARM: 210,                /* candles left out at the start (the 200 average needs them) */
-  TFS: ['5m', '15m', '1h', '4h', '1d'],
+  TFS: ['5m', '15m', '1h', '4h', '1d', '1w'],
   M: {},                    /* other timeframes: { 'sym|tf': { at, up, dn, of } } */
   open: '',                 /* the light whose details are open */
   prev: {},                 /* each light's last direction, to show a change the moment it happens */
@@ -103,12 +106,18 @@ const SignalBoard = window.SignalBoard = {
   active(){ const p = this.$('tab-tssig'); return !!p && p.classList.contains('active') && p.offsetParent !== null && document.documentElement.dataset.face === 'tm'; },
   /* while this tab is open the panel is wider and the news stream at its foot steps aside: the board gets the whole side */
   sync(){ const on = this.active(), H = document.documentElement; if (H.classList.contains('tsSigTab') !== on){ H.classList.toggle('tsSigTab', on); setTimeout(() => window.dispatchEvent(new Event('resize')), 80); } if (on) this.tick(true); },
-  click(e){ const l = e.target.closest('[data-sg]'), tf = e.target.closest('[data-sgtf]'); if (l){ this.open = this.open === l.dataset.sg ? '' : l.dataset.sg; this.paint(); return; }
+  click(e){ const mv = e.target.closest('[data-sgmv]'); if (mv){ const p = mv.dataset.sgmv.split(':'); this.move(p[0], +p[1]); return; }
+    const l = e.target.closest('[data-sg]'), tf = e.target.closest('[data-sgtf]'); if (l){ this.open = this.open === l.dataset.sg ? '' : l.dataset.sg; this.paint(); this.orderApply(); return; }
     if (tf && typeof App !== 'undefined' && App.setTf){ try { App.setTf(tf.dataset.sgtf); } catch(x){} this._key = ''; setTimeout(() => this.tick(true), 1200); } },
 
   /* ---------- reading the chart ---------- */
   dur(c){ const s = c * (typeof tfSeconds === 'function' ? tfSeconds(STORE.tf) : 60); return s < 3600 ? Math.round(s / 60) + ' min' : s < 86400 ? Math.floor(s / 3600) + ' h' + (Math.round(s % 3600 / 60) ? ' ' + Math.round(s % 3600 / 60) + ' m' : '') : (s / 86400).toFixed(s < 864000 ? 1 : 0) + ' d'; },
   lean(up, dn, of){ const side = up > dn ? 1 : dn > up ? -1 : 0, n = Math.max(up, dn); return { side, n, level: n >= Math.ceil(of * 0.7) ? 2 : n >= Math.ceil(of * 0.55) && side ? 1 : 0 }; },
+  /* the count on any run of candles, read on the last one given: how many readings point up and down there, the same count
+     on every candle before it (to see how long it has held), the close against its 200 average, and the usual range */
+  tally(bars){ if (!bars || bars.length < 260 || typeof ProInd === 'undefined') return null; const P = ProInd.prep(bars.slice(-this.LOOK)), n = P.n, i = n - 1, R = this.readings(), U = new Int16Array(n), D = new Int16Array(n);
+    for (const r of R){ let d = null; try { d = r.run(P); } catch(e){ continue; } for (let k = 0; k < n; k++){ if (d[k] > 0) U[k]++; else if (d[k] < 0) D[k]++; } }
+    const m = ProInd.sma(P.c, 200)[i], A = ProInd.atr(P, 14)[i]; return { up: U[i], dn: D[i], of: R.length, U, D, TS: P.t, px: P.c[i], ma: m, trend: m === m ? (P.c[i] > m ? 1 : P.c[i] < m ? -1 : 0) : 0, atr: A === A ? A : 0 }; },
   compute(){ const raw = (typeof Chart !== 'undefined' && Chart.raw) || []; if (raw.length < 260) return null; const P = ProInd.prep(raw.slice(-this.LOOK)), n = P.n, i = n - 1, R = this.readings();
     const D = R.map(r => { try { return r.run(P); } catch(e){ return new Int8Array(n); } }), up = new Int16Array(n), dn = new Int16Array(n);
     for (const d of D) for (let k = 0; k < n; k++){ if (d[k] > 0) up[k]++; else if (d[k] < 0) dn[k]++; }
@@ -148,15 +157,26 @@ const SignalBoard = window.SignalBoard = {
       '<div class="sgVerdict" id="sgVerdict"><b>Reading the chart…</b><small></small></div>' +
       '<div class="sgTime"><div><small>THIS CANDLE CLOSES IN</small><b id="sgCd">–</b></div><div><small>THE LEAN HAS HELD</small><b id="sgHeld">–</b></div><div class="wide"><small>NEWEST CHANGE</small><b id="sgNew">–</b></div></div>' +
       '<p class="sgLegend"><i class="up"></i>points up <i class="dn"></i>points down <i></i>neither <b>12</b> candles it has held · press a light</p>' +
-      this.FAM.map(f => '<div class="sgBlock"><h5>' + f[1] + ' <em id="sgF_' + f[0] + '"></em></h5><div class="sgGrid">' + R.filter(r => r.fam === f[0]).map(r => '<button type="button" class="sgL" data-sg="' + r.id + '"><i></i><b>' + this.esc(this.SHORT[r.id] || r.name) + '</b><em></em></button>').join('') + '</div></div>').join('') +
+      this.FAM.map(f => '<div class="sgBlock" data-sgb="' + f[0] + '"><h5>' + f[1] + ' <em id="sgF_' + f[0] + '"></em>' + this.mv(f[0]) + '</h5><div class="sgGrid">' + R.filter(r => r.fam === f[0]).map(r => '<button type="button" class="sgL" data-sg="' + r.id + '"><i></i><b>' + this.esc(this.SHORT[r.id] || r.name) + '</b><em></em></button>').join('') + '</div></div>').join('') +
       '<div class="sgMore" id="sgMore" hidden></div>' +
-      '<div class="sgBlock"><h5>OTHER TIMEFRAMES <em>the nine trend readings · press one to open it</em></h5><div class="sgTfs" id="sgTfs"></div></div>' +
-      '<div class="sgCtx" id="sgCtx"></div>' +
-      '<div class="sgBlock"><h5>FRESH SIGNALS <em>one-off signals of the last six candles</em></h5><div class="sgEv" id="sgEv"></div></div>' +
-      '<div class="sgBlock"><h5>THE RECORD <em>counted on this chart’s own candles</em></h5><div class="sgRec" id="sgRec"></div></div>' +
-      '<p class="sgFoot">The readings describe this chart; they are not a forecast and not advice. The newer lights (long trend, volume, pullback) come from published research; those studies used daily or monthly prices, and in most of them trading costs took much of the result. Press a light to see how it did on this chart. In the large test on your broker’s markets (twenty of these signals, 2.9 million cases), more agreement did not beat random entries once the spread was paid.</p>'; },
+      '<div class="sgBlock" data-sgb="tfs"><h5>TIMEFRAMES <em>the nine trend readings · press one to open it</em>' + this.mv('tfs') + '</h5><div class="sgTfs" id="sgTfs"></div></div>' +
+      '<div class="sgBlock" data-sgb="ctx"><h5>RIGHT NOW <em>texture, this candle, volume, sessions</em>' + this.mv('ctx') + '</h5><div class="sgCtx" id="sgCtx"></div></div>' +
+      '<div class="sgBlock" data-sgb="fresh"><h5>FRESH SIGNALS <em>one-off signals of the last six candles</em>' + this.mv('fresh') + '</h5><div class="sgEv" id="sgEv"></div></div>' +
+      '<div class="sgBlock" data-sgb="record"><h5>THE RECORD <em>counted on this chart’s own candles</em>' + this.mv('record') + '</h5><div class="sgRec" id="sgRec"></div></div>' +
+      '<div class="sgBlock" data-sgb="bot"><h5>AGREEMENT BOT <em>this timeframe and the two above it</em>' + this.mv('bot') + '</h5><div class="sgBot" id="sgBot"><span class="sgNone">Reading…</span></div></div>' +
+      '<p class="sgFoot">The readings describe this chart; they are not a forecast and not advice. The newer lights (long trend, volume, pullback) come from published research; those studies used daily or monthly prices, and in most of them trading costs took much of the result. Press a light to see how it did on this chart. In the large test on your broker’s markets (twenty of these signals, 2.9 million cases), more agreement did not beat random entries once the spread was paid.</p>'; this.orderApply(); },
+  /* ---------- the parts under the dial, in your own order ---------- */
+  OKEY: 'astra_signals_order', PARTS: ['tfs', 'trend', 'momentum', 'volume', 'pullback', 'structure', 'bot', 'ctx', 'fresh', 'record'],
+  mv(id){ return '<span class="sgMv"><button type="button" data-sgmv="' + id + ':-1" title="Move this part up" aria-label="Move this part up">▲</button><button type="button" data-sgmv="' + id + ':1" title="Move this part down" aria-label="Move this part down">▼</button></span>'; },
+  orderGet(){ let s = []; try { s = JSON.parse(localStorage.getItem(this.OKEY) || '[]') || []; } catch(e){} s = Array.isArray(s) ? s.filter(k => this.PARTS.includes(k)) : []; return s.concat(this.PARTS.filter(k => !s.includes(k))); },
+  orderApply(){ const w = this.$('sgWrap'); if (!w) return; const o = this.orderGet(); w.querySelectorAll('[data-sgb]').forEach(b => { b.style.order = String(10 + o.indexOf(b.dataset.sgb) * 10); });
+    /* an opened light's details sit right under its own family */
+    const m = this.$('sgMore'), r = this.open ? this.readings().find(x => x.id === this.open) : null; if (m) m.style.order = String(r ? 15 + o.indexOf(r.fam) * 10 : 5); const f = w.querySelector('.sgFoot'); if (f) f.style.order = '9999';
+    w.querySelectorAll('[data-sgmv]').forEach(b => { const p = b.dataset.sgmv.split(':'), k = o.indexOf(p[0]); b.disabled = (+p[1] < 0 && k === 0) || (+p[1] > 0 && k === o.length - 1); }); },
+  move(id, d){ const o = this.orderGet(), k = o.indexOf(id), j = k + d; if (k < 0 || j < 0 || j >= o.length) return; const t = o[k]; o[k] = o[j]; o[j] = t; try { localStorage.setItem(this.OKEY, JSON.stringify(o)); } catch(e){} this.orderApply();
+    const b = this.$('sgWrap').querySelector('[data-sgb="' + id + '"]'); if (b){ b.classList.remove('sgMoved'); void b.offsetWidth; b.classList.add('sgMoved'); b.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } },
   tick(force){ if (!this.active()) return; const key = STORE.symbol + '|' + STORE.tf; if (key !== this._key){ this._key = key; this.prev = {}; this.open = ''; this.C = null; }
-    if (!this.$('sgNeedle')) this.build(); let C = null; try { C = this.compute(); } catch(e){ console.warn('signals', e); } this.C = C; this.paint(); this.mtf(); },
+    if (!this.$('sgNeedle')) this.build(); let C = null; try { C = this.compute(); } catch(e){ console.warn('signals', e); } this.C = C; this.paint(); this.mtf(); try { if (typeof AgreeBot !== 'undefined') AgreeBot.paint(); } catch(e){} },
   paint(){ const C = this.C, w = this.$('sgWrap'); if (!w || !this.$('sgNeedle')) return; const set = (id, t) => { const e = this.$(id); if (e && e.textContent !== t) e.textContent = t; }, html = (id, h) => { const e = this.$(id); if (e && e._h !== h){ e._h = h; e.innerHTML = h; } };
     if (!C){ set('sgNum', '–'); set('sgNumL', 'too few candles'); html('sgVerdict', '<b>Not enough candles on this chart yet.</b><small>The board needs about 260 candles to read every indicator.</small>'); return; }
     const L = C.L, of = C.of, flat = of - C.upN - C.dnN, word = L.side > 0 ? 'up' : L.side < 0 ? 'down' : '';
