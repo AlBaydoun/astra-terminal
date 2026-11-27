@@ -13,7 +13,7 @@
 'use strict';
 const SideLook = window.SideLook = {
   KEY: 'astra_sidetabs_size', SIZES: ['s', 'm', 'l'], SAY: { s: 'One row', m: 'Two rows', l: 'Three rows, with names' }, HINT: { s: 'every tab in one line, small', m: 'larger buttons', l: 'each tab with its name' },
-  NAME: { watch: 'Watch', tssig: 'Signals', tstrade: 'Trade', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours', tsclock: 'Clock', tsheat: 'Heatmap', tsnews: 'News', alerts: 'Alerts', portfolio: 'Paper', ai: 'Observer', notes: 'Notes', tslayers: 'Layers' },
+  NAME: { watch: 'Watch', tssig: 'Signals', tstrade: 'Trade', sbots: 'Bots', book: 'Depth', ind: 'Indicators', heat: 'Hours', tsclock: 'Clock', tsheat: 'Heatmap', tsnews: 'News', alerts: 'Alerts', portfolio: 'Paper', ai: 'Observer', notes: 'Notes', tslayers: 'Layers', tsstack: 'Stack' },
   TFS: ['5m', '15m', '1h', '4h', '1d'], C: {},
   $(id){ return document.getElementById(id); },
   esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
@@ -39,6 +39,7 @@ const SideLook = window.SideLook = {
     I.ai = this.svg('ai', g('e', '#6FE3FF', '#7B5CF0'), '<path d="M1.8 12c2.7-4.8 6.2-7.2 10.2-7.2s7.5 2.4 10.2 7.2c-2.7 4.8-6.2 7.2-10.2 7.2S4.5 16.8 1.8 12z" fill="#F4F8FF"/><circle cx="12" cy="12" r="4.9" fill="' + u('e') + '"/><circle cx="12" cy="12" r="2.2" fill="#0B1322"/><circle cx="13.6" cy="10.3" r="1.1" fill="#FFFFFF"/><path d="M1.8 12c2.7-4.8 6.2-7.2 10.2-7.2s7.5 2.4 10.2 7.2" fill="none" stroke="#7B5CF0" stroke-width="1.4" stroke-linecap="round"/>');
     I.notes = this.svg('notes', g('o', '#FFF08A', '#FFC93D'), '<path d="M4 3.4h16v11.2L14.6 20.6H4z" fill="' + u('o') + '"/><path d="M20 14.6h-5.4v6z" fill="#D99A00"/><path d="M7 8h10M7 11.4h10M7 14.8h5" stroke="#8A6400" stroke-width="1.6" stroke-linecap="round"/>');
     I.tslayers = this.svg('tslayers', '', '<path d="M12 11.6l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#7B5CF0"/><path d="M12 7.1l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#2FB8E6"/><path d="M12 2.6l9.6 4.9-9.6 4.9-9.6-4.9z" fill="#FFC24B"/><path d="M12 4.4l5.2 2.7-5.2 1.2z" fill="#FFF3C4" opacity=".7"/>');
+    I.tsstack = this.svg('tsstack', '', '<rect x="3" y="15.4" width="18" height="5.6" rx="1.8" fill="#7B5CF0"/><rect x="3" y="9.2" width="18" height="5.6" rx="1.8" fill="#2FB8E6"/><rect x="3" y="3" width="18" height="5.6" rx="1.8" fill="#FFC24B"/><circle cx="6.4" cy="5.8" r="1.3" fill="#7A4B00"/><circle cx="6.4" cy="12" r="1.3" fill="#0B4A66"/><circle cx="6.4" cy="18.2" r="1.3" fill="#2B1A70"/><path d="M9.4 5.8h8M9.4 12h8M9.4 18.2h8" stroke="#0B1322" stroke-opacity=".55" stroke-width="1.5" stroke-linecap="round"/>');
     return (this._I = I); },
   dress(){ const st = this.$('sideTabs'); if (!st) return; const I = this.icons();
     st.querySelectorAll('button[data-tab]').forEach(b => { const k = b.dataset.tab; if (I[k] && !b.querySelector(':scope > .stIco')) b.insertAdjacentHTML('afterbegin', I[k]); const n = this.NAME[k] || ''; if (n && b.dataset.stn !== n) b.dataset.stn = n; });

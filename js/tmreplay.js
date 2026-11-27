@@ -35,6 +35,11 @@ const Replay = {
   px(p){ const a = Math.abs(p), d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 10 ? 3 : a >= 1 ? 4 : 5; return Number(p).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); },
   sym(s){ return String(s).replace(/\.(s|m|std)$/i, ''); },
   when(sec, t){ const d = new Date((sec - Autopsy.shift(t.sym, sec)) * 1000); return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + d.toTimeString().slice(0, 5); },
+  /* the order the chart's layers are painted in, bottom first; the Stack card (js/tmstack.js) changes it */
+  SKEY: 'astra_replay_stack', PAINT_DEFAULT: ['zones', 'vol', 'candles', 'bb', 'ma', 'vwap', 'st', 'channel', 'events', 'fvg', 'ob', 'bos', 'sweep', 'div', 'sig', 'draws', 'trade'],
+  paintOrder(){ if (!this._po){ const D = this.PAINT_DEFAULT; let o = []; try { o = JSON.parse(localStorage.getItem(this.SKEY) || '[]') || []; } catch(e){} o = Array.isArray(o) ? o.filter((k, i) => D.includes(k) && o.indexOf(k) === i) : [];
+      for (const k of D) if (!o.includes(k)){ const before = D.slice(0, D.indexOf(k)).reverse().find(x => o.includes(x)); o.splice(before ? o.indexOf(before) + 1 : 0, 0, k); } this._po = o; } return this._po; },
+  setPaintOrder(o){ this._po = null; try { if (o) localStorage.setItem(this.SKEY, JSON.stringify(o)); else localStorage.removeItem(this.SKEY); } catch(e){} return this.paintOrder(); },
   layers(){ if (!this.L){ let s = {}; try { s = JSON.parse(localStorage.getItem(this.LKEY) || '{}') || {}; } catch(e){} this.L = Object.assign({ trade: true, ma: true, vol: true, zones: true, channel: true, events: true }, s); } return this.L; },
   saveLayers(){ try { localStorage.setItem(this.LKEY, JSON.stringify(this.L)); } catch(e){} },
   notes(){ try { return JSON.parse(localStorage.getItem(this.NKEY) || '{}') || {}; } catch(e){ return {}; } },
@@ -209,28 +214,33 @@ const Replay = {
     if (cur >= iE){ const x0 = X(iE) - cw / 2, x1 = X(Math.min(cur, iX)) + cw / 2; c.fillStyle = t.pnl > 0 ? 'rgba(61,220,151,.07)' : 'rgba(255,107,122,.07)'; c.fillRect(x0, 0, x1 - x0, mainH); }
     const R = (L.zones || L.channel || L.events || L.fvg || L.ob || L.bos || L.sweep || L.div) && typeof Studio !== 'undefined' ? this.studio() : null;
     const view = lay => ({ X, Y, left: 0, right: W - padR, i0: a, i1: cur, bars: this.bars, layers: lay, fmt: p => this.px(p), pulse: 1, sans: 'Inter, sans-serif', mono: 'JetBrains Mono, monospace' });
-    if (R && L.zones) Studio.paint(c, R, view({ zones: true }));
-    if (L.vol){ let mv = 1; for (let i = a; i <= b; i++) mv = Math.max(mv, P.v[i]); for (let i = a; i <= end; i++){ const hgt = P.v[i] / mv * mainH * 0.14; c.fillStyle = P.c[i] >= P.o[i] ? 'rgba(61,220,151,.22)' : 'rgba(255,107,122,.22)'; c.globalAlpha = i > cur ? 0.3 : 1; c.fillRect(X(i) - bw / 2, mainH - hgt, bw, hgt); } c.globalAlpha = 1; }
-    if (FAN) Fantasy.paint(c, { X, Y, a, b, cur, end, P, cw, bw, right: W - padR, mainH, t, iE, iX, reach: this.reach(), tool: this.tool, redraw: () => { if (!this.playing || this.speed <= 2) this.draw(); } });
-    else for (let i = a; i <= end; i++){ const up = P.c[i] >= P.o[i], x = X(i); c.globalAlpha = i > cur ? 0.22 : 1; c.strokeStyle = C.wick; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(x) + 0.5, Y(P.h[i])); c.lineTo(Math.round(x) + 0.5, Y(P.l[i])); c.stroke(); c.fillStyle = up ? C.up : C.dn; const yo = Y(P.o[i]), yc = Y(P.c[i]); c.fillRect(x - bw / 2, Math.min(yo, yc), bw, Math.max(1, Math.abs(yc - yo))); } c.globalAlpha = 1;
+    /* every layer is a painter; they are called bottom first, in the order the Stack card keeps (paintOrder) */
+    const PT = {};
+    PT.zones = () => { if (R && L.zones) Studio.paint(c, R, view({ zones: true })); };
+    PT.vol = () => { if (L.vol){ let mv = 1; for (let i = a; i <= b; i++) mv = Math.max(mv, P.v[i]); for (let i = a; i <= end; i++){ const hgt = P.v[i] / mv * mainH * 0.14; c.fillStyle = P.c[i] >= P.o[i] ? 'rgba(61,220,151,.22)' : 'rgba(255,107,122,.22)'; c.globalAlpha = i > cur ? 0.3 : 1; c.fillRect(X(i) - bw / 2, mainH - hgt, bw, hgt); } c.globalAlpha = 1; } };
+    PT.candles = () => { if (L.candles === false) return;
+      if (FAN) Fantasy.paint(c, { X, Y, a, b, cur, end, P, cw, bw, right: W - padR, mainH, t, iE, iX, reach: this.reach(), tool: this.tool, redraw: () => { if (!this.playing || this.speed <= 2) this.draw(); } });
+      else for (let i = a; i <= end; i++){ const up = P.c[i] >= P.o[i], x = X(i); c.globalAlpha = i > cur ? 0.22 : 1; c.strokeStyle = C.wick; c.lineWidth = 1; c.beginPath(); c.moveTo(Math.round(x) + 0.5, Y(P.h[i])); c.lineTo(Math.round(x) + 0.5, Y(P.l[i])); c.stroke(); c.fillStyle = up ? C.up : C.dn; const yo = Y(P.o[i]), yc = Y(P.c[i]); c.fillRect(x - bw / 2, Math.min(yo, yc), bw, Math.max(1, Math.abs(yc - yo))); } c.globalAlpha = 1; };
     const line = (arr, col, wd, dash) => { c.strokeStyle = col; c.lineWidth = wd || 1.4; c.setLineDash(dash || []); c.lineJoin = 'round'; c.beginPath(); let on = false; for (let i = a; i <= cur; i++){ const v = arr[i]; if (v !== v || v == null){ on = false; continue; } on ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v)); on = true; } c.stroke(); c.setLineDash([]); };
-    if (L.bb){ line(I.bu, 'rgba(167,139,250,.75)', 1.1); line(I.bl, 'rgba(167,139,250,.75)', 1.1); }
-    if (L.ma){ line(I.e200, '#FF6BD6', 1.3); line(I.e50, '#FFB648', 1.4); line(I.e20, '#4FD8F7', 1.5); }
-    if (L.vwap) line(I.vw, '#E6EEFF', 1.1, [5, 4]);
-    if (L.st){ c.lineWidth = 1.8; for (let i = Math.max(a + 1, 1); i <= cur; i++){ const p0 = I.st.line[i - 1], p1 = I.st.line[i]; if (p0 !== p0 || p1 !== p1 || I.st.dir[i] !== I.st.dir[i - 1]) continue; c.strokeStyle = I.st.dir[i] > 0 ? C.up : C.dn; c.beginPath(); c.moveTo(X(i - 1), Y(p0)); c.lineTo(X(i), Y(p1)); c.stroke(); } }
-    if (R) Studio.paint(c, R, view({ channel: L.channel, events: L.events, fvg: L.fvg, ob: L.ob, bos: L.bos, sweep: L.sweep, div: L.div }));
-    if (L.sig && typeof ProInd !== 'undefined'){ const put = {}; c.font = '600 9.5px JetBrains Mono, monospace'; c.textAlign = 'center';
-      for (const S of ProInd.SIGNALS){ const arr = ProInd.signal(P, S.id); for (let i = Math.max(a, iE - 45); i <= cur; i++){ const d = arr[i]; if (!d) continue; const k = i + '|' + d, m = put[k] = (put[k] || 0) + 1; if (m > 3) continue; const y = d > 0 ? Y(P.l[i]) + 10 + (m - 1) * 11 : Y(P.h[i]) - 10 - (m - 1) * 11; c.lineWidth = 3; c.strokeStyle = 'rgba(6,10,18,.9)'; c.strokeText(this.CODE[S.id] || S.id, X(i), y); c.fillStyle = d > 0 ? '#7BE8B8' : '#FF9AA4'; c.fillText(this.CODE[S.id] || S.id, X(i), y); } } }
-    if (this._zoomI != null && this._zoomI >= a && this._zoomI <= b){ const age = (performance.now() - this._zoomAt) / 1600; if (age < 1){ const x = X(this._zoomI); c.strokeStyle = 'rgba(79,216,247,' + (0.8 * (1 - age)).toFixed(2) + ')'; c.lineWidth = 1.5; c.setLineDash([4, 3]); c.strokeRect(x - cw / 2 - 3, Y(P.h[this._zoomI]) - 8, cw + 6, Y(P.l[this._zoomI]) - Y(P.h[this._zoomI]) + 16); c.setLineDash([]); requestAnimationFrame(() => this.draw()); } }
-    this.g2 = { X, Y, cw, mainH, W, padR, lo, hi }; if (typeof Draws !== 'undefined' && this.dg()) Draws.draw(c, this.dg(), this.dkey());
-    if (L.trade){ c.font = '600 10.5px Inter, sans-serif'; const x0 = X(iE) - cw / 2, lv = (p, col, dash, label) => { if (!(p > 0)) return; const y = Math.round(Y(p)) + 0.5; c.strokeStyle = col; c.lineWidth = 1.2; c.setLineDash(dash); c.beginPath(); c.moveTo(x0, y); c.lineTo(W - padR, y); c.stroke(); c.setLineDash([]); c.fillStyle = col; c.textAlign = 'right'; c.fillText(label, W - padR - 5, y - 8); };
+    PT.bb = () => { if (L.bb){ line(I.bu, 'rgba(167,139,250,.75)', 1.1); line(I.bl, 'rgba(167,139,250,.75)', 1.1); } };
+    PT.ma = () => { if (L.ma){ line(I.e200, '#FF6BD6', 1.3); line(I.e50, '#FFB648', 1.4); line(I.e20, '#4FD8F7', 1.5); } };
+    PT.vwap = () => { if (L.vwap) line(I.vw, '#E6EEFF', 1.1, [5, 4]); };
+    PT.st = () => { if (L.st){ c.lineWidth = 1.8; for (let i = Math.max(a + 1, 1); i <= cur; i++){ const p0 = I.st.line[i - 1], p1 = I.st.line[i]; if (p0 !== p0 || p1 !== p1 || I.st.dir[i] !== I.st.dir[i - 1]) continue; c.strokeStyle = I.st.dir[i] > 0 ? C.up : C.dn; c.beginPath(); c.moveTo(X(i - 1), Y(p0)); c.lineTo(X(i), Y(p1)); c.stroke(); } } };
+    for (const k of ['channel', 'events', 'fvg', 'ob', 'bos', 'sweep', 'div']) PT[k] = () => { if (R && L[k]) Studio.paint(c, R, view({ [k]: true })); };
+    PT.sig = () => { if (L.sig && typeof ProInd !== 'undefined'){ const put = {}; c.font = '600 9.5px JetBrains Mono, monospace'; c.textAlign = 'center';
+        for (const S of ProInd.SIGNALS){ const arr = ProInd.signal(P, S.id); for (let i = Math.max(a, iE - 45); i <= cur; i++){ const d = arr[i]; if (!d) continue; const k = i + '|' + d, m = put[k] = (put[k] || 0) + 1; if (m > 3) continue; const y = d > 0 ? Y(P.l[i]) + 10 + (m - 1) * 11 : Y(P.h[i]) - 10 - (m - 1) * 11; c.lineWidth = 3; c.strokeStyle = 'rgba(6,10,18,.9)'; c.strokeText(this.CODE[S.id] || S.id, X(i), y); c.fillStyle = d > 0 ? '#7BE8B8' : '#FF9AA4'; c.fillText(this.CODE[S.id] || S.id, X(i), y); } } } };
+    this.g2 = { X, Y, cw, mainH, W, padR, lo, hi };
+    PT.draws = () => { if (typeof Draws !== 'undefined' && this.dg()) Draws.draw(c, this.dg(), this.dkey()); };
+    PT.trade = () => { if (L.trade){ c.font = '600 10.5px Inter, sans-serif'; const x0 = X(iE) - cw / 2, lv = (p, col, dash, label) => { if (!(p > 0)) return; const y = Math.round(Y(p)) + 0.5; c.strokeStyle = col; c.lineWidth = 1.2; c.setLineDash(dash); c.beginPath(); c.moveTo(x0, y); c.lineTo(W - padR, y); c.stroke(); c.setLineDash([]); c.fillStyle = col; c.textAlign = 'right'; c.fillText(label, W - padR - 5, y - 8); };
       for (const k of [1, 2, -1]){ const p = t.entry + t.dir * k * risk; if (p > lo && p < hi && Math.abs(p - (k < 0 ? t.sl : t.tp)) > risk * 0.1) lv(p, 'rgba(124,139,168,.45)', [2, 5], this.sg(k * risk / t.entry * 100, 2, '%')); }
       lv(t.sl, C.dn, [5, 4], 'stop ' + this.pm(t, -Math.abs(t.entry - t.sl))); lv(t.tp, C.up, [5, 4], 'target ' + this.pm(t, Math.abs(t.tp - t.entry))); lv(t.entry, C.cy, [], 'entry ' + this.px(t.entry));
       const dot = (i, p, col, txt, above) => { const x = X(i), y = Y(p); c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 12; c.beginPath(); c.arc(x, y, 5, 0, 6.3); c.fill(); c.shadowBlur = 0; c.strokeStyle = '#060A12'; c.lineWidth = 2; c.stroke(); c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(6,10,18,.9)'; c.strokeText(txt, x, y + (above ? -15 : 16)); c.fillStyle = col; c.fillText(txt, x, y + (above ? -15 : 16)); };
       /* entry and exit: drawn as beacons over the canvas (js/tmbeacon.js) */
       if (cur >= this.V.iBest && F.mfe > 0.3) dot(this.V.iBest, t.dir > 0 ? P.h[this.V.iBest] : P.l[this.V.iBest], C.am, 'best ' + this.sg(F.mfe * risk / t.entry * 100, 2, '%'), t.dir > 0);
       if (cur >= this.V.iWorst && F.mae > 0.3 && this.V.iWorst !== this.V.iBest) dot(this.V.iWorst, t.dir > 0 ? P.l[this.V.iWorst] : P.h[this.V.iWorst], C.dim, 'worst ' + this.sg(-F.mae * risk / t.entry * 100, 2, '%'), t.dir < 0);
-    }
+    } };
+    for (const k of this.paintOrder()) if (PT[k]) PT[k]();
+    if (this._zoomI != null && this._zoomI >= a && this._zoomI <= b){ const age = (performance.now() - this._zoomAt) / 1600; if (age < 1){ const x = X(this._zoomI); c.strokeStyle = 'rgba(79,216,247,' + (0.8 * (1 - age)).toFixed(2) + ')'; c.lineWidth = 1.5; c.setLineDash([4, 3]); c.strokeRect(x - cw / 2 - 3, Y(P.h[this._zoomI]) - 8, cw + 6, Y(P.l[this._zoomI]) - Y(P.h[this._zoomI]) + 16); c.setLineDash([]); requestAnimationFrame(() => this.draw()); } }
     /* where the playback stands */
     { const x = Math.round(X(cur) + cw / 2) + 0.5; c.strokeStyle = 'rgba(79,216,247,.55)'; c.lineWidth = 1; c.setLineDash([3, 4]); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, mainH); c.stroke(); c.setLineDash([]); }
     c.restore();

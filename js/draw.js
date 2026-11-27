@@ -293,26 +293,33 @@ const Draw = {
   },
 
   /* --- rendering --- */
+  /* the painters of this canvas. Each one is a row of the Stack panel; a new overlay gets its line here and
+     in PAINT_DEFAULT (bottom first), and the panel lists it by itself. */
+  PAINT: {
+    vp(ctx){ this.drawVP(ctx); },
+    autosr(ctx){ if (typeof AutoSR !== 'undefined') AutoSR.draw(ctx); },                 /* automatic support & resistance */
+    autostruct(ctx){ if (typeof AutoStruct !== 'undefined') AutoStruct.draw(ctx); },     /* sloped lines, channel, Fibonacci, pivots */
+    patterns(ctx){ if (typeof ChartPatterns !== 'undefined') ChartPatterns.draw(ctx); }, /* trend, pattern, zones, events */
+    studio(ctx){ if (typeof Studio !== 'undefined' && Studio.overlay) Studio.overlay.draw(ctx); },   /* the Timurila chart look */
+    forecast(ctx){ if (typeof Forecast !== 'undefined') Forecast.draw(ctx); },           /* the tested next-move call */
+    proven(ctx){ if (typeof ProvenCandles !== 'undefined') ProvenCandles.draw(ctx); },   /* candle signals that survived the backtest */
+    stregime(ctx){ if (typeof StRegime !== 'undefined') StRegime.draw(ctx); },           /* SuperTrend + EMA 200 regime signals */
+    jmregime(ctx){ if (typeof JMRegime !== 'undefined') JMRegime.draw(ctx); },           /* six readings of the market's condition */
+    jmsignals(ctx){ if (typeof JMSignals !== 'undefined') JMSignals.draw(ctx); },        /* BUY / SELL and the expected move */
+    jmcheck(ctx){ if (typeof JMCheck !== 'undefined') JMCheck.draw(ctx); },              /* risk rules, filings and news */
+    pos(ctx){ if (typeof PosLines !== 'undefined') PosLines.draw(ctx); },                /* open positions */
+    items(ctx){ this._pinHit = null; this._unpinHits = []; for (const it of this.items) if (!it.hidden) this.drawItem(ctx, it, false); },   /* your drawings; a hidden one is kept, not painted */
+  },
+  PAINT_DEFAULT: ['vp', 'autosr', 'autostruct', 'patterns', 'studio', 'forecast', 'proven', 'stregime', 'jmregime', 'jmsignals', 'jmcheck', 'pos', 'items'],
+  paintOrder(){ const o = this._order; return Array.isArray(o) && o.length ? o : this.PAINT_DEFAULT; },
+
   redraw(){
     if (!this.ctx) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.cssW, this.cssH);
     if (!Chart.priceSeries) return;
-    this.drawVP(ctx);
-    if (typeof AutoSR !== 'undefined') AutoSR.draw(ctx);
-    if (typeof AutoStruct !== 'undefined') AutoStruct.draw(ctx);
-    if (typeof ChartPatterns !== 'undefined') ChartPatterns.draw(ctx);
-    if (typeof Studio !== 'undefined' && Studio.overlay) Studio.overlay.draw(ctx);   /* ✦ Studio — the Timurila chart look */
-    if (typeof Forecast !== 'undefined') Forecast.draw(ctx);
-    if (typeof ProvenCandles !== 'undefined') ProvenCandles.draw(ctx);   /* candle signals that survived the backtest */
-    if (typeof StRegime !== 'undefined') StRegime.draw(ctx);             /* SuperTrend + EMA 200 regime BUY / SELL signals */
-    if (typeof JMRegime !== 'undefined') JMRegime.draw(ctx);             /* ✦ Regime — six readings of the market's condition */
-    if (typeof JMSignals !== 'undefined') JMSignals.draw(ctx);           /* ✦ Signals — BUY / SELL and the expected move */
-    if (typeof JMCheck !== 'undefined') JMCheck.draw(ctx);               /* ✦ Check — risk rules, filings and news */
-    /* the tested next-move call */   /* trend, pattern, zones, events */  /* sloped lines, channel, Fibonacci, pivots */      /* automatic support & resistance, under everything else */
-    if (typeof PosLines !== 'undefined') PosLines.draw(ctx);   /* open positions, under the drawings */
-    this._pinHit = null; this._unpinHits = [];
-    for (const it of this.items) this.drawItem(ctx, it, false);
+    /* everything on this canvas, painted bottom first, in an order the Stack panel (js/tmstack.js) can change */
+    for (const k of this.paintOrder()){ const f = this.PAINT[k]; if (f) f.call(this, ctx); }
     if (this.measure) this.drawMeasure(ctx, this.measure, 'live');
     if ((this.tool === 'measure' || this.tool === 'dmeasure') && this.temp && this.cursor)
       this.drawMeasure(ctx, { p1: this.temp, _to: this.cursor, dated: this.tool === 'dmeasure' });
@@ -944,6 +951,7 @@ const Draw = {
   },
 
   hits(it, x, y){
+    if (it.hidden) return false;          /* a hidden drawing cannot be pressed */
     const N = this.NEAR;
     const S = Chart.priceSeries;
     if (!S) return false;
